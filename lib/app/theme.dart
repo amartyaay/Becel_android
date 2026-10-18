@@ -1,38 +1,43 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
-  static const bg = Color(0xFF0B0B0E);
-  static const surface = Color(0xFF141419);
-  static const surfaceHigh = Color(0xFF1A1A21);
-  static const surfaceHigher = Color(0xFF22222B);
-  static const border = Color(0xFF26262F);
+  static const bg = Color(0xFF0A0F0D);
+  static const surface = Color(0xFF111916);
+  static const surfaceHigh = Color(0xFF17211D);
+  static const surfaceHigher = Color(0xFF202C26);
+  static const border = Color(0xFF29372F);
 
-  static const textPrimary = Color(0xFFF4F4F6);
-  static const textSecondary = Color(0xFF9C9CA7);
-  static const textTertiary = Color(0xFF6C6C78);
+  static const textPrimary = Color(0xFFF2F4EC);
+  static const textSecondary = Color(0xFFA0ADA5);
+  static const textTertiary = Color(0xFF6F7D74);
 
-  static const green = Color(0xFF3EDC8B);
-  static const yellow = Color(0xFFFFC94D);
-  static const red = Color(0xFFFF5A5F);
+  static const green = Color(0xFFD0F477);
+  static const yellow = Color(0xFFF5CC70);
+  static const red = Color(0xFFFF806C);
+  static const teal = Color(0xFF79D6C1);
+  static const blue = Color(0xFF8EA9FF);
+  static const violet = Color(0xFFB9A4FF);
 
-  static const recovery = Color(0xFF3EDC8B);
-  static const sleep = Color(0xFF7C8CFF);
-  static const strain = Color(0xFFFF6B57);
-  static const stress = Color(0xFFFFC94D);
-  static const energy = Color(0xFF35D6C4);
-  static const nutrition = Color(0xFF9BE15D);
+  // Retained semantic names for detail screens while the app moves toward
+  // the companion-first information architecture.
+  static const recovery = green;
+  static const sleep = blue;
+  static const strain = red;
+  static const stress = yellow;
+  static const energy = teal;
+  static const nutrition = green;
 }
 
 ThemeData buildDarkTheme() {
   const colorScheme = ColorScheme.dark(
     primary: AppColors.green,
-    onPrimary: Color(0xFF06210F),
-    secondary: AppColors.sleep,
-    onSecondary: Color(0xFF0B1030),
+    onPrimary: Color(0xFF17200B),
+    secondary: AppColors.teal,
+    onSecondary: Color(0xFF071C18),
     surface: AppColors.surface,
     onSurface: AppColors.textPrimary,
     error: AppColors.red,
-    onError: Colors.white,
+    onError: Color(0xFF25100D),
   );
 
   return ThemeData(
@@ -56,26 +61,29 @@ ThemeData buildDarkTheme() {
       titleTextStyle: TextStyle(
         color: AppColors.textPrimary,
         fontSize: 18,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 68,
-      backgroundColor: const Color(0xFF0E0E12),
-      indicatorColor: Colors.white.withValues(alpha: 0.08),
+      height: 72,
+      backgroundColor: const Color(0xFF101713),
+      indicatorColor: AppColors.green.withValues(alpha: 0.14),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
-          size: 24,
+          size: 22,
           color: states.contains(WidgetState.selected)
-              ? AppColors.textPrimary
+              ? AppColors.green
               : AppColors.textTertiary,
         ),
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontSize: 10,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
           color: states.contains(WidgetState.selected)
               ? AppColors.textPrimary
               : AppColors.textTertiary,

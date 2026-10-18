@@ -1,211 +1,487 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/charts.dart';
-import '../../widgets/components.dart';
+import '../../data/health_connect_service.dart';
 
-class FitnessScreen extends StatelessWidget {
+class FitnessScreen extends StatefulWidget {
   const FitnessScreen({super.key});
 
   @override
+  State<FitnessScreen> createState() => _FitnessScreenState();
+}
+
+class _FitnessScreenState extends State<FitnessScreen> {
+  final _health = HealthConnectService.instance;
+  HealthConnectInspection? _inspection;
+  HealthSummary? _summary;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _health.dataRevision.addListener(_onHealthDataChanged);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _health.dataRevision.removeListener(_onHealthDataChanged);
+    super.dispose();
+  }
+
+  void _onHealthDataChanged() => _refresh();
+
+  Future<void> _refresh() async {
+    final inspection = await _health.inspect();
+    HealthSummary? summary;
+    if (inspection.isAvailable && inspection.hasAnyPermission) {
+      summary = await _health.readSummary();
+    }
+    if (!mounted) return;
+    setState(() {
+      _inspection = inspection;
+      _summary = summary;
+      _error = summary?.error ?? inspection.error;
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final summary = _summary;
+    final connected = summary?.hasAccess == true;
+    final statusColor = connected ? AppColors.green : AppColors.yellow;
+
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
-          children: [
-            const Text(
-              'Fitness',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 18),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          color: AppColors.green,
+          backgroundColor: AppColors.surfaceHigh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Row(
-                    children: [
-                      Text(
-                        'Cardio Load',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MOVE WITH CONTEXT',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                          ),
                         ),
-                      ),
-                      Spacer(),
-                      StatusPill('Productive', AppColors.green),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Short-term load is inside your optimal range.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                        SizedBox(height: 5),
+                        Text(
+                          'Activity',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.8,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TrendLineChart(
-                    data: MockData.cardioLoad30,
-                    color: AppColors.strain,
-                    bandLow: 34,
-                    bandHigh: 52,
-                    bandColor: AppColors.green,
+                  _StatusPill(
+                    label: _loading
+                        ? 'CHECKING'
+                        : connected
+                        ? 'LIVE DATA'
+                        : 'NOT CONNECTED',
+                    color: _loading ? AppColors.textSecondary : statusColor,
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: const [
-                Expanded(
-                  child: _StatCard(label: 'VO₂ max', value: '46.2'),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(label: 'HR recovery', value: '32 bpm'),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(label: 'This week', value: '3'),
+              const SizedBox(height: 22),
+              _MovementCard(
+                stepCount: summary?.stepCount,
+                canReadSteps: summary?.canReadSteps ?? false,
+              ),
+              const SizedBox(height: 25),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Most recent workout',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.25,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'LAST 7 DAYS',
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 11),
+              _WorkoutCard(
+                summary: summary,
+                canReadExercise: summary?.canReadExercise ?? false,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.red, fontSize: 10),
                 ),
               ],
-            ),
-            const SizedBox(height: 24),
-            const SectionHeader('This week'),
-            AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              child: Column(
-                children: const [
-                  InfoRow(
-                    title: 'Total strain',
-                    value: '142',
-                    icon: Icons.local_fire_department_outlined,
-                    iconColor: AppColors.strain,
-                  ),
-                  InfoRow(
-                    title: 'Workout time',
-                    value: '1h 42m',
-                    icon: Icons.timer_outlined,
-                    iconColor: AppColors.sleep,
-                  ),
-                  InfoRow(
-                    title: 'Calories',
-                    value: '698 kcal',
-                    icon: Icons.bolt_outlined,
-                    iconColor: AppColors.yellow,
-                  ),
-                ],
+              const SizedBox(height: 22),
+              _DataAccessCard(
+                isAvailable: _inspection?.isAvailable ?? false,
+                onTap: () => context.go('/data'),
               ),
-            ),
-            const SizedBox(height: 24),
-            const SectionHeader('Recent workouts'),
-            for (final workout in MockData.workouts) ...[
-              AppCard(
-                onTap: () => showSoonSnack(context, 'Workout details'),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: AppColors.strain.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: Icon(
-                        workout.kind == 'Strength'
-                            ? Icons.fitness_center
-                            : Icons.directions_run,
-                        size: 20,
-                        color: AppColors.strain,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            workout.title,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            [
-                              if (workout.distanceKm != null)
-                                '${workout.distanceKm} km',
-                              '${workout.durationMin}m',
-                              '${workout.calories} kcal',
-                            ].join(' · '),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      'Strain ${workout.strain.toStringAsFixed(1)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.strain,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 18),
+              Center(
+                child: Text(
+                  connected
+                      ? 'READ FROM HEALTH CONNECT · PULL TO REFRESH'
+                      : 'WORKOUTS APPEAR WHEN AVAILABLE IN HEALTH CONNECT',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.65,
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+class _MovementCard extends StatelessWidget {
+  const _MovementCard({required this.stepCount, required this.canReadSteps});
 
-  final String label;
-  final String value;
+  final int? stepCount;
+  final bool canReadSteps;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(14),
+    const goal = 10000;
+    final progress = ((stepCount ?? 0) / goal).clamp(0.0, 1.0);
+    final count = stepCount == null ? '—' : _formatNumber(stepCount!);
+    final status = stepCount != null
+        ? 'TODAY'
+        : canReadSteps
+        ? 'NO RECORD'
+        : 'ACCESS NEEDED';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(19, 18, 19, 17),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceHigh,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.directions_walk_rounded,
+                  color: AppColors.green,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Steps today',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                ),
+              ),
+              _StatusPill(label: status, color: AppColors.green),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                count,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 38,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1.8,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(left: 7, bottom: 4),
+                child: Text(
+                  'steps',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                stepCount == null ? '—' : '${(progress * 100).round()}%',
+                style: const TextStyle(
+                  color: AppColors.green,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: AppColors.surfaceHigher,
+              valueColor: const AlwaysStoppedAnimation(AppColors.green),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            '10,000 step reference goal · Health Connect total',
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 9),
           ),
         ],
       ),
     );
   }
+}
+
+class _WorkoutCard extends StatelessWidget {
+  const _WorkoutCard({required this.summary, required this.canReadExercise});
+
+  final HealthSummary? summary;
+  final bool canReadExercise;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = this.summary;
+    final workout = summary?.workoutType;
+    final start = summary?.workoutStart;
+    final duration = summary?.workoutDurationMinutes;
+    final hasWorkout = workout != null;
+    final icon = switch (workout) {
+      'Run' || 'Treadmill run' => Icons.directions_run_rounded,
+      'Walk' => Icons.directions_walk_rounded,
+      'Cycling' || 'Indoor cycling' => Icons.directions_bike_rounded,
+      'Strength training' => Icons.fitness_center_rounded,
+      'Pool swim' || 'Open-water swim' => Icons.pool_rounded,
+      'Yoga' => Icons.self_improvement_rounded,
+      _ => Icons.sports_gymnastics_rounded,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceHigh,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: (hasWorkout ? AppColors.red : AppColors.textTertiary)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(
+              hasWorkout ? icon : Icons.event_busy_rounded,
+              color: hasWorkout ? AppColors.red : AppColors.textTertiary,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  workout ?? 'No workout found',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  !canReadExercise
+                      ? 'Allow workout access in Data Sources'
+                      : hasWorkout
+                      ? '${duration ?? '—'} min · Health Connect'
+                      : 'No exercise session found in the last 7 days',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 9,
+                  ),
+                ),
+                if (start != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatDateAndTime(start),
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (hasWorkout)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Icon(
+                Icons.check_circle_rounded,
+                color: AppColors.green,
+                size: 17,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DataAccessCard extends StatelessWidget {
+  const _DataAccessCard({required this.isAvailable, required this.onTap});
+
+  final bool isAvailable;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.health_and_safety_outlined,
+                color: AppColors.teal,
+                size: 20,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  isAvailable
+                      ? 'Review Health Connect permissions and data'
+                      : 'Set up Health Connect on this device',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: AppColors.teal,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.55,
+        ),
+      ),
+    );
+  }
+}
+
+String _formatNumber(int value) {
+  final text = value.toString();
+  final buffer = StringBuffer();
+  for (var index = 0; index < text.length; index++) {
+    if (index > 0 && (text.length - index) % 3 == 0) buffer.write(',');
+    buffer.write(text[index]);
+  }
+  return buffer.toString();
+}
+
+String _formatDateAndTime(String value) {
+  final date = DateTime.tryParse(value)?.toLocal();
+  if (date == null) return 'Recent';
+  final today = DateTime.now();
+  final dateLabel =
+      date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day
+      ? 'Today'
+      : '${date.month}/${date.day}';
+  final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '$dateLabel · $hour:$minute ${date.hour < 12 ? 'AM' : 'PM'}';
 }

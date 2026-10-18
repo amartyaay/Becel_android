@@ -24,3 +24,12 @@ plugins {
 }
 
 include(":app")
+
+include(":RxFitbitGatt")
+project(":RxFitbitGatt").projectDir = file("fitbit_air_bridge/platform/android/goldengate/RxFitbitGatt")
+include(":GoldenGateBindings")
+project(":GoldenGateBindings").projectDir = file("fitbit_air_bridge/platform/android/goldengate/GoldenGateBindings")
+include(":linkcontroller")
+project(":linkcontroller").projectDir = file("fitbit_air_bridge/platform/android/goldengate/linkcontroller")
+include(":GoldenGateConnectionManager")
+project(":GoldenGateConnectionManager").projectDir = file("fitbit_air_bridge/platform/android/goldengate/GoldenGateConnectionManager")

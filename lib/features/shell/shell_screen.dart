@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../widgets/components.dart';
 
 class ShellScreen extends StatelessWidget {
   const ShellScreen({super.key, required this.navigationShell});
@@ -13,13 +12,6 @@ class ShellScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showQuickActions(context),
-        backgroundColor: AppColors.textPrimary,
-        foregroundColor: AppColors.bg,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add, size: 28),
-      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => navigationShell.goBranch(
@@ -28,111 +20,73 @@ class ShellScreen extends StatelessWidget {
         ),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.donut_large_outlined),
-            selectedIcon: Icon(Icons.donut_large),
+            icon: Icon(Icons.grid_view_rounded),
+            selectedIcon: Icon(Icons.grid_view_rounded),
             label: 'Today',
           ),
           NavigationDestination(
-            icon: Icon(Icons.fitness_center_outlined),
-            selectedIcon: Icon(Icons.fitness_center),
-            label: 'Fitness',
+            icon: Icon(Icons.directions_run_outlined),
+            selectedIcon: Icon(Icons.directions_run_rounded),
+            label: 'Activity',
           ),
           NavigationDestination(
-            icon: Icon(Icons.restaurant_outlined),
-            selectedIcon: Icon(Icons.restaurant),
-            label: 'Nutrition',
+            icon: Icon(Icons.show_chart_rounded),
+            selectedIcon: Icon(Icons.show_chart_rounded),
+            label: 'Trends',
           ),
           NavigationDestination(
-            icon: Icon(Icons.monitor_heart_outlined),
-            selectedIcon: Icon(Icons.monitor_heart),
-            label: 'Biology',
+            icon: Icon(Icons.sensors_rounded),
+            selectedIcon: Icon(Icons.sensors_rounded),
+            label: 'Data',
           ),
         ],
       ),
     );
   }
-
-  void _showQuickActions(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 4, 24, 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Quick log',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-            _QuickAction(
-              icon: Icons.water_drop_outlined,
-              label: 'Log water',
-              onTap: () => _soon(sheetContext, 'Water logging'),
-            ),
-            _QuickAction(
-              icon: Icons.coffee_outlined,
-              label: 'Log caffeine',
-              onTap: () => _soon(sheetContext, 'Caffeine logging'),
-            ),
-            _QuickAction(
-              icon: Icons.restaurant_outlined,
-              label: 'Log food',
-              onTap: () => _soon(sheetContext, 'Food logging'),
-            ),
-            _QuickAction(
-              icon: Icons.directions_run_outlined,
-              label: 'Start workout',
-              onTap: () => _soon(sheetContext, 'Workout tracking'),
-            ),
-            _QuickAction(
-              icon: Icons.book_outlined,
-              label: 'Journal entry',
-              onTap: () => _soon(sheetContext, 'Journal'),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _soon(BuildContext sheetContext, String feature) {
-    Navigator.of(sheetContext).pop();
-    final context = sheetContext;
-    showSoonSnack(context, feature);
-  }
 }
 
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+void openSettings(BuildContext context) => context.push('/settings');
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+class PreviewPill extends StatelessWidget {
+  const PreviewPill({super.key, this.compact = false});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceHigher,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, size: 20),
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 9 : 11,
+        vertical: compact ? 6 : 7,
       ),
-      title: Text(label, style: const TextStyle(fontSize: 15)),
-      onTap: onTap,
+      decoration: BoxDecoration(
+        color: AppColors.yellow.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.yellow.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: AppColors.yellow,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            compact ? 'PREVIEW' : 'SAMPLE DATA',
+            style: TextStyle(
+              color: AppColors.yellow,
+              fontSize: compact ? 9 : 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

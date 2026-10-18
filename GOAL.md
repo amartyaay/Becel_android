@@ -1,546 +1,352 @@
-# GOAL.md — Becel: Android clone of Bevel, built around Fitbit Air
-
-> Research date: 2026-10-18. All external claims below are sourced from the links in
-> [§14 References](#14-references). Items marked **(inferred)** are design decisions, not
-> verified facts about Bevel.
-
----
-
-## 1. Purpose
-
-Build **Becel**, an Android-first (Flutter) health-coaching app that clones the core
-experience of **Bevel** (bevel.health, Finerpoint Inc., iOS-only) for users whose primary
-wearable is the **Fitbit Air** (Google, screenless tracker, released May 2026).
-
-Bevel is the #1 WHOOP-alternative app for Apple Watch users and has **no Android app**
-([Bodly review](https://bodly.app/blog/bevel-app-review)). Android + Fitbit Air is an
-unserved combination: Fitbit Air is a $99 screenless WHOOP-style band with accurate HR and
-sleep tracking but whose official app (Google Health) gives raw numbers and a Gemini coach,
-not the integrated Recovery/Strain/Energy-Bank experience that Bevel provides
-([PCMag review](https://uk.pcmag.com/fitness-trackers/165161/fitbit-air),
-[WIRED](https://www.wired.com/story/google-fitbit-air/),
-[Google blog — Fitbit Air India](https://blog.google/intl/en-in/products/hardware/the-all-new-fitbit-air-comes-to-india/)).
-
----
-
-## 2. What Bevel is (research summary)
-
-**Bevel: AI Health Coach** — App Store id `6456176249`, developer **Finerpoint, Inc.**,
-iOS 18+, iPhone + Apple Watch. 4.8★ / ~49K ratings globally, 150K+ active users, ~800 MB.
-Apple-Watch-first, but Biology data can also come from Garmin, Oura and **Google Health**
-([App Store release notes](https://apps.apple.com/br/app/bevel-ai-health-coach/id6456176249?l=en-GB)).
-
-Core value proposition: turn wearable data into five daily scores + coaching.
-
-| Pillar | What it is |
-|---|---|
-| **Recovery** | 1–100% morning readiness from Sleep Score, HRV, RHR, respiratory rate, SpO₂, wrist temperature ([help](https://help.bevel.health/en/articles/11258177), [blog](https://www.bevel.health/blog/what-is-recovery-score)) |
-| **Sleep** | 0–100 score from 6 contributors: Time Asleep, Deep, REM, Heart-Rate Dip, Efficiency, Continuity + sleep need/bank/debt, smart alarm ([blog](https://www.bevel.health/blog/what-is-sleep-score)) |
-| **Strain** | Daily exertion, active + passive, HR-zone driven, **uncapped**, logarithmic, 100% ≈ a high-intensity workout; **Target Strain** recommendation ([blog](https://www.bevel.health/blog/what-is-strain-score)) |
-| **Stress** | Real-time 0–100 physiological stress (lower = calmer) from HR + HRV with activity context; not emotions ([Key Terms](https://help.bevel.health/en/articles/11251073)) |
-| **Energy Bank** | Body-battery; combines Recovery, sleep, strain, stress; carries over day to day; recharges during calm/rest/naps; non-linear at extremes ([help](https://help.bevel.health/en/articles/11258369)) |
-
-Supporting systems (Free tier unless noted): Nutrition (score, 6M+ foods, barcode/photo/
-describe/recipe, glucose/CGM), Fitness (Cardio Load = ATL/CTL/TSB using TRIMP, Cardio
-Status with 7 states, Cardio Focus, Heart-Rate Recovery, HR zones with Max HR / HR
-Reserve / LTHR / manual), Strength Builder (700+ exercises, 1RM, volume, muscular load,
-muscle freshness, routines), Biology (HRV/RHR 60-day baselines, VO₂max, weight trend,
-LBM, body fat, BP, glucose, Biological Age, Health Monitors, Timeline), Journal
-(hydration, caffeine, alcohol, sunlight, screen time, mood, creatine, PMS, allergies,
-late meals, shared bed, …), Cycle Tracking, Activity Status (Active/Sick/Injured/Break),
-Smart Alarm, Home-screen widgets, and Bevel Intelligence (AI coach — **Pro**).
-Pro also unlocks **Health Records**, **Biological Age**, **Training Plans**
-([pricing page](https://help.bevel.health/en/articles/11583937)).
-
-Pricing: Free (now includes all five scores), Pro $14.99/mo, $10.99/mo annual-commit,
-$99.99/yr.
-
-Calibration: Bevel needs **2–6 weeks** to personalize; Stress/Energy Bank need ~30 days;
-Recovery requires complete sleep HRV + RHR or it will not render
-([Common Questions](https://help.bevel.health/en/articles/11257601),
-[fitcoin summary](https://www.fitcoin.co/articles/bevel-scores-explained)).
-
-Bevel's exact formulas/weights are **not public** — Becel implements *behavior-equivalent*
-algorithms (documented in §7), never claiming numerical parity.
-
----
-
-## 3. Target device: Fitbit Air
-
-| Spec | Value |
-|---|---|
-| Release | May 26, 2026 (US from $99.99; India Oct 2, 2026, ₹13,999) |
-| Form | Screenless pebble, 34.9 × 17 × 8.3 mm, 5.2 g (12 g with band), medical-grade band options |
-| OS | FitbitOS (syncs **only** with the Google Health app) |
-| Battery | ~7 days; 34.5 mAh; 5 min charge ≈ 1 day; full in 90 min; USB-C |
-| Durability | 5 ATM, IP68 |
-| Sensors | Optical HR, SpO₂, skin temperature, accelerometer, gyroscope, vibration motor; **no** EDA, ECG, altimeter, Wi-Fi, NFC, mic |
-| GPS | Connected GPS only (phone) |
-| On-device storage | 7 days detailed motion data (minute-by-minute), 30 days daily totals, HR at 2-s intervals |
-| Health features | 24/7 HR, HRV, RHR, sleep stages & duration, SpO₂, respiration, skin temp, Afib/pulse-arrhythmia alerts, Daily Readiness, Cardio Load, Target Load, stress tracking |
-| Sync | Google Health app (BLE), auto-sync throughout the day and ~every 15 min when app is open/in background |
-
-Sources: [gadgetsandwearables specs](https://gadgetsandwearables.com/technical-specs/fitbit-air/),
-[Google Store specs](https://store.google.com/us/product/google_fitbit_air_specs),
-[PCMag](https://uk.pcmag.com/fitness-trackers/165161/fitbit-air),
-[Google blog India](https://blog.google/intl/en-in/products/hardware/the-all-new-fitbit-air-comes-to-india/).
-
-PCMag verdict: accurate HR & sleep, 7+ day battery, weak auto-workout detection,
-Gemini coaching is the differentiator — exactly the data profile Bevel-style scores need.
-
-**Critical device constraints for Becel**
-
-1. **No direct device access.** "Fitbit devices can't communicate directly with third-party
-   applications. They sync exclusively with the Google Health app"
-   ([Google Health API docs](https://developers.google.com/health/data-types)). All
-   Becel data arrives *after* the Google Health app syncs.
-2. **No third-party smart alarm on the wrist.** The Air's vibration motor is not
-   programmable by third parties; Becel's smart alarm can only be a phone alarm +
-   notification. (Bevel's Apple Watch alarm has no equivalent on this hardware.)
-3. **No live in-workout screen.** No real-time HR broadcast to third parties; workouts are
-   post-hoc. (inferred from #1; verify with Health Connect latency on device.)
-4. **No EDA →** stress must be computed from HR/HRV/movement (same signals Bevel uses for
-   Apple Watch, so parity is achievable).
-5. Skin temperature is delivered as **nightly derivations/variation from baseline**
-   (relative), not absolute temperature.
-6. Weight/body-fat only come from Fitbit Aria scales or manual logging (Air has no body
-   composition; Google Health API lists only Aria devices as weight sources).
-
----
-
-## 4. Data access architecture
-
-### 4.1 Do NOT build on the Fitbit Web API
-
-The legacy Fitbit Web API **turns off permanently on October 30, 2026** (support ended
-Sep 30, 2026) ([developers.google.com/health](https://developers.google.com/health),
-[dev.fitbit.com](https://dev.fitbit.com/legal/fitbit-user-data-and-developer-policy/)).
-
-### 4.2 Primary: Google Health API v4 (cloud)
-
-- Successor to Fitbit Web API; REST + gRPC; **Google OAuth 2.0**; new
-  `googlehealth.*` scope bundles; users must re-consent; `healthUserId` identity;
-  **webhook subscriptions**, rollups/daily-rollups, "reconciled stream" that matches what
-  users see in Google Health ([overview](https://developers.google.com/health/about),
-  [migration](https://developers.google.com/health/migration),
-  [data types](https://developers.google.com/health/data-types)).
-- Rate limits + pagination rules; "hot load 7–14 days, cold load history in background";
-  max query range 90 days for most rollups (14 days for HR/calories).
-- Requires a Google Cloud project, OAuth verification, and **CASA security assessment
-  (4–6 weeks)** before production — start this early ([Validic timeline](https://help.validic.com/space/VCS/5535203416/Fitbit+to+Google+Health+API:+Developer+Migration+Timeline)).
-- **OAuth client = Web Server type** (setup asks for a redirect URI; register a custom
-  URI scheme such as `com.becel:/oauth2redirect` for the Android app). Mobile apps must
-  use the **system browser (Chrome Custom Tabs)** — AppAuth-style flow
-  (`flutter_appauth`); embedded WebViews are forbidden and break Google OAuth.
-- **Pre-consent requirement**: user must first link Google Health in the Google Health
-  mobile app. Verify after token exchange with `GET /v4/users/me/identity`; handle
-  `400 ACCOUNT_NOT_LINKED`.
-- **Refresh tokens** expire after **7 days** while the consent screen stays in
-  "Testing" (100 test users max). Publish before production. Refresh on-demand only —
-  never batch-/cron-refresh. Separate GCP projects per environment (no sandbox).
-- **RISC (Cross-Account Protection) is optional** — enable later only if we want push
-  notices for revoked tokens / unlinked accounts; otherwise detect via failed refreshes.
-- **Onboarding deep links**: `https://www.fitbit.com/in-app/today` opens the Google
-  Health app (Today page); `https://fitbit.google.com/wse/deeplink/store` opens its
-  store listing ([universal/app links](https://developers.google.com/health/universal-app-links)).
-
-Fitbit Air–compatible data types we will consume (from the
-[data types table](https://developers.google.com/health/data-types)):
-
-`heart-rate` (1 s resolution), `heart-rate-variability`, `daily-heart-rate-variability`,
-`daily-resting-heart-rate`, `sleep`, `oxygen-saturation`, `daily-oxygen-saturation`,
-`respiratory-rate-sleep-summary`, `daily-respiratory-rate`,
-`daily-sleep-temperature-derivations`, `exercise`, `steps`, `distance`,
-`active-energy-burned`, `total-calories`, `active-zone-minutes`, `active-minutes`,
-`activity-level`, `sedentary-period`, `time-in-heart-rate-zone`,
-`calories-in-heart-rate-zone`, `daily-heart-rate-zones`, `vo2-max`, `daily-vo2-max`,
-`run-vo2-max`, `swim-lengths-data`, `irregular-rhythm-notification`,
-`hydration-log`, `nutrition-log`, `food`, `food-measurement-unit`, `menstrual-period`,
-`weight`/`body-fat` (Aria scales), `blood-glucose` (manual/CGM).
-
-### 4.3 Secondary: Health Connect (on-device)
-
-The Google Health app syncs **both ways** with Health Connect on Android
-([support article](https://support.google.com/fitbit/answer/14506680)). Becel reads from
-Health Connect for offline-first, on-device scoring with no server round-trip (privacy
-story to match Bevel's "Built for privacy"). Health Connect gives us record types for
-sleep sessions **with stages**, heart rate, HRV (RMSSD), RHR, SpO₂, respiratory rate,
-skin temperature, VO₂max, exercise sessions, steps, distance, calories, total energy, etc.
-([Health Connect data types](https://developer.android.com/health-and-fitness/health-connect/data-types)).
-
-Publishing requirements: declare every Health Connect data type in the Play Console,
-justify health-data access, implement background-read permission flow, respect write
-cooldowns (15 min) if Becel ever writes back.
-
-**Verified `health` plugin (v13.3.2, carp.dk) details for our build** — checked against
-pub.dev, [docs.carp.dk](https://docs.carp.dk/plugins/health/data-types) and plugin source:
-
-- `minSdkVersion 26` required (bump `android/app/build.gradle.kts`; Flutter default is
-  21). Health Connect runs on Android 9+ (API 28) via the Play app, built-in on Android
-  14+.
-- Android-verified data types we need: **HRV RMSSD** (changelog 13.2.0; Android-only in
-  the plugin), **skin temperature** (13.3.1+; availability varies by HC version), body
-  temperature, blood oxygen, respiratory rate, resting HR, HR, sleep stages
-  (deep/light/REM/awake/asleep), steps, distance, calories, workouts (+ routes).
-- **Workout routes**: Android only surfaces routes while our app is in the foreground,
-  and reading Google Health's routes requires the user to manually grant "Always
-  allow" for *Exercise routes* in the Health Connect app (no request dialog exists yet).
-- Manifest setup: per-type `android.permission.health.READ_*` permissions, `<queries>`
-  block for `com.google.android.apps.healthdata`, `ViewPermissionUsageActivity`
-  activity-alias linking the privacy policy (required for Play review), `MainActivity`
-  must extend `FlutterFragmentActivity`, `ACTIVITY_RECOGNITION` for steps/pedometer.
-- Background sync: `READ_HEALTH_DATA_IN_BACKGROUND` +
-  `requestHealthDataInBackgroundAuthorization()`.
-- **History window**: reads are capped at the last **30 days** by default; for backfill
-  request history access (`READ_HEALTH_DATA_HISTORY` +
-  `requestHealthDataHistoryAuthorization()`).
-
-### 4.4 Recommended hybrid (inferred)
-
-| Use case | Source |
-|---|---|
-| Real-time dashboard, scoring, offline | **Health Connect** (user enables Google Health → HC sync) |
-| History backfill, webhooks, cross-device continuity | **Google Health API** (OAuth) |
-| Aria weight/body-fat, glucose from CGM | Google Health API |
-| Nutrition database lookups | own backend / third-party food DB |
-
-Data-source-family filter: `users/me/dataSourceFamilies/google-wearables` gives raw
-Fitbit-Air-recorded telemetry only ([endpoints doc](https://developers.google.com/health/endpoints)).
-
----
-
-## 5. Feature parity matrix
-
-| # | Bevel feature | Becel scope | Phase |
-|---|---|---|---|
-| 1 | Recovery Score + contributors | Full | MVP |
-| 2 | Sleep: stages, score, needed/bank/debt, smart alarm (phone), sleep goal | Full (alarm = phone) | MVP |
-| 3 | Strain: active/passive, per-workout strain, Target Strain | Full | MVP |
-| 4 | Stress: real-time-ish daytime score, maps by activity | Full | MVP |
-| 5 | Energy Bank | Full | MVP |
-| 6 | Home "Today" hub: score rings, cards, Timeline, Action (+) button | Full | MVP |
-| 7 | Trends & history charts, calibration UX | Full | MVP |
-| 8 | Workouts from Fitbit Air (auto + manual logging), HR zones (+zone settings) | Full | v1 |
-| 9 | Cardio Load (ATL/CTL/TSB via TRIMP), Cardio Status (7 states), Cardio Focus, HRR | Full | v1 |
-| 10 | Journal + Insights (correlate habits ↔ sleep/recovery) | Full | v1 |
-| 11 | Hydration + caffeine tracking | Full | v1 |
-| 12 | Activity Status (Active/Sick/Injured/Break) | Full | v1 |
-| 13 | Nutrition: manual/describe/barcode/photo AI, score, macros, net energy | Barcode+manual+describe first, photo AI later | v2 |
-| 14 | Strength Builder (exercises, sets/reps/1RM/volume, muscular load, freshness, routines) | Reduced v1: logging + volume/1RM; muscular strain needs phone motion | v2 |
-| 15 | Biology: baselines (60-day), weight trend, LBM, fat %, BP, glucose, Health Monitors | Full minus watch-only inputs | v1 |
-| 16 | Cycle Tracking (phase-aware insights) | Full (basic) | v2 |
-| 17 | Health Records (labs import, manual + PDF) | Pro feature | v2 |
-| 18 | Biological Age (+ confidence level, weekly update) | Pro feature | v2 |
-| 19 | Bevel Intelligence AI coach (chat, check-ins, proactive) | Pro feature — see §10 | v3 |
-| 20 | Widgets (home-screen) | Android app widgets / Glance | v1 |
-| 21 | Apple Watch app | **Not applicable**; Wear OS companion = non-goal v1 | — |
-| 22 | Smart Alarm on wrist | **Impossible with Fitbit Air** (phone alarm only) | — |
-
-Free vs Pro split (mirror Bevel's current logic): all five scores + tracking free;
-AI coach, biological age, health records, training plans = Pro.
-
----
-
-## 6. Bevel information architecture (observed/inferred)
-
-Observed from marketing screenshots + docs:
-
-- **Today/Home** — date header; Recovery, Strain, Sleep hero values; coaching message;
-  Timeline of workouts/sleep/nutrition; Action button “+” (bottom-right, customizable).
-- **Score detail pages** — Recovery (contributors, baselines), Sleep (hypnogram, stages,
-  needed, bank), Strain (chart vs Target Strain band, HR zones, cardio/muscular/passive),
-  Stress (0–100 day map by activity), Energy Bank (battery + history).
-- **Fitness** — workouts list, Cardio Load chart + status, Cardio Graphs, Strength graphs,
-  Personal Records, Routines, Training Load.
-- **Nutrition** — diary, Nutrition Score + food-quality contributors, macro balance,
-  net energy, glucose (if available), recipes.
-- **Biology** — Health Monitors card (RR, RHR, HRV, SpO₂, Temp, Sleep), VO₂max, weight
-  trend, LBM/body-fat/BP/glucose rows, Biological Age, Health Records.
-- **Journal** — habit list with correlation insights vs sleep/recovery.
-- **Settings** — customization: goals (sleep), calculations (HRV RMSSD/SDNN, resting-HRV
-  source, temp source), HR zone method, units, widgets.
-
-Design language to replicate: dark, near-black background, large rounded score cards with
-red/green/yellow status accents, bold numeric typography, smooth charts, haptic polish.
-(Becel will create its own visual identity — no copied assets.)
-
----
-
-## 7. Scoring system specifications (Becel algorithms)
-
-All formulas are our own published-in-code approximations, clinically disclaimed
-("wellness insights, not a medical device"). Evaluated with Bevel's *behavioral* targets:
-2–6 week calibration, morning recovery stamp, uncapped logarithmic strain, cumulative
-energy bank.
-
-### 7.1 Signal pipeline (Fitbit Air → metrics)
-
-| Metric | Derivation |
-|---|---|
-| Resting HRV | Mean RMSSD over sleep (Google Health `heart-rate-variability` samples within sleep window; Health Connect HRV record) |
-| HRV baseline | 60-day rolling average of resting HRV |
-| RHR | `daily-resting-heart-rate` (Fitbit computes during sleep); fallback: 10th-percentile HR during sleep window |
-| Sleep stages | `sleep` sessions (deep/core/REM/awake intervals) |
-| HR dip | (mean daytime HR − mean sleeping HR) / mean daytime HR |
-| RR | `respiratory-rate-sleep-summary` (nightly average) |
-| SpO₂ | `daily-oxygen-saturation` (nightly average, % ) |
-| Skin temp deviation | `daily-sleep-temperature-derivations` (nightly °C delta from personal baseline) |
-| Daytime HR series | `heart-rate` samples (5-min buckets) |
-| Movement context | steps + activity-level during HR buckets (stress gating) |
-
-### 7.2 Recovery Score (0–100, computed once/morning after sleep sync)
-
-Approach (inferred weights — tune during calibration):
-`Recovery = 0.45·SleepScore + 0.20·z(HRV vs 60-day baseline) + 0.15·z(RHR, inverted)
-+ 0.08·z(RR, inverted) + 0.07·(SpO₂ term) + 0.05·(temp deviation term)`, mapped to 1–100
-via logistic on the personal baseline. Requires sleep HRV + RHR; otherwise show
-"missing data" state (Bevel behavior). Baseline warm-up: blend personal baseline with
-population prior during first 2–6 weeks; show calibration banner.
-
-### 7.3 Sleep Score (0–100) — 6 contributors
-
-`f(timeAsleep, need) + f(deep vs target) + f(REM vs target) + f(HR dip) +
-f(efficiency = asleep/inBed) + f(continuity = interruptions)`, deep/REM targets age/sex
-adjusted (Bevel-style). Add: Time to Fall Asleep, Time in Bed, HR Dip, sleep efficiency,
-continuity metrics on the Sleep page.
-
-- **Sleep Needed** = sleepGoal + strainAdjustment + sleepDebtPayment + efficiencyAdjust.
-- **Sleep Bank** = Σ (sleep + naps − goal) over 7 days with recency weighting; negative → debt.
-- **Smart alarm**: phone alarm inside wake window; wake when accelerometer/HR suggest
-  light sleep near target time (approximation, phone-only).
-
-### 7.4 Strain (uncapped, ~0–100+, log scaling)
-
-- Per-workout strain: time-in-zone weighted (Z1=1 … Z5=5 × duration), Bartsch-style
-  log mapping (like Whoop/Bevel: strain = c·ln(1+load)).
-- **Passive strain**: 5-min HR buckets outside workouts vs personal daytime baseline,
-  weighted by movement (steps) to discount excitement/stress.
-- **Daily Strain** = workout strain + passive strain.
-- **Target Strain** = f(recent recovery scores, 7-day strain trend) → a low–high band.
-
-### 7.5 Stress (0–100, lower = calmer)
-
-Real-time-ish bucket score from HR + HRV + movement context; sleep stress separately
-scored (elevated sleep HR/HRV stress reduces Energy Bank charging). ~30-day adaptation.
-Inputs: HR above personal daytime baseline net of expected HR from step rate; HRV
-suppression vs baseline; sustained-window smoothing to avoid spikes from housework.
-
-### 7.6 Energy Bank (0–100, cumulative across days)
-
-Battery model: charge rate driven by sleep quality/length + daytime calm periods
-(stress < threshold) + naps; drain rate driven by strain + stress + time awake;
-non-linear saturation near 0/100; carries balance day-to-day.
-
-### 7.7 Cardio Load & Status
-
-TRIMP-based (Banister): `TRIMP = Σ (duration × HRr × 0.64·e^(1.92·HRr))` (male) /
-0.86·e^(1.67·HRr) (female), HRr = reserve fraction.
-ATL = 7-day EMA, CTL = 42-day EMA, TSB = CTL − ATL; status mapping:
-Calibrating (first 6 weeks/insufficient data), Detraining, Maintaining, Productive,
-Peaking, Fatigued, Overtraining (Bevel's exact thresholds unknown — replicate semantics).
-Cardio Focus: minutes in low-aerobic / high-aerobic / anaerobic zones defined by %VO₂max.
-HRR: peak HR (zone 4+) minus HR at +2 min, shown when workout reaches zone 4.
-
-### 7.8 Biological Age (Pro, weekly on Mondays)
-
-Three input groups (Bevel-documented structure):
-1. Physiological & lifestyle factors (4-week averages): sleep duration/consistency, RHR,
-   HRV, activity/steps, VO₂max, body composition, resting RR, BP.
-2. Habits: training frequency, nutrition score, alcohol, smoking (self-report),
-   hydration, stress load.
-3. Blood biomarkers (manual entry / PDF import): HbA1c, LDL, HDL, triglycerides,
-   hs-CRP, ALT, eGFR, ferritin, vitamin D, TSH, etc.
-Age-adjusted z-scores vs population tables → weighted composite → biological age,
-with a **Confidence Level** (Low/Med/High) based on data freshness/completeness.
-
----
-
-## 8. Data mapping: Bevel metric → Fitbit Air data
-
-| Bevel metric | Fitbit Air / Google Health source | Health Connect path |
-|---|---|---|
-| Overnight HRV (RMSSD) | `heart-rate-variability`, `daily-heart-rate-variability` | HRV RMSSD records |
-| RHR | `daily-resting-heart-rate` | Resting heart rate |
-| Sleep stages & sessions | `sleep` | Sleep sessions + stages |
-| Respiratory rate | `respiratory-rate-sleep-summary`, `daily-respiratory-rate` | Respiratory rate |
-| SpO₂ | `daily-oxygen-saturation`, `oxygen-saturation` | Oxygen saturation |
-| Wrist temperature deviation | `daily-sleep-temperature-derivations` | Skin temperature (peripheral) |
-| Workouts | `exercise` | Exercise sessions |
-| HR during workouts | `heart-rate`, `time-in-heart-rate-zone`, `daily-heart-rate-zones` | Heart rate, exercise |
-| Cardio intensity | `active-zone-minutes` (Fitbit AZM ≈ strain proxy) | (AZM not in HC; recompute from HR) |
-| Steps/distance/calories | `steps`, `distance`, `active-energy-burned`, `total-calories` | Steps, Distance, Active/Total calories |
-| VO₂max | `vo2-max`, `daily-vo2-max`, `run-vo2-max` | VO₂max |
-| Heart rhythm alerts | `irregular-rhythm-notification` | — |
-| Weight / body fat | `weight`, `body-fat` (Aria only) | Weight / Body fat |
-| Hydration/nutrition logs | `hydration-log`, `nutrition-log`, `food` | Hydration, Nutrition |
-| Blood glucose | `blood-glucose` (manual/CGM) | Blood glucose |
-| Stress | **not exposed** — compute from HR/HRV/movement | compute from HC records |
-| Daily Readiness / Sleep Score (Google's) | **not exposed via API** — compute Bevel-style ourselves | — |
-
----
-
-## 9. Product & UX requirements
-
-1. **Onboarding**: welcome → install/sign in to the Google Health app + pair Fitbit Air
-   (deep link `https://fitbit.google.com/wse/deeplink/store`) → enable
-   Google Health → Health Connect sync (Google Health app settings → Connections) →
-   Becel Health Connect permission flow (step-by-step, copy errors verbatim) →
-   wearable check (verify Fitbit Air data present) → goals (sleep goal, activity level,
-   sex/age for targets) → baseline calibration explanation.
-2. **Calibration UX**: banners like Bevel's ("Building your baseline, day X of ~42"),
-   grayscale/scored placeholders until enough data; never fabricate scores.
-3. **Morning cycle**: sleep → recovery computed → notification "Recovery 72% — ready to
-   train"; Today screen updated.
-4. **Today**: 5 score cards (Recovery, Sleep, Strain vs Target, Stress, Energy Bank),
-   coaching sentence, Timeline, + action button (log water/caffeine/food/workout/journal).
-5. **Trends**: 1D/1W/1M/3M/6M/1Y ranges on every metric page; week-in-review screen.
-6. **Settings**: sleep goal + auto-calc; HRV method (RMSSD default, SDNN option);
-   resting HRV source (sleep vs awake); HR zone method (MaxHR/HR-Reserve/LTHR/manual);
-   temp source; units; widgets config; privacy & data export/deletion.
-7. **Privacy**: local-first storage; explicit consent screens; data export (JSON/CSV);
-   account deletion; no ads; no third-party analytics on health data — same trust pitch
-   as Bevel's "Built for privacy".
-8. **Accessibility**: dynamic text, color-blind-safe score colors (don't rely on
-   red/green only), TalkBack for score cards.
-
----
-
-## 10. Technical architecture (proposed)
-
-- **App**: Flutter (stable channel; project scaffolded here), Android only.
-- **State**: Riverpod (or Bloc) + `go_router`; `Material 3` with custom dark theme.
-- **Local DB**: Drift (SQLite) — raw data cache, aggregates, scores, settings.
-- **Health data**: 
-  - `health` plugin (Health Connect) for on-device ingestion + background reads.
-  - `googleapis` REST client with AppAuth (`flutter_appauth`) for Google Health API v4 —
-    system-browser flow required (Chrome Custom Tabs); `google_sign_in` is not used
-    (add gRPC later only if needed).
-- **Sync**: `workmanager` periodic jobs (on HC change / every 15–30 min), foreground
-  service for long backfills; webhook receiver (needs minimal backend) for push updates.
-- **Charts**: `fl_chart` (or custom painters for hypnogram/energy battery).
-- **Notifications**: `flutter_local_notifications` + exact alarms for smart alarm window.
-- **Widgets**: `home_widget` + Glance-style native Android widgets for score cards.
-- **AI coach (v3)**: server-side LLM call with a sanitized metrics context; user opt-in;
-  per-feature usage accounting (mirror Bevel Pro's weekly allowance); no raw health data
-  retention by default.
-- **Backend (optional but likely)**: minimal service for Google OAuth token exchange,
-  webhook receipt, food DB proxy, AI proxy. Health data stays local by default.
-
-**Repository layout (target)**
-
-```
-lib/
-  app/            # theme, router, di
-  core/           # models, utils, health-units
-  data/
-    health_connect/
-    google_health/
-    db/           # drift tables + DAOs
-  domain/         # scoring engines (recovery, sleep, strain, stress, energy, cardio load)
-  features/
-    onboarding/ today/ sleep/ recovery/ strain/ stress/ energy/
-    fitness/ nutrition/ journal/ biology/ settings/
-  widgets/        # shared score cards, rings, charts
+# Becel — Fitbit Air Companion App Goal
+
+**Status:** Product and engineering direction  
+**Platform:** Android first; Flutter/Dart UI with Kotlin integrations where Android APIs require them  
+**Last researched:** 18 October 2026
+
+## 1. Product goal
+
+Build **Becel**, a trustworthy Android companion for people who use Fitbit Air and Google Health. Becel makes available health and activity data easier to inspect, compare, and keep over time. It adds transparent estimates and user-controlled tools without pretending to replace Google Health, claim supported Fitbit Air control, or provide medical care.
+
+The product promise is: **show what was measured, what Becel calculated, which data was used, how fresh it is, and where uncertainty remains.** Fitbit Air and Google Health are external product names; Becel is an independent app and must not imply endorsement or affiliation.
+
+The first release is a useful data companion. It is not a numerical or visual clone of Bevel. Bevel’s score-led coaching experience is a reference for possible later wellness features, but Becel will use its own interface, methods, naming, and disclosed limitations.
+
+## 2. Users and problems to solve
+
+Primary users are Fitbit Air owners who want more inspectable data and tools around their Google Health data.
+
+Product hypotheses from the supplied companion plan and public user reports:
+
+- Users may find activity totals, workout labels, or calorie estimates hard to trust or explain.
+- Health metrics can be delayed, unavailable, or present only as summaries.
+- Users want stable history, context, and a way to export their records.
+- Sleep and workout classification may need user annotations or corrections.
+- Some users want a configurable alarm challenge that takes more than one tap to dismiss.
+- Users may want an independent calorie estimate, but should be able to compare it with the source estimate and understand its assumptions.
+
+These are hypotheses, not prevalence claims. Do not describe them as proven device defects or promise that Becel can correct the source device’s measurements.
+
+## 3. Product principles
+
+1. **Preserve source records.** Never silently rewrite or delete imported measurements. Store annotations and derived estimates separately.
+2. **Provenance on every value.** Record source, unit, timestamps, import time, and whether a value is measured, user-entered, or estimated.
+3. **No false precision.** Estimates include assumptions and uncertainty; missing values are not zero.
+4. **Local-first.** No account or backend is required for MVP. Any later cloud feature must have a clear user benefit and explicit privacy design.
+5. **Graceful partial data.** The app remains useful if a metric is unsupported, permission is denied, or syncing is late.
+6. **Feasibility before feature promises.** Verify Fitbit Air data access on a real device before making a metric a requirement.
+7. **Alarm fallback.** The phone-side alarm works independently of Fitbit Air connectivity. Wrist haptics are experimental and optional.
+8. **Wellness, not diagnosis.** No diagnosis, treatment advice, or unsupported clinical claims.
+9. **Explain decisions.** Anomaly flags are review cues, not automatic edits or accusations of inaccurate data.
+10. **Use evidence responsibly.** Product features and hardware capabilities need primary or direct sources; hypotheses and design choices are marked as such.
+
+## 4. Scope and priorities
+
+### P0 — MVP foundation
+
+- Device and source capability diagnostics, including Health Connect availability and permissions.
+- Read supported Health Connect records after the user grants access.
+- Source adapters so additional access methods can be added without coupling the UI to one provider.
+- Local database, idempotent import, provenance, deletion handling where supported, and sync status.
+- Today dashboard for available steps, activity, heart rate, sleep, workouts, and energy metrics.
+- Data freshness, gaps, permissions, source and missing-data states.
+- Daily and weekly history with metric detail and date navigation.
+- CSV and JSON export; delete locally stored Becel data.
+- Transparent calorie estimate v1 with gross and active energy separated, plus source estimate comparison when available.
+- Conservative activity data-quality flags that preserve the original value.
+- Android phone-side configurable step challenge alarm, subject to Android permissions and device capabilities; ordinary stop/fallback controls remain available.
+- Privacy screen, diagnostics without sensitive health values, and accessible UI.
+
+### P1 — Core expansion after MVP data access is proven
+
+- Sleep timeline using only imported stages; notes and user annotations for sleep boundaries and naps.
+- Workout list, manual workout entry, and user correction of activity type without changing source records.
+- HRV and resting-heart-rate trends where records are available and sufficiently complete.
+- GPS workout recording with foreground notification and explicit location controls.
+- Manual treadmill distance correction and GPS quality display.
+- Configurable heart-rate threshold alerts, with limits and background behavior clearly stated.
+- More robust, user-reviewable anomaly flags after a labeled example set exists.
+- Optional home-screen widgets and phone reminders.
+
+### P2 — Later, contingent on user need and evidence
+
+- Editable food diary and deterministic macro arithmetic.
+- Summaries grounded in available records, with missing-data disclosures; no AI coach in MVP.
+- Optional backup/sync service only after threat modeling and a privacy case.
+- Google Health API adapter only if project onboarding, scopes, OAuth verification, terms, and user access are confirmed.
+- Additional behavior-equivalent wellness scores (for example sleep or recovery summaries) only after the inputs, calibration, and score interpretation are validated. Scores must be labeled as Becel estimates, not Bevel scores.
+
+### Out of scope unless separately approved
+
+- Production management of Fitbit Air firmware, general alarms, or settings. The user-requested one-shot wrist test is implemented as a debug-only experiment and remains gated from release builds under section 10.
+- Guaranteed live sensor streaming or guaranteed third-party Bluetooth coexistence with Google Health.
+- Reverse-engineered Bluetooth commands as a production dependency.
+- Guaranteeing that users cannot silence or bypass the phone alarm.
+- Medical diagnosis, treatment, or claims of clinical accuracy.
+- Copying Bevel branding, proprietary assets, or presenting Becel scores as equivalent to Bevel.
+- Mandatory cloud accounts or a paid subscription in the initial release.
+
+## 5. Data access strategy and feasibility gates
+
+### 5.1 Primary candidate: Health Connect
+
+Health Connect is a local Android data store and a candidate import source, not a guaranteed Fitbit Air integration. Android documentation says Health Connect is available on Android 9+ with Google Play services; users grant per-data-type permissions. Historical reads beyond the default 30 days require an additional permission when supported, and background reads require a separate permission. Data availability depends on what Google Health actually writes to Health Connect and what the user grants.
+
+Therefore:
+
+- Build a small proof of concept before committing the dashboard or scoring roadmap to any specific Fitbit Air metric.
+- On target hardware, record which Health Connect types are present, their provenance, sample resolution, date range, update delay, and behavior after revocation/regrant.
+- Query only granted data types and available history. Do not assume 60-day baselines or full-fidelity intraday HR.
+- Sync on app foreground/resume and through appropriately permitted background work; WorkManager is deferrable and is not a real-time 15-minute guarantee.
+- Use the Health Connect Changes API only where supported and appropriate; handle token invalidation, deletions, interrupted reads, and duplicate records.
+- Treat user-selected source priorities and aggregation behavior as possible causes of differences in aggregate data.
+
+### 5.2 Optional candidate: Google Health API
+
+Google’s current developer documentation describes the Google Health API as successor infrastructure for Fitbit data, but explicitly says it is **not onboarding new projects at this time**. It also says updates are available only after tracker sync, with automatic Fitbit/Google Health sync described as possible about every 15 minutes while the app is open, connected, and in Bluetooth range. This does not establish a Becel project’s eligibility, access approval, backfill range, or webhook entitlement.
+
+Accordingly, do not make the Google Health API a launch dependency. Before starting an adapter, verify project enablement, current developer terms, OAuth scopes/verification, supported Air data types, rate limits, history behavior, and webhook configuration for Becel’s own project. Keep API credentials and refresh tokens out of the client where applicable. Do not claim that cloud access bypasses Health Connect’s limits unless the API contract and approved project confirm it.
+
+### 5.3 Legacy Fitbit Web API
+
+Google’s current documentation states that the Fitbit Web API will turn off on **30 October 2026**. Do not start a new long-term integration on that API. Recheck the migration documentation at implementation time because dates and access rules can change.
+
+### 5.4 Source adapter contract
+
+Each data source reports capabilities, permissions, sync status, and errors explicitly. Conceptual interface:
+
+```dart
+abstract interface class HealthDataSource {
+  String get sourceId;
+  Future<SourceCapabilities> getCapabilities();
+  Future<PermissionStatus> requestPermissions(Set<MetricType> metrics);
+  Future<SyncResult> sync(SyncWindow window);
+}
 ```
 
----
+An unsupported metric must be represented as unsupported, not as an empty or fabricated reading.
 
-## 11. Phased roadmap & acceptance criteria
+## 6. Data and persistence requirements
 
-**Phase 0 — Foundation (done/next)**
-- Flutter Android project (this repo, name `becel`). ✅
-- CI (analyze + test), theming, navigation shell, Drift schema v1.
+Use a local SQLite-backed store (Drift or another maintained Flutter solution) with migrations. Normalize units and UTC timestamps while preserving original value, source identity, original timestamps, and available timezone/offset metadata.
 
-**Phase 1 — MVP scores (the reason to exist)**
-- Health Connect ingestion (HR, HRV, RHR, RR, SpO₂, temp, sleep, steps, workouts).
-- Recovery, Sleep, Strain, Stress, Energy Bank engines + Today screen + details + trends.
-- Calibration states; morning notification; background sync; Play data-declaration.
-- *Accept:* after 3 weeks of Fitbit Air data, scores available without gaps; app cold-start
-  → Today < 2 s; scores refresh after each Google Health sync.
+Core entities:
 
-**Phase 2 — Fitness depth**
-- Cardio Load/Status/Focus, HRR, workout list w/ zones, manual workouts, Timeline.
-- Journal + insights, hydration/caffeine, Activity Status, widget(s).
-- *Accept:* TRIMP load matches sanity checks on sample workouts; journal insights show
-  correlations after 30 days.
+- **Source record:** source, source record ID if supplied, metric/type, value, unit, start/end time, import time, origin/device metadata where available, quality flags, and safe raw payload only when justified.
+- **Derived metric:** metric, value/unit, time window, algorithm name/version, input record IDs, assumptions, and uncertainty label.
+- **User annotation:** target interval/record, corrected label or note, author (user), and audit timestamps.
+- **Sync state:** source/type, last attempt/success, cursor/token if supported, and sanitized error code.
+- **Alarm configuration:** schedule, repeat days, step goal, sound/vibration, maximum duration, and fallback controls.
 
-**Phase 3 — Nutrition & Biology**
-- Food logging (search/describe/barcode; photo AI if feasible), Nutrition Score, macros,
-  net energy; glucose entry/CGM display; weight trend, LBM, BP, baselines; cycle tracking.
-- *Accept:* daily energy balance ±5% vs Google Health totals.
+Rules:
 
-**Phase 4 — Pro features**
-- Google Health API cloud sync (OAuth + backfill + webhooks), health records (manual/PDF →
-  labs), Biological Age + confidence, training plans, AI coach.
-- *Accept:* 1-year backfill in < 5 min; AI answers cite user metrics correctly.
+- Store times in UTC; render in the user’s local zone and handle daylight-saving/timezone changes.
+- Never interpret absence of a sample as zero.
+- Deduplicate by provider record ID when available; otherwise use a documented stable composite key.
+- Preserve corrected or deleted-source semantics when the provider exposes them.
+- Do not log raw health values or sensitive routes in production diagnostics.
+- Export and deletion must include Becel-derived data and clearly state what remains in Google Health/Health Connect.
 
-**Phase 5 — Polish/launch**
-- Accessibility pass, performance pass, crash-free > 99.5%, privacy policy + data-safety
-  forms, Play review incl. Health Connect declarations, beta via Play internal track.
+## 7. Product features and UX
 
----
+### Navigation
 
-## 12. Non-goals (explicit)
+1. **Today:** available daily metrics, last update, recent sleep/workout, estimated vs imported energy.
+2. **History:** calendar/date selector and daily/weekly timelines.
+3. **Activity:** imported workouts, manual entries, optional GPS sessions and annotations.
+4. **Sleep:** sessions, imported stages, gaps and notes.
+5. **Data quality:** missing periods, provenance, suspicious intervals, permissions and source status.
+6. **Alarm:** schedule, challenge length, progress, sound/vibration and fallback configuration.
+7. **Settings:** connected sources, units, privacy, export, local deletion and diagnostics.
 
-- iOS app (Bevel itself is iOS; this is the Android counterpart).
-- Wear OS companion app in v1 (no Fitbit Air data path to a watch; revisit later).
-- Direct Fitbit Air Bluetooth pairing / on-device workouts / wrist smart alarm
-  (technically impossible for third parties; see §3).
-- Live in-exercise HR display (post-hoc only).
-- Medical claims; diagnosing illness; ECG-like features (Air has no ECG).
-- Copying Bevel's trade dress, assets, copy, or brand.
-- CGM hardware integration in v1 (glucose data entry/display only until a validated
-  source is available via Health Connect).
+### UX behavior
 
----
+- Every value shows a unit and can be opened to inspect source, freshness, interval, and history.
+- Mark estimates and manual entries clearly; distinguish them visually and in exports.
+- Include loading, empty, unsupported, stale, permission-denied, sync-error, and partial-data states.
+- Never rely on color alone. Support large text, screen readers, and accessible chart summaries.
+- Use a restrained dark/light system with a distinct Becel identity. Do not reproduce Bevel’s exact interface or assets.
 
-## 13. Risks & legal
+## 8. Calorie estimate requirements
 
-| Risk | Mitigation |
+Calorie values are estimates. The app must preserve imported energy records and show Becel calculations separately. Use a documented activity MET reference (initial candidate: 2024 Adult Compendium) and store reference/version with the algorithm. Do not call the Fitbit Air estimate “wrong” simply because it differs.
+
+For a MET-based baseline:
+
+```text
+gross kcal  = MET × 3.5 × weight_kg / 200 × duration_minutes
+active kcal = max(MET − 1, 0) × 3.5 × weight_kg / 200 × duration_minutes
+```
+
+Inputs and behavior:
+
+- Require valid duration and a recent, sourced body-weight value for the baseline; disclose if a fallback is used.
+- Map activity type to a documented MET range/value; avoid using one universal intensity.
+- Treat HR, pace, cadence, distance, grade, and user corrections as optional context, not proof of energy expenditure.
+- Personalize from HR only after calibration and validation, with signal coverage/quality checks.
+- Return gross and active estimates, inputs, source, algorithm version, and a plain-language uncertainty note.
+- Flag contradictory duration/distance/pace/cadence or insufficient HR coverage without overwriting input records.
+- Validate against hand-calculated fixtures and, before accuracy claims, a representative reference dataset. Do not imply indirect-calorimetry accuracy without such validation.
+
+## 9. Activity data-quality feature
+
+Initial anomaly detection should be simple, explainable, and non-destructive. Potential flags include unusual step rate, impossible duration/distance combinations, overlapping sessions, abrupt source gaps, or activity totals inconsistent with available samples. Thresholds require labeled real examples and should be configurable/calibrated.
+
+The interface should say “review this interval” and show the evidence. Users may confirm, dismiss, annotate, or compare with another source. Never silently subtract steps or change a source value. Report validation results and false-positive rates internally before presenting the feature as reliable.
+
+## 10. Alarm feature requirements
+
+The configurable step challenge is a **phone-side alarm**. A 500-step goal is a default suggestion from the supplied plan, not a hard-coded requirement. Users can choose the target and retain a clear stop/fallback path for safety, accessibility, sensor failure, or emergency.
+
+Android implementation considerations:
+
+- Use Android alarm APIs for user-scheduled alarm events; request exact-alarm capability only if justified and handle denial/revocation. Android documentation distinguishes exact alarms from deferrable WorkManager work.
+- Full-screen alarm intents are restricted on Android 14+ to apps whose permitted core use is calling or alarms; verify Google Play eligibility and runtime permission state. A full-screen activity is not a device lock, and users retain OS controls.
+- Request `ACTIVITY_RECOGNITION` for step-counter sensor access on Android 10+; `TYPE_STEP_COUNTER` may have up to 10 seconds latency and depends on device sensor support.
+- Count steps relative to a baseline captured when the challenge starts; persist and restore challenge state. Do not depend on a raw all-day step total.
+- Provide an audible/notification fallback and safe dismissal if the sensor is absent, permission is denied, app process is killed, or the device restarts.
+- Test screen-off behavior, battery restrictions, reboot, notification permission, volume/DND, OEM variants, and exact-alarm access on real target phones.
+- Do not advertise “inescapable”, “cannot be silenced”, or guaranteed 500-step enforcement.
+
+### Fitbit Air wrist haptics
+
+The user explicitly requested a Fitbit Air vibration test initiated entirely from Becel; a phone vibration or handoff to Google Health does not meet that requirement. Becel now contains a debug-build-only prototype adapted from the community Apache-2.0 Golden Gate bridge. It scans for Fitbit Golden Gate devices, asks the user to select the Air, briefly toggles the private `/settings` haptics value, restores the saved value, and verifies it. The reported prototype was validated on one Air, not on this Becel build. It relies on private BLE/DTLS behavior, can interrupt Google Health sync, and may fail if the saved Bluetooth address rotates. Google Health's paired-device API only documents get/list operations; its user help supports alarm setup in Google Health. Fitbit's platform terms prohibit reverse-engineering or interference and require an agreement for unsupported use cases. Therefore this experiment is hidden in release builds and is not an alarm, notification guarantee, or production feature. Do not publish or enable it in a release until legal authorization, license review, security review, coexistence, reliability, and target-device testing are resolved. Never substitute phone vibration for this app-only wrist test.
+
+## 11. Technical architecture
+
+```mermaid
+flowchart TD
+  A[Fitbit Air] --> B[Google Health]
+  B -. only data actually shared .-> C[Health Connect adapter]
+  C --> D[Source repository]
+  D --> E[Local SQLite]
+  E --> F[Today and history UI]
+  E --> G[Calorie estimate engine]
+  E --> H[Data quality flags]
+  E --> I[Sleep and activity views]
+  J[Android step sensor] --> K[Phone step challenge]
+  L[Optional GPS session] --> D
+  M[Optional approved Google Health API] -. contingent .-> D
+  E --> N[CSV / JSON export]
+```
+
+Flutter owns presentation, repositories, normalized models, local persistence, and portable calculation logic. Kotlin is reserved for Android-specific Health Connect integration if the selected Flutter package cannot meet requirements, alarm lifecycle, sensors, permissions, and optional Bluetooth experiments. Keep platform code behind narrow interfaces.
+
+Background work is best-effort and permission-dependent. Do not promise real-time ingestion, a fixed 15-minute polling cadence, or immediate morning scores. Show last successful import and let foreground refresh recover from missed background work.
+
+## 12. Milestones and exit gates
+
+### Milestone 0 — Feasibility (before substantial feature implementation)
+
+- Confirm target handset model, Android release, Google Health version, Health Connect availability, and Fitbit Air pairing.
+- Inventory the Health Connect records actually produced by a real Fitbit Air: data types, source metadata, sample granularity, history, and update delays.
+- Check permission behavior and whether background/historical reads are supported on that installation.
+- Check Google Health API project onboarding for Becel; confirm docs/terms and test-project access, if available.
+- Prototype step sensor and alarm behavior on the target phone.
+- Keep the direct Bluetooth haptic test isolated to debug builds and measure behavior with a real Air while Google Health is idle, syncing, foregrounded, and backgrounded.
+
+**Exit:** written capability report with screenshots/logged type names (no sensitive values), reproducible sample import, and a go/no-go for each candidate data source. If Fitbit Air data is unavailable, revise product scope before promising Air-specific analysis.
+
+### Milestone 1 — Data foundation
+
+- Flutter app shell, source diagnostics, permission rationale, adapter interface, database schema/migrations.
+- Import a bounded time range idempotently; preserve provenance and sync diagnostics.
+- Add export and local deletion.
+
+**Exit:** repeat imports create no duplicates; denied/revoked permissions recover cleanly; missing data is not shown as zero; source values can be inspected and exported.
+
+### Milestone 2 — MVP dashboard and history
+
+- Today, history, metric details, freshness, partial-data and error states.
+- Build only cards for metrics confirmed available in Milestone 0.
+
+**Exit:** manually compare app display and exported records against source data for representative cases and date/time boundaries.
+
+### Milestone 3 — Calorie and quality engines
+
+- Implement MET baseline, gross/active separation, provenance, uncertainty, and explainable flags.
+- Add replay fixtures and user review flow.
+
+**Exit:** calculation fixtures match independently computed results within rounding tolerance; estimates never replace source values; anomaly behavior is documented and reviewed against labeled examples.
+
+### Milestone 4 — Alarm prototype and core expansion
+
+- Implement phone-side alarm and relative step goal with safe fallback.
+- Add sleep timeline, workout annotations, and optional GPS only after MVP stability.
+
+**Exit:** alarm test matrix covers supported target devices and known failures; it works without Fitbit Air; users can stop it if sensor or permission support fails.
+
+### Milestone 5 — Private beta readiness
+
+- Verify migrations, privacy notice, export/delete, accessibility, crash diagnostics, and device coverage.
+- Document supported metrics, delays, unavailable sources, and known limitations.
+
+**Exit:** no known data-loss issue in tested import/export/delete flows; no copy or diagnosis claims; release notes describe actual, tested capabilities.
+
+## 13. Post-MVP roadmap
+
+After feedback and reliable imports: sleep/workout refinements, trend summaries, user-calibrated recovery/sleep insights, optional food log, widgets, and optional backup. Add AI summaries only if they cite the records they use, disclose missing data, and avoid medical advice. Add cloud/API support only after access, policy, privacy, security, and cost feasibility are established. Prioritize with user evidence rather than attempting feature parity with another app.
+
+## 14. Acceptance criteria for MVP
+
+- App can clearly report supported/unsupported metrics and current permissions.
+- Imported values preserve provenance, units, timestamps, and source identity when available.
+- Dashboard/history work with incomplete data and show freshness.
+- Re-sync does not duplicate records; source corrections/deletions are handled where supported.
+- Export and local deletion work and explain that they do not erase Google Health data.
+- Imported calorie values and Becel estimates remain separate; estimate assumptions and version are inspectable.
+- Quality flags never alter source records.
+- Alarm works without a connected band, handles unavailable sensor/permission safely, and never claims to lock the phone or guarantee compliance.
+- Sensitive health values are absent from production logs.
+- Screens have empty/error/permission states and accessible labels.
+- Real-device test report documents tested phones, Android versions, data availability, alarm behavior, and limitations.
+
+## 15. Key risks and responses
+
+| Risk | Response |
 |---|---|
-| Google Health API access gating (OAuth verification, CASA 4–6 wks, scopes) | Start now; build Phase 1–2 on Health Connect (no gating) |
-| Fitbit Web API shutdown Oct 30, 2026 | Never code against legacy API |
-| Health Connect sync must be user-enabled in Google Health app | Onboarding wizard + troubleshooting screens (mirror Google's docs) |
-| Data gaps (watch off, battery, sync lag) | Explain gracefully; Bevel-style "scores unavailable" states; local re-sync |
-| Fitbit HRV is averaged RMSSD (not raw RR) | Treat as our HRV truth; features use relative baselines, not absolute comparisons |
-| Name "Becel" is an existing Unilever food brand | Legal check before launch; rename is cheap now (package id can stay) |
-| Bevel may ship Android later | Move fast on Fitbit-Air niche; local-first privacy + Journal/Nutrition depth as moat |
-| Health-data policies (Play health apps, GDPR/HIPAA-adjacent) | Local-first, consent, export/delete, no ad SDKs |
-| Fake-score temptation during calibration | Hard rule: no score without required signals; show calibration UI |
+| Fitbit Air data is absent or too summarized in Health Connect | Validate first; ship only supported data; reconsider Air-specific value if core data is unavailable. |
+| Google Health API onboarding remains closed | Keep it optional; use only verified Health Connect data or revise product assumptions. |
+| Sync is delayed or background work is deferred | Show freshness and refresh on foreground; do not promise real-time coaching. |
+| Historical reads are permission/version limited | Request only if needed and supported; disclose actual range; avoid assuming long baselines. |
+| Bluetooth haptics cannot coexist with Google Health | Keep haptics experimental; phone alarm remains independent. |
+| Android alarm permissions or full-screen behavior vary | Handle denied permissions and OEM behavior; retain user controls and fallback. |
+| Calorie estimates are inaccurate for an individual | Label estimates and uncertainty; preserve source values; validate before claims. |
+| Anomaly flags frustrate users | Make flags explainable and reversible; measure false positives; never auto-correct. |
+| Health data is exposed | Local-first, minimum permissions, sanitized logs, explicit export/delete, secure any future tokens. |
+| Scope expands into a Bevel clone | Keep primary roadmap focused on companion utility; validate later features with users. |
 
----
+## 16. Research notes and primary references
 
-## 14. References
+External platform behavior can change. Recheck sources before implementation and release. Research here verifies platform/API constraints; it does not establish that every listed Fitbit Air metric is actually present on a particular phone.
 
-**Bevel**
-- https://www.bevel.health/ · https://www.bevel.health/app · https://www.bevel.health/watch-2
-- App Store: https://apps.apple.com/us/app/bevel-ai-health-coach/id6456176249
-- Help — Membership & Pricing: https://help.bevel.health/en/articles/11583937
-- Help — Key Bevel Terms: https://help.bevel.health/en/articles/11251073
-- Help — Recovery FAQ: https://help.bevel.health/en/articles/11258177
-- Help — Stress & Energy FAQ: https://help.bevel.health/en/articles/11258369
-- Help — Common Questions (calibration): https://help.bevel.health/en/articles/11257601
-- Blog — Recovery: https://www.bevel.health/blog/what-is-recovery-score
-- Blog — Sleep: https://www.bevel.health/blog/what-is-sleep-score
-- Blog — Strain: https://www.bevel.health/blog/what-is-strain-score
-- Blog — Cardio Load: https://www.bevel.health/blog/the-basics-cardio-load
-- Blog — Biological Age: https://www.bevel.health/blog/biological-age-the-basics
-- Independent review: https://bodly.app/blog/bevel-app-review
-- Score explainer: https://www.fitcoin.co/articles/bevel-scores-explained
+- [Google Health API overview and onboarding status](https://developers.google.com/health) — states projects are not currently being onboarded and gives Fitbit Web API shutdown timeline.
+- [Google Health paired-device API](https://developers.google.com/health/reference/rest/v4beta/users.pairedDevices) — exposes device metadata and alarm capability; the documented methods are get/list.
+- [Fitbit Web API Create Alarm](https://dev.fitbit.com/build/reference/web-api/devices/create-alarm/) — model-limited legacy alarm endpoint; verify Air support and current status before any use.
+- [Fitbit Platform Terms](https://dev.fitbit.com/new-developer/) — governs Fitbit platform access and calls out unsupported use cases and reverse engineering.
+- [Google Fitbit Air alarm help](https://support.google.com/googlehealth/answer/14226604) — documents the supported alarm setup path in Google Health and wrist vibration at alarm time.
+- [Unofficial Fitbit Air haptics bridge](https://github.com/paceaitian/fitbit-air-notification-bridge) — community experiment only; not a supported or approved Becel integration.
+- [Google Health API device compatibility](https://developers.google.com/health/data-types/device-compatibility) — device/type compatibility reference; verify supported metric table and project availability when building.
+- [Google Health API data types and data availability](https://developers.google.com/health/data-types) — data updates depend on tracker sync; describes possible ~15-minute sync conditions.
+- [Android Health Connect availability](https://developer.android.com/health-and-fitness/health-connect/availability) — Android version and Play services requirements.
+- [Health Connect permissions and setup](https://developer.android.com/health-and-fitness/health-connect/get-started) — per-type user permissions.
+- [Health Connect data types and additional read permissions](https://developer.android.com/health-and-fitness/health-connect/data-types) — background and history permission declarations.
+- [Health Connect read behavior and history limits](https://developer.android.com/health-and-fitness/health-connect/read-data) — background reads, historical access, default 30-day limit.
+- [Health Connect sync guidance](https://developer.android.com/health-and-fitness/health-connect/sync-data) — changes sync/background reads and lack of automatic new-data notification.
+- [Android alarm scheduling](https://developer.android.com/develop/background-work/services/alarms) — exact alarm permissions and deferrable work guidance.
+- [Android 14 full-screen intent limits](https://developer.android.com/about/versions/14/behavior-changes-14) — full-screen intent eligibility and user control.
+- [Android motion sensors](https://developer.android.com/develop/sensors-and-location/sensors/sensors_motion) — step counter permission and latency.
+- [2024 Adult Compendium of Physical Activities](https://pacompendium.com/) — candidate MET reference; confirm licensing/attribution and mapping before use.
+- [Flutter platform channels](https://docs.flutter.dev/platform-integration/platform-channels) — Flutter/native integration reference.
 
-**Fitbit Air**
-- https://www.wired.com/story/google-fitbit-air/
-- https://uk.pcmag.com/fitness-trackers/165161/fitbit-air
-- https://gadgetsandwearables.com/technical-specs/fitbit-air/
-- https://store.google.com/us/product/google_fitbit_air_specs
-- https://blog.google/intl/en-in/products/hardware/the-all-new-fitbit-air-comes-to-india/
+The supplied `gemini_finding.md` is treated as an idea source, not an authoritative verification source. Its claims that Fitbit Air alarm internals, double-tap behavior, call-alert loops, direct GATT controls, specific chipset limits, or exact vibration battery impacts are verified should not be carried forward without direct primary evidence and device tests.
 
-**APIs & platform**
-- Google Health API: https://developers.google.com/health
-- Data types: https://developers.google.com/health/data-types
-- Endpoints/data source families: https://developers.google.com/health/endpoints
-- Migration from Fitbit Web API: https://developers.google.com/health/migration
-- Health Connect: https://developer.android.com/health-and-fitness/health-connect
-- Health Connect data types: https://developer.android.com/health-and-fitness/health-connect/data-types
-- Google Health ⇄ Health Connect support: https://support.google.com/fitbit/answer/14506680
-- CASA/migration timeline: https://help.validic.com/space/VCS/5535203416
+## 17. Immediate next actions
+
+1. Run Milestone 0 on the actual Fitbit Air and target Android phone; record data availability and latency.
+2. Confirm current Google Health API onboarding and terms for this project; do not build against it until access exists.
+3. Build the narrow import diagnostic and provenance-preserving local store.
+4. Implement Today/history for only confirmed types.
+5. Add calorie estimates and reviewable quality flags with transparent assumptions.
+6. Prototype the phone alarm on the actual target handset with permission and failure handling.
+7. Validate the debug-only wrist haptic experiment on the user's Air and resolve authorization, coexistence, and reliability before considering any release build support.

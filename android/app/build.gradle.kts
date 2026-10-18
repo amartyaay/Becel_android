@@ -24,7 +24,8 @@ android {
         applicationId = "com.becel.becel"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Health Connect's Android SDK supports API 26 and newer.
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -37,6 +38,18 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    debugImplementation(project(":RxFitbitGatt"))
+    debugImplementation(project(":GoldenGateBindings"))
+    debugImplementation(project(":linkcontroller"))
+    debugImplementation(project(":GoldenGateConnectionManager"))
+    debugImplementation("com.github.fitbit:bitgatt:v0.9.11")
+    debugImplementation("io.reactivex.rxjava2:rxjava:2.2.21")
 }
 
 flutter {
