@@ -128,6 +128,21 @@ Sep 30, 2026) ([developers.google.com/health](https://developers.google.com/heal
   max query range 90 days for most rollups (14 days for HR/calories).
 - Requires a Google Cloud project, OAuth verification, and **CASA security assessment
   (4–6 weeks)** before production — start this early ([Validic timeline](https://help.validic.com/space/VCS/5535203416/Fitbit+to+Google+Health+API:+Developer+Migration+Timeline)).
+- **OAuth client = Web Server type** (setup asks for a redirect URI; register a custom
+  URI scheme such as `com.becel:/oauth2redirect` for the Android app). Mobile apps must
+  use the **system browser (Chrome Custom Tabs)** — AppAuth-style flow
+  (`flutter_appauth`); embedded WebViews are forbidden and break Google OAuth.
+- **Pre-consent requirement**: user must first link Google Health in the Google Health
+  mobile app. Verify after token exchange with `GET /v4/users/me/identity`; handle
+  `400 ACCOUNT_NOT_LINKED`.
+- **Refresh tokens** expire after **7 days** while the consent screen stays in
+  "Testing" (100 test users max). Publish before production. Refresh on-demand only —
+  never batch-/cron-refresh. Separate GCP projects per environment (no sandbox).
+- **RISC (Cross-Account Protection) is optional** — enable later only if we want push
+  notices for revoked tokens / unlinked accounts; otherwise detect via failed refreshes.
+- **Onboarding deep links**: `https://www.fitbit.com/in-app/today` opens the Google
+  Health app (Today page); `https://fitbit.google.com/wse/deeplink/store` opens its
+  store listing ([universal/app links](https://developers.google.com/health/universal-app-links)).
 
 Fitbit Air–compatible data types we will consume (from the
 [data types table](https://developers.google.com/health/data-types)):
@@ -156,6 +171,29 @@ skin temperature, VO₂max, exercise sessions, steps, distance, calories, total 
 Publishing requirements: declare every Health Connect data type in the Play Console,
 justify health-data access, implement background-read permission flow, respect write
 cooldowns (15 min) if Becel ever writes back.
+
+**Verified `health` plugin (v13.3.2, carp.dk) details for our build** — checked against
+pub.dev, [docs.carp.dk](https://docs.carp.dk/plugins/health/data-types) and plugin source:
+
+- `minSdkVersion 26` required (bump `android/app/build.gradle.kts`; Flutter default is
+  21). Health Connect runs on Android 9+ (API 28) via the Play app, built-in on Android
+  14+.
+- Android-verified data types we need: **HRV RMSSD** (changelog 13.2.0; Android-only in
+  the plugin), **skin temperature** (13.3.1+; availability varies by HC version), body
+  temperature, blood oxygen, respiratory rate, resting HR, HR, sleep stages
+  (deep/light/REM/awake/asleep), steps, distance, calories, workouts (+ routes).
+- **Workout routes**: Android only surfaces routes while our app is in the foreground,
+  and reading Google Health's routes requires the user to manually grant "Always
+  allow" for *Exercise routes* in the Health Connect app (no request dialog exists yet).
+- Manifest setup: per-type `android.permission.health.READ_*` permissions, `<queries>`
+  block for `com.google.android.apps.healthdata`, `ViewPermissionUsageActivity`
+  activity-alias linking the privacy policy (required for Play review), `MainActivity`
+  must extend `FlutterFragmentActivity`, `ACTIVITY_RECOGNITION` for steps/pedometer.
+- Background sync: `READ_HEALTH_DATA_IN_BACKGROUND` +
+  `requestHealthDataInBackgroundAuthorization()`.
+- **History window**: reads are capped at the last **30 days** by default; for backfill
+  request history access (`READ_HEALTH_DATA_HISTORY` +
+  `requestHealthDataHistoryAuthorization()`).
 
 ### 4.4 Recommended hybrid (inferred)
 
@@ -343,10 +381,12 @@ with a **Confidence Level** (Low/Med/High) based on data freshness/completeness.
 
 ## 9. Product & UX requirements
 
-1. **Onboarding**: welcome → Google Health/Health Connect permission flow (step-by-step,
-   copy errors verbatim from Health Connect) → wearable check (verify Fitbit Air data
-   present) → goals (sleep goal, activity level, sex/age for targets) → baseline
-   calibration explanation.
+1. **Onboarding**: welcome → install/sign in to the Google Health app + pair Fitbit Air
+   (deep link `https://fitbit.google.com/wse/deeplink/store`) → enable
+   Google Health → Health Connect sync (Google Health app settings → Connections) →
+   Becel Health Connect permission flow (step-by-step, copy errors verbatim) →
+   wearable check (verify Fitbit Air data present) → goals (sleep goal, activity level,
+   sex/age for targets) → baseline calibration explanation.
 2. **Calibration UX**: banners like Bevel's ("Building your baseline, day X of ~42"),
    grayscale/scored placeholders until enough data; never fabricate scores.
 3. **Morning cycle**: sleep → recovery computed → notification "Recovery 72% — ready to
@@ -372,8 +412,9 @@ with a **Confidence Level** (Low/Med/High) based on data freshness/completeness.
 - **Local DB**: Drift (SQLite) — raw data cache, aggregates, scores, settings.
 - **Health data**: 
   - `health` plugin (Health Connect) for on-device ingestion + background reads.
-  - `googleapis`/`google_sign_in` (or direct OAuth) for Google Health API v4
-    (REST; add gRPC later only if needed).
+  - `googleapis` REST client with AppAuth (`flutter_appauth`) for Google Health API v4 —
+    system-browser flow required (Chrome Custom Tabs); `google_sign_in` is not used
+    (add gRPC later only if needed).
 - **Sync**: `workmanager` periodic jobs (on HC change / every 15–30 min), foreground
   service for long backfills; webhook receiver (needs minimal backend) for push updates.
 - **Charts**: `fl_chart` (or custom painters for hypnogram/energy battery).
