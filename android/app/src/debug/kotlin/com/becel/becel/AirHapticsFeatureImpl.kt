@@ -36,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.Inet4Address
@@ -143,29 +144,49 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
 
     private suspend fun scanDevices(context: Context): List<Map<String, Any>> {
         ensureRuntime(context)
-        return scan(context, exactAddress = null, SCAN_WINDOW_MILLIS)
+        repeat(SCAN_ATTEMPTS) { attempt ->
+            val devices = scan(context, SCAN_WINDOW_MILLIS)
+            if (devices.isNotEmpty()) return devices
+            if (attempt < SCAN_ATTEMPTS - 1) delay(SCAN_RETRY_DELAY_MILLIS)
+        }
+        return emptyList()
     }
 
     private suspend fun testPulse(context: Context): Map<String, Any> {
         ensureRuntime(context)
         val selected = loadSelected(context)
             ?: throw IllegalStateException("Select a Fitbit Air from the scan before testing.")
-        val address = selected["address"] as String
-        val found = scan(context, address, CONNECT_SCAN_WINDOW_MILLIS)
-        if (found.isEmpty()) {
+        val address = awaitSelectedAir(context, selected)
+        if (address == null) {
             throw IllegalStateException(
-                "Fitbit Air was not advertising at the saved Bluetooth address. Scan and select it again; Google Health may be using the connection.",
+                "Fitbit Air has not advertised a connectable Bluetooth address yet. Becel cannot force Google Health to release its connection. Keep the band nearby and try again after Google Health finishes syncing; you do not need to unpair it.",
             )
         }
 
-        val peer = createPeer(address)
+        var peer: StackPeer<CoapEndpoint>? = null
+        var lastConnectError: Exception? = null
+        for (attempt in 0 until CONNECTION_ATTEMPTS) {
+            val attemptPeer = createPeer(address)
+            try {
+                attemptPeer.connection()
+                    .firstOrError()
+                    .timeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .blockingGet()
+                peer = attemptPeer
+                lastConnectError = null
+                break
+            } catch (error: Exception) {
+                lastConnectError = error
+                runCatching { attemptPeer.close() }
+                if (attempt < CONNECTION_ATTEMPTS - 1) delay(CONNECT_RETRY_DELAY_MILLIS)
+            }
+        }
+
+        val connectedPeer = peer ?: throw IllegalStateException(
+            "Fitbit Air advertised, but Becel could not connect. Google Health may have reconnected first; try the pulse again shortly. ${lastConnectError?.message.orEmpty()}",
+        )
         try {
-            val endpoint = peer.connection()
-                .firstOrError()
-                .timeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .map { peer.stackService }
-                .blockingGet()
-            val execution = AirHapticPatternExecutor.execute(endpoint).blockingGet()
+            val execution = AirHapticPatternExecutor.execute(connectedPeer.stackService).blockingGet()
             return mapOf(
                 "deviceName" to (selected["name"] as? String ?: "Fitbit Air"),
                 "initialIntensity" to execution.initialIntensity,
@@ -173,9 +194,43 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
                 "restored" to (execution.initialIntensity == execution.finalIntensity),
             )
         } finally {
-            runCatching { peer.close() }
-            Thread.sleep(PEER_RELEASE_SETTLE_MILLIS)
+            runCatching { connectedPeer.close() }
+            delay(PEER_RELEASE_SETTLE_MILLIS)
         }
+    }
+
+    /**
+     * Google Health and this experimental bridge cannot use the Air's single BLE link together.
+     * Wait for an advertisement, then refresh a rotated address only when a single Air-named
+     * Golden Gate device is visible.
+     */
+    private suspend fun awaitSelectedAir(
+        context: Context,
+        selected: Map<String, Any>,
+    ): String? {
+        val savedAddress = selected["address"] as String
+        val selectedName = (selected["name"] as? String).orEmpty()
+        repeat(CONNECT_SCAN_ATTEMPTS) { attempt ->
+            val devices = scan(context, CONNECT_SCAN_WINDOW_MILLIS)
+            val exact = devices.firstOrNull {
+                (it["address"] as? String).equals(savedAddress, ignoreCase = true)
+            }
+            if (exact != null) return exact["address"] as String
+
+            if (selectedName.contains("air", ignoreCase = true)) {
+                val airMatches = devices.filter {
+                    (it["name"] as? String).orEmpty().contains("air", ignoreCase = true)
+                }
+                if (airMatches.size == 1) {
+                    val current = airMatches.single()
+                    val currentAddress = current["address"] as String
+                    saveSelected(context, currentAddress, current["name"] as? String ?: selectedName)
+                    return currentAddress
+                }
+            }
+            if (attempt < CONNECT_SCAN_ATTEMPTS - 1) delay(SCAN_RETRY_DELAY_MILLIS)
+        }
+        return null
     }
 
     private fun ensureRuntime(context: Context) {
@@ -211,7 +266,6 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
     @SuppressLint("MissingPermission")
     private suspend fun scan(
         context: Context,
-        exactAddress: String?,
         durationMillis: Long,
     ): List<Map<String, Any>> = suspendCancellableCoroutine { continuation ->
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -230,7 +284,6 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
         callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 if (!continuation.isActive) return
-                if (exactAddress != null && !result.device.address.equals(exactAddress, true)) return
                 try {
                     FitbitGatt.getInstance().addBackgroundScannedDeviceConnection(result)
                     found[result.device.address] = mapOf(
@@ -261,24 +314,20 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
         }
 
         try {
-            val filters = if (exactAddress != null) {
-                listOf(ScanFilter.Builder().setDeviceAddress(exactAddress).build())
-            } else {
-                listOf(
-                    ScanFilter.Builder()
-                        .setServiceUuid(
-                            ParcelUuid(GattlinkService.uuid),
-                            ParcelUuid.fromString(GOLDEN_GATE_SERVICE_UUID_MASK),
-                        )
-                        .build(),
-                    ScanFilter.Builder()
-                        .setServiceUuid(
-                            ParcelUuid(FitbitGattlinkService.uuid),
-                            ParcelUuid.fromString(DEFAULT_UUID_MASK),
-                        )
-                        .build(),
-                )
-            }
+            val filters = listOf(
+                ScanFilter.Builder()
+                    .setServiceUuid(
+                        ParcelUuid(GattlinkService.uuid),
+                        ParcelUuid.fromString(GOLDEN_GATE_SERVICE_UUID_MASK),
+                    )
+                    .build(),
+                ScanFilter.Builder()
+                    .setServiceUuid(
+                        ParcelUuid(FitbitGattlinkService.uuid),
+                        ParcelUuid.fromString(DEFAULT_UUID_MASK),
+                    )
+                    .build(),
+            )
             scanner.startScan(
                 filters,
                 ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
@@ -340,6 +389,11 @@ class AirHapticsFeatureImpl : AirHapticsFeature {
         const val SCAN_WINDOW_MILLIS = 8_000L
         const val CONNECT_SCAN_WINDOW_MILLIS = 7_000L
         const val CONNECT_TIMEOUT_SECONDS = 18L
-        const val PEER_RELEASE_SETTLE_MILLIS = 700L
+        const val SCAN_ATTEMPTS = 4
+        const val CONNECT_SCAN_ATTEMPTS = 5
+        const val CONNECTION_ATTEMPTS = 2
+        const val SCAN_RETRY_DELAY_MILLIS = 1_500L
+        const val CONNECT_RETRY_DELAY_MILLIS = 1_000L
+        const val PEER_RELEASE_SETTLE_MILLIS = 1_000L
     }
 }

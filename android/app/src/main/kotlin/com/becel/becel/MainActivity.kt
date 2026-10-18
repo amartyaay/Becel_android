@@ -9,7 +9,8 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.records.metadata.DataOrigin
+import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -24,6 +25,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 
 class MainActivity : FlutterFragmentActivity() {
     private lateinit var healthPermissionLauncher: ActivityResultLauncher<Set<String>>
@@ -145,6 +147,7 @@ class MainActivity : FlutterFragmentActivity() {
             "status" to if (granted.isEmpty()) "permissionRequired" else "ready",
             "granted" to granted.toList().sorted(),
             "checkedAt" to now.toString(),
+            "fitbitAirMetadataMatched" to false,
             "stepCount" to null,
             "heartRateBpm" to null,
             "heartRateAt" to null,
@@ -162,22 +165,28 @@ class MainActivity : FlutterFragmentActivity() {
             "workoutDevice" to null,
         )
 
+        var fitbitAirRecordCount = 0
+
         if (HealthPermission.getReadPermission(StepsRecord::class) in granted) {
             val range = TimeRangeFilter.between(todayStart, now)
-            val hasRecords = client.readRecords(
-                ReadRecordsRequest<StepsRecord>(
-                    timeRangeFilter = range,
-                    pageSize = 1,
-                ),
-            ).records.isNotEmpty()
-            if (hasRecords) {
-                val response = client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+            val records = mutableListOf<StepsRecord>()
+            var pageToken: String? = null
+            do {
+                val response = client.readRecords(
+                    ReadRecordsRequest<StepsRecord>(
                         timeRangeFilter = range,
+                        pageSize = 1000,
+                        pageToken = pageToken,
+                        dataOriginFilter = AIR_SOURCE_ORIGINS,
                     ),
                 )
-                data["stepCount"] = response[StepsRecord.COUNT_TOTAL]
+                records.addAll(response.records.filter { isFitbitAirRecord(it.metadata) })
+                pageToken = response.pageToken
+            } while (!pageToken.isNullOrEmpty())
+
+            if (records.isNotEmpty()) {
+                fitbitAirRecordCount += records.size
+                data["stepCount"] = records.sumOf { it.count }
             }
         }
 
@@ -191,9 +200,12 @@ class MainActivity : FlutterFragmentActivity() {
                         timeRangeFilter = TimeRangeFilter.between(start, now),
                         pageSize = 1000,
                         pageToken = pageToken,
+                        dataOriginFilter = AIR_SOURCE_ORIGINS,
                     ),
                 )
-                records.addAll(response.records)
+                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
+                fitbitAirRecordCount += airRecords.size
+                records.addAll(airRecords)
                 pageToken = response.pageToken
             } while (!pageToken.isNullOrEmpty())
             val latest = records
@@ -206,8 +218,7 @@ class MainActivity : FlutterFragmentActivity() {
             if (latest != null) {
                 data["heartRateBpm"] = latest.second
                 data["heartRateAt"] = latest.first.toString()
-                data["heartRateSource"] = latest.third.metadata.dataOrigin.packageName
-                data["heartRateDevice"] = latest.third.metadata.device?.model
+                data["heartRateSource"] = "Fitbit Air"
             }
         }
 
@@ -221,9 +232,12 @@ class MainActivity : FlutterFragmentActivity() {
                         timeRangeFilter = TimeRangeFilter.between(start, now),
                         pageSize = 100,
                         pageToken = pageToken,
+                        dataOriginFilter = AIR_SOURCE_ORIGINS,
                     ),
                 )
-                records.addAll(response.records)
+                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
+                fitbitAirRecordCount += airRecords.size
+                records.addAll(airRecords)
                 pageToken = response.pageToken
             } while (!pageToken.isNullOrEmpty())
             val latest = records.maxByOrNull { it.endTime }
@@ -232,8 +246,7 @@ class MainActivity : FlutterFragmentActivity() {
                     Duration.between(latest.startTime, latest.endTime).toMinutes()
                 data["sleepStart"] = latest.startTime.toString()
                 data["sleepEnd"] = latest.endTime.toString()
-                data["sleepSource"] = latest.metadata.dataOrigin.packageName
-                data["sleepDevice"] = latest.metadata.device?.model
+                data["sleepSource"] = "Fitbit Air"
             }
         }
 
@@ -247,9 +260,12 @@ class MainActivity : FlutterFragmentActivity() {
                         timeRangeFilter = TimeRangeFilter.between(start, now),
                         pageSize = 100,
                         pageToken = pageToken,
+                        dataOriginFilter = AIR_SOURCE_ORIGINS,
                     ),
                 )
-                records.addAll(response.records)
+                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
+                fitbitAirRecordCount += airRecords.size
+                records.addAll(airRecords)
                 pageToken = response.pageToken
             } while (!pageToken.isNullOrEmpty())
             val latest = records.maxByOrNull { it.endTime }
@@ -258,13 +274,36 @@ class MainActivity : FlutterFragmentActivity() {
                 data["workoutStart"] = latest.startTime.toString()
                 data["workoutDurationMinutes"] =
                     Duration.between(latest.startTime, latest.endTime).toMinutes()
-                data["workoutSource"] = latest.metadata.dataOrigin.packageName
-                data["workoutDevice"] = latest.metadata.device?.model
+                data["workoutSource"] = "Fitbit Air"
             }
         }
 
+        data["fitbitAirMetadataMatched"] = fitbitAirRecordCount > 0
         return data
     }
+
+    private fun isFitbitAirRecord(metadata: Metadata): Boolean {
+        val packageName = metadata.dataOrigin.packageName
+        if (AIR_SOURCE_PACKAGES.none { it.equals(packageName, ignoreCase = true) }) {
+            return false
+        }
+
+        val device = metadata.device ?: return false
+        val manufacturer = normalizeIdentity(device.manufacturer)
+        val model = normalizeIdentity(device.model)
+        return when (manufacturer) {
+            "fitbit" -> model in AIR_MODELS
+            "google" -> model in GOOGLE_AIR_MODELS
+            "googlefitbit" -> model in AIR_MODELS + GOOGLE_AIR_MODELS
+            else -> false
+        }
+    }
+
+    private fun normalizeIdentity(value: String?): String = value
+        ?.trim()
+        ?.lowercase(Locale.ROOT)
+        ?.replace(Regex("[^a-z0-9]"), "")
+        .orEmpty()
 
     private fun launchHealth(
         result: MethodChannel.Result,
@@ -322,6 +361,16 @@ class MainActivity : FlutterFragmentActivity() {
         private const val CHANNEL_NAME = "com.becel/health_connect"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+        private val AIR_SOURCE_PACKAGES = setOf(
+            "com.fitbit.FitbitMobile",
+            "com.google.android.apps.healthdata",
+        )
+        private val AIR_SOURCE_ORIGINS = setOf(
+            DataOrigin("com.fitbit.FitbitMobile"),
+            DataOrigin("com.google.android.apps.healthdata"),
+        )
+        private val AIR_MODELS = setOf("air", "fitbitair", "googlefitbitair")
+        private val GOOGLE_AIR_MODELS = setOf("air", "fitbitair", "googlefitbitair")
         private val READ_PERMISSIONS = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),

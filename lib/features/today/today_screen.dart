@@ -50,7 +50,7 @@ class _TodayScreenState extends State<TodayScreen> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
-    final hasLiveData = summary?.hasAccess == true;
+    final hasLiveData = summary?.fitbitAirMetadataMatched == true;
     final now = DateTime.now();
     final weekday = const [
       'Monday',
@@ -142,7 +142,7 @@ class _TodayScreenState extends State<TodayScreen> {
                       note: _metricNote(
                         summary?.canReadHeartRate ?? false,
                         summary?.heartRateAt,
-                        'No reading in the last 24 hours',
+                        'No Fitbit Air-matched reading in the last 24 hours',
                       ),
                       chart: const SizedBox.shrink(),
                     ),
@@ -161,7 +161,7 @@ class _TodayScreenState extends State<TodayScreen> {
                           ? _metricNote(
                               summary?.canReadSleep ?? false,
                               null,
-                              'No session in the last 36 hours',
+                              'No Fitbit Air-matched session in the last 36 hours',
                             )
                           : 'Session span · ended ${_formatTime(summary!.sleepEnd!)}',
                       chart: const SizedBox.shrink(),
@@ -193,8 +193,8 @@ class _TodayScreenState extends State<TodayScreen> {
               Center(
                 child: Text(
                   hasLiveData
-                      ? 'HEALTH CONNECT DATA · PULL TO REFRESH'
-                      : 'NO CONNECTED HEALTH DATA · CONNECT A SOURCE',
+                      ? 'FITBIT AIR-MATCHED DATA · PULL TO REFRESH'
+                      : 'NO FITBIT AIR-MATCHED DATA',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: AppColors.textTertiary,
@@ -455,7 +455,7 @@ class _MovementCard extends StatelessWidget {
                 ),
                 child: Text(
                   stepCount != null
-                      ? 'HEALTH CONNECT'
+                      ? 'FITBIT AIR'
                       : hasStepAccess
                       ? 'NO RECORD'
                       : 'STEP ACCESS NEEDED',
@@ -783,14 +783,14 @@ class _RecentActivityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  workout ?? 'No workout found',
+                  workout ?? 'No Fitbit Air-matched workout',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   duration == null
-                      ? 'Allow exercise access or sync a workout'
-                      : '$duration min · Health Connect',
+                      ? 'No Fitbit Air-matched workout available'
+                      : '$duration min · Fitbit Air',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
@@ -863,8 +863,8 @@ class _ConnectionNudge extends StatelessWidget {
                   children: [
                     Text(
                       connected
-                          ? 'Manage your health data'
-                          : 'Connect your health data',
+                          ? 'Manage Fitbit Air data access'
+                          : 'Connect Fitbit Air data',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -873,8 +873,8 @@ class _ConnectionNudge extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       connected
-                          ? 'Review permissions and available records.'
-                          : 'Choose which records Becel can read.',
+                          ? 'Only exact Air source and device matches are shown.'
+                          : 'Records from other devices are excluded.',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 10,

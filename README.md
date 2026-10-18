@@ -4,7 +4,7 @@ Becel is an Android-first, local-first health companion for Fitbit Air users. It
 
 ## Current state
 
-Today, Activity, and Data Sources can request read-only Health Connect access and display available steps, heart-rate samples, sleep sessions, and workouts. Records are read on-device when those screens refresh; Becel does not upload them. Fitbit Air data provenance still needs to be verified on a paired target device. Debug builds include an experimental direct Bluetooth haptic test in Settings, based on the community Golden Gate bridge; it is absent from release builds and has not yet been validated on this Becel build with a physical Air. Trends and some settings remain previews, and there is no persistent local import or export yet.
+Today, Activity, and Data Sources read Health Connect on-device and display a health record only when its source package is Fitbit or Google Health and its device metadata exactly identifies Fitbit Air. Steps are summed from matching records only. Missing or nonmatching metadata, every other source/device, and preview values are excluded from live screens; Becel does not upload these records. Health Connect device metadata is optional and supplied by the writing app, so a match is not cryptographic proof of the physical device. Until the reported Air identity is checked on paired hardware, the app calls it an Air metadata match, not independently verified provenance. Trends remain empty until suitable Air-matched history is available. Debug builds include an experimental direct Bluetooth haptic test in Settings, based on the community Golden Gate bridge; it waits for the Air to advertise, connects for the test, then closes Becel's connection so Google Health can reconnect. Becel cannot force Google Health to release the band, and handoff has not yet been validated on this Becel build with a physical Air. The bridge is absent from release builds. There is no persistent local import or export yet.
 
 See [GOAL.md](GOAL.md) for the product scope, data-access feasibility gates, technical plan, and acceptance criteria.
 
@@ -26,4 +26,4 @@ flutter run
 - Keep the initial product local-first.
 - Do not present example values as live measurements or health estimates as medical advice.
 - Confirm actual Fitbit Air data availability on the target device before building dependent features.
-- The debug-only Air haptic experiment may interrupt Google Health syncing. It toggles the band haptics setting briefly and verifies restoration; do not treat it as a supported or safety-critical alert path.
+- The debug-only Air haptic experiment waits for the Air to advertise, toggles the haptics setting briefly, verifies restoration, then closes its BLE connection. It cannot force Google Health to release the band or guarantee that Health reconnects; do not treat it as a supported or safety-critical alert path.

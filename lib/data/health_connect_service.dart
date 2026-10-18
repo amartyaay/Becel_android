@@ -61,7 +61,6 @@ class HealthConnectService {
       return false;
     }
   }
-
 }
 
 class HealthConnectInspection {
@@ -121,6 +120,7 @@ class HealthSummary {
     required this.status,
     required this.granted,
     required this.checkedAt,
+    this.fitbitAirMetadataMatched = false,
     this.stepCount,
     this.heartRateBpm,
     this.heartRateAt,
@@ -144,6 +144,7 @@ class HealthSummary {
       status: map['status'] as String? ?? 'unavailable',
       granted: HealthConnectInspection._stringList(map['granted']),
       checkedAt: map['checkedAt'] as String?,
+      fitbitAirMetadataMatched: map['fitbitAirMetadataMatched'] == true,
       stepCount: _intValue(map['stepCount']),
       heartRateBpm: _intValue(map['heartRateBpm']),
       heartRateAt: map['heartRateAt'] as String?,
@@ -167,6 +168,7 @@ class HealthSummary {
       status: 'error',
       granted: const [],
       checkedAt: null,
+      fitbitAirMetadataMatched: false,
       error: message,
     );
   }
@@ -174,6 +176,7 @@ class HealthSummary {
   final String status;
   final List<String> granted;
   final String? checkedAt;
+  final bool fitbitAirMetadataMatched;
   final int? stepCount;
   final int? heartRateBpm;
   final String? heartRateAt;
@@ -193,18 +196,6 @@ class HealthSummary {
 
   bool get hasAccess => granted.isNotEmpty;
   bool get isReady => status == 'ready' && hasAccess;
-  bool get fitbitAirDetected =>
-      [
-        heartRateDevice,
-        sleepDevice,
-        workoutDevice,
-        heartRateSource,
-        sleepSource,
-        workoutSource,
-      ].whereType<String>().any(
-        (value) => value.toLowerCase().contains('fitbit air'),
-      );
-
   bool get canReadSteps =>
       granted.contains('android.permission.health.READ_STEPS');
   bool get canReadHeartRate =>

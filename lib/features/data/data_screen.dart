@@ -83,7 +83,7 @@ class _DataScreenState extends State<DataScreen> {
     final inspection = _inspection;
     final summary = _summary;
     final healthStatus = inspection?.stateLabel ?? 'Checking';
-    final airSeen = summary?.fitbitAirDetected ?? false;
+    final airSeen = summary?.fitbitAirMetadataMatched ?? false;
 
     return Scaffold(
       body: SafeArea(
@@ -155,7 +155,7 @@ class _DataScreenState extends State<DataScreen> {
                 error: summary?.error ?? inspection?.error,
                 onTap: _connect,
               ),
-              if (summary?.hasAccess == true) ...[
+              if (summary?.fitbitAirMetadataMatched == true) ...[
                 const SizedBox(height: 14),
                 _HealthSummaryCard(summary: summary!),
               ],
@@ -167,9 +167,9 @@ class _DataScreenState extends State<DataScreen> {
                 color: AppColors.green,
                 title: 'Fitbit Air',
                 subtitle: airSeen
-                    ? 'Device details found in Health Connect records'
-                    : 'Air data has not been identified in readable records',
-                status: airSeen ? 'Detected' : 'Unverified',
+                    ? 'Showing records with an approved app source and exact Fitbit Air device metadata'
+                    : 'No exact Fitbit Air metadata match; records from other sources are hidden',
+                status: airSeen ? 'Metadata match' : 'No match',
                 statusColor: airSeen
                     ? AppColors.green
                     : AppColors.textSecondary,
@@ -413,9 +413,9 @@ class _HealthSummaryCard extends StatelessWidget {
         summary.stepCount == null ? '—' : _formatNumber(summary.stepCount!),
         summary.stepCount == null
             ? summary.canReadSteps
-                  ? 'No step record found today'
+                  ? 'No Fitbit Air-matched step record found today'
                   : 'Step access not allowed'
-            : 'Health Connect total',
+            : 'Fitbit Air record',
         AppColors.green,
       ),
       (
@@ -423,7 +423,7 @@ class _HealthSummaryCard extends StatelessWidget {
         summary.heartRateBpm == null ? '—' : '${summary.heartRateBpm} bpm',
         summary.heartRateBpm == null
             ? summary.canReadHeartRate
-                  ? 'No reading in the last 24 hours'
+                  ? 'No Fitbit Air-matched reading in the last 24 hours'
                   : 'Heart-rate access not allowed'
             : _sourceLine(summary.heartRateSource, summary.heartRateDevice),
         AppColors.red,
@@ -435,7 +435,7 @@ class _HealthSummaryCard extends StatelessWidget {
             : _formatDuration(summary.sleepSessionMinutes!),
         summary.sleepSessionMinutes == null
             ? summary.canReadSleep
-                  ? 'No session in the last 36 hours'
+                  ? 'No Fitbit Air-matched session in the last 36 hours'
                   : 'Sleep access not allowed'
             : 'Session span · '
                   '${_sourceLine(summary.sleepSource, summary.sleepDevice)}',
@@ -446,7 +446,7 @@ class _HealthSummaryCard extends StatelessWidget {
         summary.workoutType ?? '—',
         summary.workoutDurationMinutes == null
             ? summary.canReadExercise
-                  ? 'No workout found in the last 7 days'
+                  ? 'No Fitbit Air-matched workout in the last 7 days'
                   : 'Workout access not allowed'
             : '${summary.workoutDurationMinutes} min · '
                   '${_sourceLine(summary.workoutSource, summary.workoutDevice)}',
@@ -468,7 +468,7 @@ class _HealthSummaryCard extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'Available records',
+                  'Fitbit Air records',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                 ),
               ),
@@ -479,7 +479,7 @@ class _HealthSummaryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(99),
                 ),
                 child: const Text(
-                  'LIVE READ',
+                  'AIR FILTER',
                   style: TextStyle(
                     color: AppColors.green,
                     fontSize: 8,
@@ -492,7 +492,7 @@ class _HealthSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           const Text(
-            'Read from Health Connect · nothing is written back',
+            'Only exact Fitbit Air source and device metadata matches are shown. Other records are hidden.',
             style: TextStyle(color: AppColors.textTertiary, fontSize: 9),
           ),
           const SizedBox(height: 8),

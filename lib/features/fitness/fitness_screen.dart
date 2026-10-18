@@ -51,7 +51,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
-    final connected = summary?.hasAccess == true;
+    final connected = summary?.fitbitAirMetadataMatched == true;
     final statusColor = connected ? AppColors.green : AppColors.yellow;
 
     return Scaffold(
@@ -154,8 +154,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
               Center(
                 child: Text(
                   connected
-                      ? 'READ FROM HEALTH CONNECT · PULL TO REFRESH'
-                      : 'WORKOUTS APPEAR WHEN AVAILABLE IN HEALTH CONNECT',
+                      ? 'FITBIT AIR-MATCHED RECORDS · PULL TO REFRESH'
+                      : 'NO FITBIT AIR-MATCHED RECORDS',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppColors.textTertiary,
@@ -185,9 +185,9 @@ class _MovementCard extends StatelessWidget {
     final progress = ((stepCount ?? 0) / goal).clamp(0.0, 1.0);
     final count = stepCount == null ? '—' : _formatNumber(stepCount!);
     final status = stepCount != null
-        ? 'TODAY'
+        ? 'FITBIT AIR'
         : canReadSteps
-        ? 'NO RECORD'
+        ? 'NO AIR RECORD'
         : 'ACCESS NEEDED';
 
     return Container(
@@ -274,7 +274,7 @@ class _MovementCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            '10,000 step reference goal · Health Connect total',
+            '10,000 reference goal · only Fitbit Air metadata matches are shown',
             style: TextStyle(color: AppColors.textTertiary, fontSize: 9),
           ),
         ],
@@ -347,8 +347,8 @@ class _WorkoutCard extends StatelessWidget {
                   !canReadExercise
                       ? 'Allow workout access in Data Sources'
                       : hasWorkout
-                      ? '${duration ?? '—'} min · Health Connect'
-                      : 'No exercise session found in the last 7 days',
+                      ? '${duration ?? '—'} min · Fitbit Air'
+                      : 'No Fitbit Air-matched exercise session found in the last 7 days',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 9,

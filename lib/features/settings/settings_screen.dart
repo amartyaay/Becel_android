@@ -203,7 +203,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
   Future<void> _scan() async {
     setState(() {
       _scanning = true;
-      _status = 'Looking for Fitbit devices nearby…';
+      _status = 'Waiting for Fitbit Air to advertise nearby…';
       _lastTestRestored = null;
     });
     try {
@@ -215,7 +215,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
           .toList();
       if (devices.isEmpty) {
         setState(() => _status =
-            'No compatible Fitbit device found. Keep Air nearby and awake, then scan again.');
+            'Fitbit Air has not advertised yet. Keep it nearby; if Google Health is syncing, Becel will keep checking while the band becomes available.');
         return;
       }
       final selected = await showModalBottomSheet<Map<String, dynamic>>(
@@ -277,7 +277,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
   Future<void> _testPulse() async {
     setState(() {
       _testing = true;
-      _status = 'Connecting to Fitbit Air…';
+      _status = 'Waiting for Fitbit Air, then connecting briefly…';
       _lastTestRestored = null;
     });
     try {
@@ -287,7 +287,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
       setState(() {
         _lastTestRestored = restored;
         _status = restored
-            ? 'Haptic command sent. Original setting restored and verified.'
+            ? 'Pulse sent and original setting restored. Becel disconnected so Google Health can reconnect.'
             : 'The band did not confirm its original haptics setting.';
       });
     } on PlatformException catch (error) {
@@ -385,7 +385,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
               borderRadius: BorderRadius.circular(13),
             ),
             child: const Text(
-              'Unofficial Bluetooth control may briefly interrupt Google Health sync. The test changes haptics for less than a second and checks that the previous setting is restored.',
+              'Becel waits for Air to advertise, connects only for this short test, restores the previous haptics setting, then disconnects so Google Health can reconnect. If Health is using the band, the test may wait. Becel cannot force Health to release it.',
               style: TextStyle(
                 fontSize: 10,
                 color: AppColors.textSecondary,

@@ -101,6 +101,8 @@ Therefore:
 - Use the Health Connect Changes API only where supported and appropriate; handle token invalidation, deletions, interrupted reads, and duplicate records.
 - Treat user-selected source priorities and aggregation behavior as possible causes of differences in aggregate data.
 
+The current app uses a fail-closed Air-only display filter: it reads raw records, accepts only the Fitbit or Google Health source packages, and then requires device manufacturer/model metadata to match Fitbit Air exactly. Step totals are calculated only from those matching records; records with missing or nonmatching metadata are omitted, and live screens contain no sample health values. Health Connect device metadata is optional and source-app supplied, so this match is an attribution check rather than cryptographic proof that the physical band produced the record. Confirm the exact metadata written by a paired Air before describing it as verified Air data or relaxing this filter.
+
 ### 5.2 Optional candidate: Google Health API
 
 Google’s current developer documentation describes the Google Health API as successor infrastructure for Fitbit data, but explicitly says it is **not onboarding new projects at this time**. It also says updates are available only after tracker sync, with automatic Fitbit/Google Health sync described as possible about every 15 minutes while the app is open, connected, and in Bluetooth range. This does not establish a Becel project’s eligibility, access approval, backfill range, or webhook entitlement.
@@ -157,7 +159,7 @@ Rules:
 4. **Sleep:** sessions, imported stages, gaps and notes.
 5. **Data quality:** missing periods, provenance, suspicious intervals, permissions and source status.
 6. **Alarm:** schedule, challenge length, progress, sound/vibration and fallback configuration.
-7. **Settings:** connected sources, units, privacy, export, local deletion and diagnostics.
+7. **Settings:** connected sources, units, privacy, export, local deletion and diagnostics. Debug builds also expose the experimental Fitbit Air haptic test.
 
 ### UX behavior
 
@@ -210,7 +212,7 @@ Android implementation considerations:
 
 ### Fitbit Air wrist haptics
 
-The user explicitly requested a Fitbit Air vibration test initiated entirely from Becel; a phone vibration or handoff to Google Health does not meet that requirement. Becel now contains a debug-build-only prototype adapted from the community Apache-2.0 Golden Gate bridge. It scans for Fitbit Golden Gate devices, asks the user to select the Air, briefly toggles the private `/settings` haptics value, restores the saved value, and verifies it. The reported prototype was validated on one Air, not on this Becel build. It relies on private BLE/DTLS behavior, can interrupt Google Health sync, and may fail if the saved Bluetooth address rotates. Google Health's paired-device API only documents get/list operations; its user help supports alarm setup in Google Health. Fitbit's platform terms prohibit reverse-engineering or interference and require an agreement for unsupported use cases. Therefore this experiment is hidden in release builds and is not an alarm, notification guarantee, or production feature. Do not publish or enable it in a release until legal authorization, license review, security review, coexistence, reliability, and target-device testing are resolved. Never substitute phone vibration for this app-only wrist test.
+The user explicitly requested a Fitbit Air vibration test initiated entirely from Becel; a phone vibration or handoff to Google Health does not meet that requirement. Becel now contains a debug-build-only prototype adapted from the community Apache-2.0 Golden Gate bridge. It scans for Fitbit Golden Gate devices, asks the user to select the Air, briefly toggles the private `/settings` haptics value, restores the saved value, and verifies it. Scanning retries while the band is unavailable; a changed Bluetooth address is accepted only when a single Air-named Golden Gate device is visible. After the pulse, Becel closes its own BLE connection so Google Health may reconnect. Users should not have to unpair the Air, but Becel cannot force Google Health to release its connection or guarantee Health's reconnection. The reported protocol was validated on one Air, not on this Becel build. It relies on private BLE/DTLS behavior and may briefly delay syncing. Fitbit's platform terms prohibit reverse-engineering or interference and require an agreement for unsupported use cases. Therefore this experiment is hidden in release builds and is not an alarm, notification guarantee, or production feature. Do not publish or enable it in a release until legal authorization, license review, security review, coexistence, reliability, and target-device testing are resolved. Never substitute phone vibration for this app-only wrist test.
 
 ## 11. Technical architecture
 
@@ -243,7 +245,7 @@ Background work is best-effort and permission-dependent. Do not promise real-tim
 - Check permission behavior and whether background/historical reads are supported on that installation.
 - Check Google Health API project onboarding for Becel; confirm docs/terms and test-project access, if available.
 - Prototype step sensor and alarm behavior on the target phone.
-- Keep the direct Bluetooth haptic test isolated to debug builds and measure behavior with a real Air while Google Health is idle, syncing, foregrounded, and backgrounded.
+- Keep the direct Bluetooth haptic test isolated to debug builds. With the Air paired in Google Health, measure discovery and availability while Health is idle, syncing, foregrounded, and backgrounded; verify the original haptics setting is restored, Becel releases its BLE connection, and Health resumes syncing without unpairing. Record wait time, failures, and reconnection behavior. Treat discovery retries as best effort; do not claim Becel can force Health to release the band.
 
 **Exit:** written capability report with screenshots/logged type names (no sensitive values), reproducible sample import, and a go/no-go for each candidate data source. If Fitbit Air data is unavailable, revise product scope before promising Air-specific analysis.
 
@@ -309,7 +311,7 @@ After feedback and reliable imports: sleep/workout refinements, trend summaries,
 | Google Health API onboarding remains closed | Keep it optional; use only verified Health Connect data or revise product assumptions. |
 | Sync is delayed or background work is deferred | Show freshness and refresh on foreground; do not promise real-time coaching. |
 | Historical reads are permission/version limited | Request only if needed and supported; disclose actual range; avoid assuming long baselines. |
-| Bluetooth haptics cannot coexist with Google Health | Keep haptics experimental; phone alarm remains independent. |
+| Bluetooth haptics handoff can delay Google Health reconnection | Wait for Air advertisements, close Becel's connection after each test, and validate coexistence with Google Health on paired hardware; keep haptics experimental. |
 | Android alarm permissions or full-screen behavior vary | Handle denied permissions and OEM behavior; retain user controls and fallback. |
 | Calorie estimates are inaccurate for an individual | Label estimates and uncertainty; preserve source values; validate before claims. |
 | Anomaly flags frustrate users | Make flags explainable and reversible; measure false positives; never auto-correct. |
@@ -349,4 +351,4 @@ The supplied `gemini_finding.md` is treated as an idea source, not an authoritat
 4. Implement Today/history for only confirmed types.
 5. Add calorie estimates and reviewable quality flags with transparent assumptions.
 6. Prototype the phone alarm on the actual target handset with permission and failure handling.
-7. Validate the debug-only wrist haptic experiment on the user's Air and resolve authorization, coexistence, and reliability before considering any release build support.
+7. Validate the debug-only wrist haptic handoff on the user's Air while it remains paired to Google Health. Confirm pulse delivery, restoration, Becel disconnect, and Health reconnection across idle/sync/foreground/background cases; resolve authorization, coexistence, and reliability before considering any release build support.
