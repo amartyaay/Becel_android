@@ -240,12 +240,18 @@ class MainActivity : FlutterFragmentActivity() {
                 records.addAll(airRecords)
                 pageToken = response.pageToken
             } while (!pageToken.isNullOrEmpty())
-            val latest = records.maxByOrNull { it.endTime }
-            if (latest != null) {
+            // Prefer the longest session that ended in the last day so the
+            // main night sleep wins over naps; fall back to the longest
+            // session in the whole 36-hour window.
+            val recent = records.filter { it.endTime >= now.minus(Duration.ofHours(24)) }
+            val main = (recent.ifEmpty { records }).maxByOrNull {
+                Duration.between(it.startTime, it.endTime)
+            }
+            if (main != null) {
                 data["sleepSessionMinutes"] =
-                    Duration.between(latest.startTime, latest.endTime).toMinutes()
-                data["sleepStart"] = latest.startTime.toString()
-                data["sleepEnd"] = latest.endTime.toString()
+                    Duration.between(main.startTime, main.endTime).toMinutes()
+                data["sleepStart"] = main.startTime.toString()
+                data["sleepEnd"] = main.endTime.toString()
                 data["sleepSource"] = "Fitbit Air"
             }
         }
@@ -284,19 +290,27 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun isFitbitAirRecord(metadata: Metadata): Boolean {
         val packageName = metadata.dataOrigin.packageName
-        if (AIR_SOURCE_PACKAGES.none { it.equals(packageName, ignoreCase = true) }) {
+        val fromFitbitApp = packageName.equals(FITBIT_APP_PACKAGE, ignoreCase = true)
+        if (!fromFitbitApp &&
+            AIR_SOURCE_PACKAGES.none { it.equals(packageName, ignoreCase = true) }
+        ) {
             return false
         }
 
-        val device = metadata.device ?: return false
-        val manufacturer = normalizeIdentity(device.manufacturer)
-        val model = normalizeIdentity(device.model)
-        return when (manufacturer) {
-            "fitbit" -> model in AIR_MODELS
-            "google" -> model in GOOGLE_AIR_MODELS
-            "googlefitbit" -> model in AIR_MODELS + GOOGLE_AIR_MODELS
-            else -> false
+        val manufacturer = normalizeIdentity(metadata.device?.manufacturer)
+        val model = normalizeIdentity(metadata.device?.model)
+
+        if (manufacturer.isEmpty() && model.isEmpty()) {
+            // Steps and heart-rate records synced by the Fitbit app often
+            // carry no device metadata; the Fitbit app source is the only
+            // identity available for them.
+            return fromFitbitApp
         }
+
+        if (manufacturer.isNotEmpty() && manufacturer !in AIR_MANUFACTURERS) {
+            return false
+        }
+        return model in AIR_MODELS || model.isEmpty()
     }
 
     private fun normalizeIdentity(value: String?): String = value
@@ -361,16 +375,23 @@ class MainActivity : FlutterFragmentActivity() {
         private const val CHANNEL_NAME = "com.becel/health_connect"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+        private const val FITBIT_APP_PACKAGE = "com.fitbit.FitbitMobile"
         private val AIR_SOURCE_PACKAGES = setOf(
-            "com.fitbit.FitbitMobile",
+            FITBIT_APP_PACKAGE,
             "com.google.android.apps.healthdata",
         )
         private val AIR_SOURCE_ORIGINS = setOf(
-            DataOrigin("com.fitbit.FitbitMobile"),
+            DataOrigin(FITBIT_APP_PACKAGE),
             DataOrigin("com.google.android.apps.healthdata"),
         )
         private val AIR_MODELS = setOf("air", "fitbitair", "googlefitbitair")
-        private val GOOGLE_AIR_MODELS = setOf("air", "fitbitair", "googlefitbitair")
+        private val AIR_MANUFACTURERS = setOf(
+            "fitbit",
+            "google",
+            "googlefitbit",
+            "googlellc",
+            "fitbitinc",
+        )
         private val READ_PERMISSIONS = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),

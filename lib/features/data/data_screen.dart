@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
+import '../../widgets/kit.dart';
 
 class DataScreen extends StatefulWidget {
   const DataScreen({super.key});
@@ -96,52 +97,24 @@ class _DataScreenState extends State<DataScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'YOUR INFORMATION',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.05,
-                          ),
+              ScreenHeader(
+                eyebrow: 'YOUR INFORMATION',
+                title: 'Data sources',
+                trailing: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppColors.green,
                         ),
-                        SizedBox(height: 5),
-                        Text(
-                          'Data sources',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 27,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_loading)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.green,
+                      )
+                    : StatusPill(
+                        label: healthStatus,
+                        color: inspection?.hasAnyPermission == true
+                            ? AppColors.green
+                            : AppColors.yellow,
                       ),
-                    )
-                  else
-                    _StatusPill(
-                      healthStatus,
-                      inspection?.hasAnyPermission == true
-                          ? AppColors.green
-                          : AppColors.yellow,
-                    ),
-                ],
               ),
               const SizedBox(height: 21),
               _ConnectionHero(
@@ -159,17 +132,17 @@ class _DataScreenState extends State<DataScreen> {
                 const SizedBox(height: 14),
                 _HealthSummaryCard(summary: summary!),
               ],
-              const SizedBox(height: 25),
-              const _SectionLabel('CONNECTIONS'),
+              const SizedBox(height: 26),
+              const Text('CONNECTIONS', style: AppType.eyebrow),
               const SizedBox(height: 10),
               _SourceTile(
                 icon: Icons.watch_rounded,
                 color: AppColors.green,
                 title: 'Fitbit Air',
                 subtitle: airSeen
-                    ? 'Showing records with an approved app source and exact Fitbit Air device metadata'
-                    : 'No exact Fitbit Air metadata match; records from other sources are hidden',
-                status: airSeen ? 'Metadata match' : 'No match',
+                    ? 'Showing Fitbit Air records from the Fitbit app and Google Health; other apps are hidden'
+                    : 'No Fitbit Air records yet; records from other apps are hidden',
+                status: airSeen ? 'Air records' : 'No match',
                 statusColor: airSeen
                     ? AppColors.green
                     : AppColors.textSecondary,
@@ -197,22 +170,13 @@ class _DataScreenState extends State<DataScreen> {
                 status: 'Not connected',
                 statusColor: AppColors.textSecondary,
               ),
-              const SizedBox(height: 25),
-              const _SectionLabel('PRIVACY'),
+              const SizedBox(height: 26),
+              const Text('PRIVACY', style: AppType.eyebrow),
               const SizedBox(height: 10),
               const _PrivacyCard(),
-              const SizedBox(height: 17),
-              const Center(
-                child: Text(
-                  'READ ONLY  ·  NO HEALTH DATA IS UPLOADED',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.7,
-                  ),
-                ),
+              const SizedBox(height: 20),
+              const TrustFooter(
+                text: 'READ ONLY  ·  NO HEALTH DATA IS UPLOADED',
               ),
             ],
           ),
@@ -255,9 +219,9 @@ class _ConnectionHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasError = error != null && error!.isNotEmpty;
     return Container(
-      padding: const EdgeInsets.all(19),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -270,20 +234,14 @@ class _ConnectionHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.green.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.sensors_rounded,
-                  color: AppColors.green,
-                  size: 20,
-                ),
+              const IconChip(
+                icon: Icons.sensors_rounded,
+                color: AppColors.green,
+                size: 42,
+                iconSize: 21,
+                radius: 14,
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,8 +250,9 @@ class _ConnectionHero extends StatelessWidget {
                       hasAccess ? 'Health Connect is ready' : status,
                       style: const TextStyle(
                         color: AppColors.textPrimary,
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -301,65 +260,76 @@ class _ConnectionHero extends StatelessWidget {
                       hasAccess
                           ? 'Read-only access · on this device'
                           : 'Your permission stays in your control',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                      ),
+                      style: AppType.caption,
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.circle,
-                size: 8,
-                color: hasAccess ? AppColors.green : AppColors.yellow,
+              const SizedBox(width: 10),
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: hasAccess ? AppColors.green : AppColors.yellow,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (hasAccess ? AppColors.green : AppColors.yellow)
+                          .withValues(alpha: 0.35),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 17),
+          const SizedBox(height: 18),
           Text(
             hasAccess
                 ? 'Your data, on your terms.'
                 : 'Connect once. Keep control.',
             style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.55,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           Text(
             hasAccess
                 ? 'Becel reads only the types you approved. Pull to refresh '
                       'to check for new records.'
                 : 'Choose exactly which health data Becel can read. We will '
                       'show the source and freshness for available records.',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              height: 1.5,
-            ),
+            style: AppType.note,
           ),
           if (lastChecked != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Last checked ${_formatTime(lastChecked!)}',
-              style: const TextStyle(
-                color: AppColors.textTertiary,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(
+                  Icons.refresh_rounded,
+                  size: 14,
+                  color: AppColors.textTertiary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Last checked ${_formatTime(lastChecked!)}',
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ],
           if (hasError) ...[
-            const SizedBox(height: 8),
-            Text(
-              error!,
-              style: const TextStyle(color: AppColors.red, fontSize: 10),
-            ),
+            const SizedBox(height: 10),
+            InfoNote(text: error!, textColor: AppColors.red),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 17),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -377,21 +347,9 @@ class _ConnectionHero extends StatelessWidget {
                       isAvailable && hasAccess
                           ? Icons.refresh_rounded
                           : Icons.arrow_forward_rounded,
-                      size: 17,
+                      size: 18,
                     ),
               label: Text(buttonLabel),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.green,
-                foregroundColor: const Color(0xFF18210D),
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
             ),
           ),
         ],
@@ -407,7 +365,7 @@ class _HealthSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final values = <(String, String, String?, Color)>[
+    final values = <(String, String, String?, Color, IconData)>[
       (
         'Steps today',
         summary.stepCount == null ? '—' : _formatNumber(summary.stepCount!),
@@ -417,6 +375,7 @@ class _HealthSummaryCard extends StatelessWidget {
                   : 'Step access not allowed'
             : 'Fitbit Air record',
         AppColors.green,
+        Icons.directions_walk_rounded,
       ),
       (
         'Latest heart rate',
@@ -427,9 +386,10 @@ class _HealthSummaryCard extends StatelessWidget {
                   : 'Heart-rate access not allowed'
             : _sourceLine(summary.heartRateSource, summary.heartRateDevice),
         AppColors.red,
+        Icons.favorite_rounded,
       ),
       (
-        'Latest sleep session',
+        'Main sleep session',
         summary.sleepSessionMinutes == null
             ? '—'
             : _formatDuration(summary.sleepSessionMinutes!),
@@ -440,6 +400,7 @@ class _HealthSummaryCard extends StatelessWidget {
             : 'Session span · '
                   '${_sourceLine(summary.sleepSource, summary.sleepDevice)}',
         AppColors.blue,
+        Icons.nightlight_round,
       ),
       (
         'Latest workout',
@@ -451,66 +412,43 @@ class _HealthSummaryCard extends StatelessWidget {
             : '${summary.workoutDurationMinutes} min · '
                   '${_sourceLine(summary.workoutSource, summary.workoutDevice)}',
         AppColors.violet,
+        Icons.directions_run_rounded,
       ),
     ];
 
-    return Container(
+    return SurfaceCard(
       padding: const EdgeInsets.fromLTRB(17, 16, 17, 9),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(23),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               const Expanded(
-                child: Text(
-                  'Fitbit Air records',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                ),
+                child: Text('Fitbit Air records', style: AppType.cardTitle),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: const Text(
-                  'AIR FILTER',
-                  style: TextStyle(
-                    color: AppColors.green,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.55,
-                  ),
-                ),
-              ),
+              StatusPill(label: 'AIR FILTER', color: AppColors.green),
             ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           const Text(
-            'Only exact Fitbit Air source and device metadata matches are shown. Other records are hidden.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 9),
+            'Only records written for Fitbit Air by the Fitbit app or Google Health are shown. Other sources and devices are hidden.',
+            style: AppType.caption,
           ),
           const SizedBox(height: 8),
           for (final item in values) ...[
             const Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 11),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: item.$4,
-                      shape: BoxShape.circle,
-                    ),
+                  IconChip(
+                    icon: item.$5,
+                    color: item.$4,
+                    size: 36,
+                    iconSize: 18,
+                    radius: 12,
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,8 +456,10 @@ class _HealthSummaryCard extends StatelessWidget {
                         Text(
                           item.$1,
                           style: const TextStyle(
-                            fontSize: 10,
+                            color: AppColors.textPrimary,
+                            fontSize: 13.5,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: -0.1,
                           ),
                         ),
                         if (item.$3 != null) ...[
@@ -528,27 +468,20 @@ class _HealthSummaryCard extends StatelessWidget {
                             item.$3!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 8,
-                            ),
+                            style: AppType.caption,
                           ),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Flexible(
                     child: Text(
                       item.$2,
                       textAlign: TextAlign.right,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: AppType.numS,
                     ),
                   ),
                 ],
@@ -580,25 +513,13 @@ class _SourceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
-      ),
+    return SurfaceCard(
+      radius: 18,
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Icon(icon, color: color, size: 19),
-          ),
-          const SizedBox(width: 11),
+          IconChip(icon: icon, color: color, size: 40, iconSize: 20),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,8 +528,9 @@ class _SourceTile extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: AppColors.textPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.1,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -616,30 +538,13 @@ class _SourceTile extends StatelessWidget {
                   subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 9,
-                  ),
+                  style: AppType.caption,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(99),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(
-                color: statusColor,
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
+          const SizedBox(width: 10),
+          StatusPill(label: status, color: statusColor),
         ],
       ),
     );
@@ -651,75 +556,23 @@ class _PrivacyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SurfaceCard(
+      color: AppColors.surface,
+      radius: 18,
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(color: AppColors.border),
-      ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lock_outline_rounded, color: AppColors.teal, size: 18),
-          SizedBox(width: 10),
+          Icon(Icons.lock_outline_rounded, color: AppColors.teal, size: 19),
+          SizedBox(width: 11),
           Expanded(
             child: Text(
               'Becel requests read-only access. Your records stay in Health '
               'Connect; this app reads them on-device and does not upload them.',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 10,
-                height: 1.5,
-              ),
+              style: AppType.note,
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill(this.label, this.color);
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        color: AppColors.textTertiary,
-        fontSize: 9,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 1,
       ),
     );
   }

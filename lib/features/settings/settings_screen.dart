@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../widgets/kit.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -15,42 +16,19 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
         children: [
-          Container(
-            padding: const EdgeInsets.all(17),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceHigh,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  color: AppColors.yellow,
-                  size: 19,
-                ),
-                SizedBox(width: 11),
-                Expanded(
-                  child: Text(
-                    'Health Connect read access is available in Data Sources. '
-                    'Other features are being built.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const InfoNote(
+            icon: Icons.info_outline_rounded,
+            color: AppColors.yellow,
+            text: 'Health Connect read access is available in Data Sources. '
+                'Other features are being built.',
           ),
           if (kDebugMode) ...[
             const SizedBox(height: 18),
             const _AirHapticsTester(),
           ],
-          const SizedBox(height: 24),
-          const _GroupTitle('YOUR DATA'),
-          const SizedBox(height: 9),
+          const SizedBox(height: 26),
+          const Text('YOUR DATA', style: AppType.eyebrow),
+          const SizedBox(height: 10),
           _SettingsCard(
             children: [
               _SettingsRow(
@@ -78,9 +56,9 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 22),
-          const _GroupTitle('APP'),
-          const SizedBox(height: 9),
+          const SizedBox(height: 24),
+          const Text('APP', style: AppType.eyebrow),
+          const SizedBox(height: 10),
           _SettingsCard(
             children: [
               _SettingsRow(
@@ -100,13 +78,13 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 22),
-          const _GroupTitle('ABOUT'),
-          const SizedBox(height: 9),
+          const SizedBox(height: 24),
+          const Text('ABOUT', style: AppType.eyebrow),
+          const SizedBox(height: 10),
           _SettingsCard(
             children: const [
               Padding(
-                padding: EdgeInsets.symmetric(vertical: 13),
+                padding: EdgeInsets.symmetric(vertical: 14),
                 child: Row(
                   children: [
                     _BrandMark(),
@@ -118,39 +96,33 @@ class SettingsScreen extends StatelessWidget {
                           Text(
                             'Becel',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: FontWeight.w800,
+                              letterSpacing: -0.2,
                             ),
                           ),
                           SizedBox(height: 3),
                           Text(
                             'An independent wellness companion',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppColors.textSecondary,
-                            ),
+                            style: AppType.caption,
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      'PREVIEW',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textTertiary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    SizedBox(width: 10),
+                    StatusPill(label: 'PREVIEW', color: AppColors.yellow),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 23),
-          const Text(
-            'Wellness insights only · Not a medical device',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 10, color: AppColors.textTertiary),
+          const SizedBox(height: 24),
+          const Center(
+            child: Text(
+              'Wellness insights only · Not a medical device',
+              textAlign: TextAlign.center,
+              style: AppType.caption,
+            ),
           ),
         ],
       ),
@@ -228,12 +200,12 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
             children: [
               const Text(
                 'Choose your Fitbit Air',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               const Text(
                 'Only select the Air band you want Becel to test.',
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                style: AppType.caption,
               ),
               const SizedBox(height: 12),
               for (final device in devices)
@@ -321,7 +293,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.green.withValues(alpha: 0.42)),
       ),
       child: Column(
@@ -329,18 +301,12 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.green.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: const Icon(
-                  Icons.vibration_rounded,
-                  color: AppColors.green,
-                  size: 19,
-                ),
+              const IconChip(
+                icon: Icons.vibration_rounded,
+                color: AppColors.green,
+                size: 38,
+                iconSize: 19,
+                radius: 13,
               ),
               const SizedBox(width: 11),
               const Expanded(
@@ -349,13 +315,17 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                   children: [
                     Text(
                       'Fitbit Air haptic test',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                     SizedBox(height: 3),
                     Text(
                       'EXPERIMENTAL · DEBUG BUILD',
                       style: TextStyle(
-                        fontSize: 8,
+                        fontSize: 10,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.9,
                         color: AppColors.green,
@@ -371,15 +341,11 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
             _selected == null
                 ? 'Select the band first, then send a short pulse directly over Bluetooth.'
                 : 'Selected: ${_selected!['name'] ?? 'Fitbit Air'}',
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
+            style: AppType.note,
           ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(11),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppColors.bg,
               borderRadius: BorderRadius.circular(13),
@@ -387,21 +353,21 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
             child: const Text(
               'Becel waits for Air to advertise, connects only for this short test, restores the previous haptics setting, then disconnects so Google Health can reconnect. If Health is using the band, the test may wait. Becel cannot force Health to release it.',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 color: AppColors.textSecondary,
-                height: 1.4,
+                height: 1.45,
               ),
             ),
           ),
           if (_status != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (busy) ...[
                   const SizedBox(
-                    width: 13,
-                    height: 13,
+                    width: 14,
+                    height: 14,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   const SizedBox(width: 8),
@@ -409,20 +375,24 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                   Icon(
                     _lastTestRestored! ? Icons.check_circle : Icons.error_outline,
                     color: statusColor,
-                    size: 15,
+                    size: 16,
                   ),
                   const SizedBox(width: 6),
                 ],
                 Expanded(
                   child: Text(
                     _status!,
-                    style: TextStyle(fontSize: 10, color: statusColor, height: 1.4),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: statusColor,
+                      height: 1.45,
+                    ),
                   ),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: 13),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -430,50 +400,19 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                   onPressed: busy ? null : _scan,
                   icon: const Icon(Icons.bluetooth_searching_rounded, size: 17),
                   label: Text(_selected == null ? 'Select Air' : 'Change band'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                    padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 9),
-                    side: BorderSide(color: AppColors.border.withValues(alpha: 0.8)),
-                  ),
                 ),
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
                   onPressed: busy || _selected == null ? null : _testPulse,
                   icon: const Icon(Icons.waves_rounded, size: 17),
                   label: const Text('Test pulse'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.green,
-                    foregroundColor: const Color(0xFF14200B),
-                    textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
-                    padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 9),
-                  ),
                 ),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GroupTitle extends StatelessWidget {
-  const _GroupTitle(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: AppColors.textTertiary,
-        fontSize: 9,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 0.95,
       ),
     );
   }
@@ -486,13 +425,8 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SurfaceCard(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(21),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-      ),
       child: Column(children: children),
     );
   }
@@ -519,19 +453,11 @@ class _SettingsRow extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(13),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 13),
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(icon, color: color, size: 17),
-            ),
-            const SizedBox(width: 11),
+            IconChip(icon: icon, color: color, size: 38, iconSize: 19, radius: 13),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,25 +465,20 @@ class _SettingsRow extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.1,
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
+                  Text(subtitle, style: AppType.caption),
                 ],
               ),
             ),
             const Icon(
               Icons.chevron_right_rounded,
               color: AppColors.textTertiary,
-              size: 19,
+              size: 20,
             ),
           ],
         ),
@@ -570,7 +491,7 @@ class _SettingsDivider extends StatelessWidget {
   const _SettingsDivider();
 
   @override
-  Widget build(BuildContext context) => const Divider(indent: 45, height: 1);
+  Widget build(BuildContext context) => const Divider(indent: 50, height: 1);
 }
 
 class _BrandMark extends StatelessWidget {
@@ -582,8 +503,12 @@ class _BrandMark extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: AppColors.green,
         borderRadius: BorderRadius.circular(14),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFD9FA83), Color(0xFF91BD49)],
+        ),
       ),
       child: const Icon(
         Icons.monitor_heart_rounded,
