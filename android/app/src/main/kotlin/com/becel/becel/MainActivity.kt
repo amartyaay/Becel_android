@@ -1,6 +1,5 @@
 package com.becel.becel
 
-import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
@@ -32,7 +31,6 @@ import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Duration
@@ -57,15 +55,10 @@ class MainActivity : FlutterFragmentActivity() {
                 mapOf("granted" to grantedPermissions.toList().sorted()),
             )
             pendingPermissionResult = null
-            healthScope.launch { logMetricInventory() }
         }
         bluetoothPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
         ) { grants -> airHapticsFeature.onBluetoothPermissionsResult(grants) }
-        healthScope.launch {
-            delay(3000)
-            logMetricInventory()
-        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -334,123 +327,6 @@ class MainActivity : FlutterFragmentActivity() {
             pages++
         } while (!pageToken.isNullOrEmpty() && pages < 20)
         return records
-    }
-
-    private suspend fun logMetricInventory() {
-        try {
-            val availability = HealthConnectClient.getSdkStatus(this, PROVIDER_PACKAGE)
-            if (availability != HealthConnectClient.SDK_AVAILABLE) return
-            val client = HealthConnectClient.getOrCreate(this)
-            val granted = client.permissionController.getGrantedPermissions()
-            val now = Instant.now()
-            val todayStart = LocalDate.now(ZoneId.systemDefault())
-                .atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val week = now.minus(Duration.ofDays(7))
-
-            suspend fun probe(label: String, permission: String, block: suspend () -> String) {
-                if (permission !in granted) {
-                    Log.i(LOG_TAG, "inventory $label: not granted")
-                    return
-                }
-                val detail = try {
-                    block()
-                } catch (error: Exception) {
-                    "error=${error.message}"
-                }
-                Log.i(LOG_TAG, "inventory $label: $detail")
-            }
-
-            probe("steps_today", HealthPermission.getReadPermission(StepsRecord::class)) {
-                val records = readAirRecords<StepsRecord>(client, todayStart, now)
-                "count=${records.size} sum=${records.sumOf { it.count }}"
-            }
-            probe("heart_rate_7d", HealthPermission.getReadPermission(HeartRateRecord::class)) {
-                val records = readAirRecords<HeartRateRecord>(client, week, now)
-                val samples = records.flatMap { it.samples }
-                "records=${records.size} samples=${samples.size} last=${samples.maxByOrNull { it.time }?.time}"
-            }
-            probe("sleep_7d", HealthPermission.getReadPermission(SleepSessionRecord::class)) {
-                val records = readAirRecords<SleepSessionRecord>(client, week, now)
-                val stageTypes = records.flatMap { it.stages }.map { it.stage }.toSortedSet()
-                "sessions=${records.size} stageTypes=$stageTypes"
-            }
-            probe("exercise_7d", HealthPermission.getReadPermission(ExerciseSessionRecord::class)) {
-                val records = readAirRecords<ExerciseSessionRecord>(client, week, now)
-                "sessions=${records.size} types=${records.map { it.exerciseType }.toSortedSet()}"
-            }
-            probe("distance_today", HealthPermission.getReadPermission(DistanceRecord::class)) {
-                val records = readAirRecords<DistanceRecord>(client, todayStart, now)
-                "count=${records.size}"
-            }
-            probe("floors_today", HealthPermission.getReadPermission(FloorsClimbedRecord::class)) {
-                val records = readAirRecords<FloorsClimbedRecord>(client, todayStart, now)
-                "count=${records.size}"
-            }
-            probe(
-                "total_calories_today",
-                HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
-            ) {
-                val records = readAirRecords<TotalCaloriesBurnedRecord>(client, todayStart, now)
-                "count=${records.size} kcal=${records.sumOf { it.energy.inKilocalories }}"
-            }
-            probe(
-                "active_calories_today",
-                HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-            ) {
-                val records = readAirRecords<ActiveCaloriesBurnedRecord>(client, todayStart, now)
-                "count=${records.size} kcal=${records.sumOf { it.energy.inKilocalories }}"
-            }
-            probe(
-                "basal_calories_today",
-                HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
-            ) {
-                val records = readAirRecords<BasalMetabolicRateRecord>(client, todayStart, now)
-                "count=${records.size}"
-            }
-            probe(
-                "resting_hr_7d",
-                HealthPermission.getReadPermission(RestingHeartRateRecord::class),
-            ) {
-                val records = readAirRecords<RestingHeartRateRecord>(client, week, now)
-                val last = records.maxByOrNull { it.time }
-                "count=${records.size} last=${last?.beatsPerMinute}"
-            }
-            probe(
-                "hrv_rmssd_7d",
-                HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-            ) {
-                val records = readAirRecords<HeartRateVariabilityRmssdRecord>(client, week, now)
-                val last = records.maxByOrNull { it.time }
-                "count=${records.size} last=${last?.heartRateVariabilityMillis}"
-            }
-            probe("spo2_7d", HealthPermission.getReadPermission(OxygenSaturationRecord::class)) {
-                val records = readAirRecords<OxygenSaturationRecord>(client, week, now)
-                val last = records.maxByOrNull { it.time }
-                "count=${records.size} last=${last?.percentage?.value}"
-            }
-            probe(
-                "respiratory_rate_7d",
-                HealthPermission.getReadPermission(RespiratoryRateRecord::class),
-            ) {
-                val records = readAirRecords<RespiratoryRateRecord>(client, week, now)
-                val last = records.maxByOrNull { it.time }
-                "count=${records.size} last=${last?.rate}"
-            }
-            probe(
-                "skin_temp_7d",
-                HealthPermission.getReadPermission(SkinTemperatureRecord::class),
-            ) {
-                val records = readAirRecords<SkinTemperatureRecord>(client, week, now)
-                "count=${records.size}"
-            }
-            probe("vo2max_7d", HealthPermission.getReadPermission(Vo2MaxRecord::class)) {
-                val records = readAirRecords<Vo2MaxRecord>(client, week, now)
-                val last = records.maxByOrNull { it.time }
-                "count=${records.size} last=${last?.vo2MillilitersPerMinuteKilogram}"
-            }
-        } catch (error: Exception) {
-            Log.i(LOG_TAG, "inventory failed: ${error.message}")
-        }
     }
 
     private suspend fun readHeartDetail(): Map<String, Any?> {
@@ -926,7 +802,6 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val CHANNEL_NAME = "com.becel/health_connect"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
-        private const val LOG_TAG = "BecelHealth"
         private const val HEART_BUCKET_MILLIS = 5L * 60L * 1000L
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
         private const val FITBIT_APP_PACKAGE = "com.fitbit.FitbitMobile"
