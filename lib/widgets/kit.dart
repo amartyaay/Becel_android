@@ -132,18 +132,47 @@ class ScreenHeader extends StatelessWidget {
     required this.eyebrow,
     required this.title,
     this.trailing,
+    this.onBack,
   });
 
   final String eyebrow;
   final String title;
   final Widget? trailing;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(eyebrow, style: AppType.eyebrow),
+        if (onBack != null) ...[
+          Row(
+            children: [
+              InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceHigh,
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_rounded,
+                    size: 18,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(eyebrow, style: AppType.eyebrow),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ] else
+          Text(eyebrow, style: AppType.eyebrow),
         const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -535,6 +564,7 @@ class MetricTile extends StatelessWidget {
     required this.value,
     this.unit = '',
     required this.note,
+    this.onTap,
   });
 
   final IconData icon;
@@ -543,57 +573,71 @@ class MetricTile extends StatelessWidget {
   final String value;
   final String unit;
   final String note;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
+    return Material(
+      color: AppColors.surfaceHigh,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(letterSpacing: 0.8),
+              Row(
+                children: [
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.eyebrow.copyWith(letterSpacing: 0.8),
+                    ),
+                  ),
+                  if (onTap != null)
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: AppColors.textTertiary,
+                    ),
+                ],
+              ),
+              const Spacer(),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(value, style: AppType.numM),
+                    if (unit.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Text(unit, style: AppType.unit),
+                    ],
+                  ],
                 ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                note,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.caption,
               ),
             ],
           ),
-          const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(value, style: AppType.numM),
-                if (unit.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Text(unit, style: AppType.unit),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            note,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.caption,
-          ),
-        ],
+        ),
       ),
     );
   }

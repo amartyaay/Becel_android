@@ -1,328 +1,262 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../core/format.dart';
-import '../../data/mock_data.dart';
-import '../../domain/models.dart';
-import '../../domain/score_status.dart';
-import '../../widgets/charts.dart';
-import '../../widgets/components.dart';
-import '../../widgets/visuals.dart';
+import '../../data/health_connect_service.dart';
+import '../../domain/estimates.dart';
+import '../../widgets/charts_kit.dart';
+import '../../widgets/format.dart';
+import '../../widgets/kit.dart';
 
-class SleepScreen extends StatelessWidget {
+class SleepScreen extends StatefulWidget {
   const SleepScreen({super.key});
 
-  static const _stageColors = {
-    SleepStage.awake: AppColors.yellow,
-    SleepStage.rem: Color(0xFF9AA6FF),
-    SleepStage.core: AppColors.sleep,
-    SleepStage.deep: Color(0xFF5A63D8),
-  };
+  @override
+  State<SleepScreen> createState() => _SleepScreenState();
+}
+
+class _SleepScreenState extends State<SleepScreen> {
+  final _health = HealthConnectService.instance;
+  SleepDetail? _sleep;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _health.dataRevision.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _health.dataRevision.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final sleep = await _health.readSleepDetail();
+    if (!mounted) return;
+    setState(() {
+      _sleep = sleep;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final scores = MockData.todayScores;
-    final status = ScoreStatus.sleepScore(scores.sleepScore);
-    final nights = MockData.sleepSeries.sublist(
-      MockData.sleepSeries.length - 7,
-    );
+    final sleep = _sleep;
+    final lastNight = sleep?.lastNight;
+    final score = lastNight == null
+        ? null
+        : sleepScoreEstimate(
+            minutes: lastNight.minutes,
+            deepMinutes: lastNight.deepMinutes,
+            remMinutes: lastNight.remMinutes,
+          );
+    final recent = sleep?.sessions.take(7).toList() ?? const <SleepNight>[];
+    final chronological = recent.reversed.toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sleep')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-        children: [
-          Center(
-            child: Column(
-              children: [
-                ScoreRing(
-                  value: scores.sleepScore / 100,
-                  color: AppColors.sleep,
-                  size: 176,
-                  stroke: 12,
-                  center: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${scores.sleepScore}',
-                        style: const TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                      const Text(
-                        'Sleep score',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                StatusPill(status.label, status.color),
-                const SizedBox(height: 10),
-                const Text(
-                  '7h 52m asleep · 23:14 – 7:02',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          const SectionHeader('Last night'),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Hypnogram(segments: MockData.lastNightSegments),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    for (final entry in _stageColors.entries)
-                      _StageLegend(
-                        label: _stageLabel(entry.key),
-                        color: entry.value,
-                        minutes: MockData.segmentMinutes(entry.key),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const SectionHeader('Contributors'),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            child: Column(
-              children: const [
-                _Contributor(
-                  label: 'Time asleep',
-                  status: 'Good',
-                  color: AppColors.green,
-                  value: '7h 52m',
-                ),
-                _Contributor(
-                  label: 'Deep sleep',
-                  status: 'Good',
-                  color: AppColors.green,
-                  value: '1h 14m',
-                ),
-                _Contributor(
-                  label: 'REM sleep',
-                  status: 'Fair',
-                  color: AppColors.yellow,
-                  value: '2h 00m',
-                ),
-                _Contributor(
-                  label: 'Heart rate dip',
-                  status: 'Good',
-                  color: AppColors.green,
-                  value: '18%',
-                ),
-                _Contributor(
-                  label: 'Sleep efficiency',
-                  status: 'Good',
-                  color: AppColors.green,
-                  value: '94%',
-                ),
-                _Contributor(
-                  label: 'Continuity',
-                  status: 'Fair',
-                  color: AppColors.yellow,
-                  value: '4 wake-ups',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _load,
+          color: AppColors.green,
+          backgroundColor: AppColors.surfaceHigh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
             children: [
-              Expanded(
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Sleep needed',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+              ScreenHeader(
+                onBack: () => Navigator.of(context).maybePop(),
+                eyebrow: 'REST & REPAIR',
+                title: 'Sleep',
+                trailing: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppColors.green,
                         ),
+                      )
+                    : StatusPill(
+                        label: lastNight == null
+                            ? 'NO SESSION'
+                            : formatDurationMinutes(lastNight.minutes),
+                        color: lastNight == null
+                            ? AppColors.yellow
+                            : AppColors.blue,
+                        icon: Icons.nightlight_round,
                       ),
-                      SizedBox(height: 6),
-                      Text(
-                        '8h 30m',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Goal 8h + 42m debt',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: AppCard(
+              const SizedBox(height: 16),
+              if (sleep?.error != null)
+                InfoNote(text: sleep!.error!)
+              else if (sleep != null && !sleep.canReadSleep)
+                const InfoNote(
+                  text: 'Sleep access is not allowed. Enable it in Data '
+                      'sources to see sessions and stages.',
+                  icon: Icons.lock_outline_rounded,
+                  color: AppColors.yellow,
+                )
+              else if (lastNight == null)
+                const SurfaceCard(
+                  child: Text(
+                    'No Fitbit Air-matched sleep sessions in the last '
+                    '14 days. Sessions appear here after Google Health '
+                    'syncs them.',
+                    style: AppType.note,
+                  ),
+                )
+              else ...[
+                SurfaceCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Sleep bank',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            lastNight.minutes < 60
+                                ? '${lastNight.minutes}m'
+                                : formatDurationMinutes(lastNight.minutes),
+                            style: AppType.numXl,
+                          ),
+                          const Spacer(),
+                          if (score != null)
+                            StatusPill(
+                              label: '$score ESTIMATE',
+                              color: AppColors.blue,
+                            ),
+                        ],
                       ),
-                      SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
-                        '-42m',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                          color: AppColors.red,
-                        ),
+                        'Main session \u00b7 ${formatClock(lastNight.start)} '
+                        '\u2013 ${formatClock(lastNight.end)}',
+                        style: AppType.caption,
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        '7-day balance',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
-                        ),
+                      const SizedBox(height: 14),
+                      StageBar(
+                        segments: [
+                          ChartSegment(
+                            label: 'Awake',
+                            minutes: lastNight.awakeMinutes,
+                            color: AppColors.yellow,
+                          ),
+                          ChartSegment(
+                            label: 'Light',
+                            minutes: lastNight.lightMinutes,
+                            color: AppColors.blue,
+                          ),
+                          ChartSegment(
+                            label: 'Deep',
+                            minutes: lastNight.deepMinutes,
+                            color: AppColors.violet,
+                          ),
+                          ChartSegment(
+                            label: 'REM',
+                            minutes: lastNight.remMinutes,
+                            color: AppColors.teal,
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 14),
+                const InfoNote(
+                  text: sleepScoreFormula,
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.blue,
+                ),
+                const SizedBox(height: 18),
+                if (recent.length >= 2) ...[
+                  SectionHeader(
+                    title: 'Recent nights',
+                    caption: 'SESSION LENGTH',
+                  ),
+                  const SizedBox(height: 12),
+                  SurfaceCard(
+                    child: TrendBars(
+                      values: chronological
+                          .map((night) => night.minutes.toDouble())
+                          .toList(),
+                      labels: chronological
+                          .map((night) => formatDayShort(night.end))
+                          .toList(),
+                      color: AppColors.blue,
+                      valueLabelBuilder: (value) =>
+                          formatDurationMinutes(value.round()),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                SectionHeader(
+                  title: 'Sessions',
+                  caption: 'LAST 14 DAYS',
+                ),
+                const SizedBox(height: 10),
+                for (final night in recent)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SurfaceCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const IconChip(
+                            icon: Icons.bedtime_rounded,
+                            color: AppColors.blue,
+                            size: 34,
+                            iconSize: 17,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _dayLabel(night.end),
+                                  style: AppType.rowTitle,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${formatClock(night.start)} \u2013 '
+                                  '${formatClock(night.end)} \u00b7 deep '
+                                  '${formatDurationMinutes(night.deepMinutes)}',
+                                  style: AppType.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatDurationMinutes(night.minutes),
+                            style: AppType.numS,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 22),
+              const TrustFooter(
+                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          const SectionHeader('Last 7 nights'),
-          AppCard(
-            child: TrendBarChart(
-              data: nights,
-              minY: 0,
-              maxY: 100,
-              colorFor: (index, value) {
-                if (value >= 75) return AppColors.green;
-                if (value >= 60) return AppColors.yellow;
-                return AppColors.red;
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  static String _stageLabel(SleepStage stage) => switch (stage) {
-    SleepStage.awake => 'Awake',
-    SleepStage.rem => 'REM',
-    SleepStage.core => 'Core',
-    SleepStage.deep => 'Deep',
-  };
-}
-
-class _StageLegend extends StatelessWidget {
-  const _StageLegend({
-    required this.label,
-    required this.color,
-    required this.minutes,
-  });
-
-  final String label;
-  final Color color;
-  final int minutes;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '$label ${formatDuration(minutes)}',
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary,
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Contributor extends StatelessWidget {
-  const _Contributor({
-    required this.label,
-    required this.status,
-    required this.color,
-    required this.value,
-  });
-
-  final String label;
-  final String status;
-  final Color color;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(status, style: TextStyle(fontSize: 12, color: color)),
-        ],
-      ),
-    );
+  String _dayLabel(DateTime end) {
+    final local = end.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(local.year, local.month, local.day);
+    final difference = today.difference(day).inDays;
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Yesterday';
+    return formatDayShort(local);
   }
 }

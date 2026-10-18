@@ -1,331 +1,216 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../domain/models.dart';
-import '../../widgets/components.dart';
-import '../../widgets/visuals.dart';
+import '../../data/health_connect_service.dart';
+import '../../widgets/kit.dart';
 
-class BiologyScreen extends StatelessWidget {
+class BiologyScreen extends StatefulWidget {
   const BiologyScreen({super.key});
 
   @override
+  State<BiologyScreen> createState() => _BiologyScreenState();
+}
+
+class _BiologyScreenState extends State<BiologyScreen> {
+  final _health = HealthConnectService.instance;
+  BodyDetail? _body;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _health.dataRevision.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _health.dataRevision.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final body = await _health.readBodyDetail();
+    if (!mounted) return;
+    setState(() {
+      _body = body;
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final body = _body;
+
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
-          children: [
-            const Text(
-              'Biology',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 18),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.9,
-              children: [
-                for (final monitor in MockData.monitors)
-                  _MonitorCard(monitor: monitor),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const SectionHeader('Fitness markers'),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Text(
-                        'VO₂ max',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _load,
+          color: AppColors.green,
+          backgroundColor: AppColors.surfaceHigh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            children: [
+              ScreenHeader(
+                onBack: () => Navigator.of(context).maybePop(),
+                eyebrow: 'MEASURED BY YOUR AIR',
+                title: 'Biology',
+                trailing: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppColors.green,
                         ),
+                      )
+                    : const StatusPill(
+                        label: 'READ ONLY',
+                        color: AppColors.violet,
                       ),
-                      Spacer(),
-                      Text(
-                        '46.2',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Above average for your age · ml/kg/min',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SparkLine(
-                    data: const [
-                      42.0,
-                      42.4,
-                      43.1,
-                      43.4,
-                      44.0,
-                      44.2,
-                      44.8,
-                      45.1,
-                      45.4,
-                      45.8,
-                      46.0,
-                      46.2,
-                    ],
-                    color: AppColors.strain,
-                  ),
-                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            AppCard(
-              onTap: () => showSoonSnack(context, 'Weight logging'),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Text(
-                        'Weight',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Spacer(),
-                      Text(
-                        '74.6 kg',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '-0.4 kg this month · trend',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SparkLine(
-                    data: const [
-                      75.6,
-                      75.5,
-                      75.3,
-                      75.4,
-                      75.2,
-                      75.1,
-                      75.0,
-                      74.9,
-                      74.8,
-                      74.8,
-                      74.7,
-                      74.6,
-                    ],
-                    color: AppColors.sleep,
-                  ),
-                ],
+              const SizedBox(height: 16),
+              _BioTile(
+                icon: Icons.bloodtype_rounded,
+                color: AppColors.red,
+                label: 'Blood oxygen',
+                value: body?.spo2Percent != null
+                    ? body!.spo2Percent!.round().toString()
+                    : '\u2014',
+                unit: '%',
+                note: _baselineNote(body?.spo2Baseline, '%'),
+                hasAccess: body?.canReadSpo2 == true,
               ),
-            ),
-            const SizedBox(height: 12),
-            AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              child: Column(
-                children: const [
-                  InfoRow(
-                    title: 'Body fat',
-                    value: '18.4%',
-                    icon: Icons.percent,
-                    iconColor: AppColors.yellow,
-                  ),
-                  InfoRow(
-                    title: 'Lean body mass',
-                    value: '60.9 kg',
-                    icon: Icons.fitness_center,
-                    iconColor: AppColors.green,
-                  ),
-                  InfoRow(
-                    title: 'Body mass index',
-                    value: '23.1',
-                    icon: Icons.straighten,
-                    iconColor: AppColors.sleep,
-                  ),
-                ],
+              const SizedBox(height: 10),
+              _BioTile(
+                icon: Icons.air_rounded,
+                color: AppColors.teal,
+                label: 'Respiratory rate',
+                value: body?.respiratoryRate != null
+                    ? body!.respiratoryRate!.toStringAsFixed(1)
+                    : '\u2014',
+                unit: 'br/min',
+                note: _baselineNote(body?.respiratoryBaseline, 'br/min'),
+                hasAccess: body?.canReadRespiratory == true,
               ),
-            ),
-            const SizedBox(height: 24),
-            const SectionHeader('Longevity'),
-            AppCard(
-              onTap: () => showSoonSnack(context, 'Biological age'),
-              child: Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Biological age',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            '29',
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'yrs',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '3 years younger than your age',
-                        style: TextStyle(fontSize: 12, color: AppColors.green),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const StatusPill('Pro', AppColors.yellow),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Confidence: high',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              const SizedBox(height: 10),
+              _BioTile(
+                icon: Icons.thermostat_rounded,
+                color: AppColors.yellow,
+                label: 'Skin temperature',
+                value: _skinTempValue(body),
+                unit: '\u00b0C',
+                note: body?.skinTempBaselineC != null
+                    ? 'Deviation from '
+                          '${body!.skinTempBaselineC!.toStringAsFixed(1)}\u00b0C '
+                          'baseline'
+                    : null,
+                hasAccess: body?.canReadSkinTemp == true,
               ),
-            ),
-            const SizedBox(height: 12),
-            AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              child: Column(
-                children: [
-                  InfoRow(
-                    title: 'Health records',
-                    subtitle: 'Labs, bloodwork and clinical notes',
-                    icon: Icons.folder_outlined,
-                    iconColor: AppColors.sleep,
-                    value: '',
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: AppColors.textTertiary,
-                    ),
-                    onTap: () => showSoonSnack(context, 'Health records'),
-                  ),
-                ],
+              const SizedBox(height: 10),
+              _BioTile(
+                icon: Icons.monitor_heart_outlined,
+                color: AppColors.green,
+                label: 'VO\u2082 max',
+                value: body?.vo2Max != null
+                    ? body!.vo2Max!.round().toString()
+                    : '\u2014',
+                unit: 'ml/kg/min',
+                note: body?.vo2Max != null
+                    ? 'Latest estimate written to Health Connect'
+                    : null,
+                hasAccess: body?.canReadVo2Max == true,
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              const InfoNote(
+                text: 'Biology shows raw Fitbit Air values as written to '
+                    'Health Connect. Empty tiles mean either no access or no '
+                    'synced records yet \u2014 Becel never fills them with '
+                    'estimates.',
+                icon: Icons.info_outline_rounded,
+                color: AppColors.violet,
+              ),
+              const SizedBox(height: 22),
+              const TrustFooter(
+                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  String _skinTempValue(BodyDetail? body) {
+    final deviation = body?.skinTempDeviationC;
+    if (deviation == null) return '\u2014';
+    final sign = deviation >= 0 ? '+' : '';
+    return '$sign${deviation.toStringAsFixed(1)}';
+  }
+
+  String? _baselineNote(num? baseline, String unit) {
+    if (baseline == null) return null;
+    return '7-day average ${baseline.toStringAsFixed(1)} $unit';
+  }
 }
 
-class _MonitorCard extends StatelessWidget {
-  const _MonitorCard({required this.monitor});
+class _BioTile extends StatelessWidget {
+  const _BioTile({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.note,
+    required this.hasAccess,
+  });
 
-  final MonitorReading monitor;
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final String unit;
+  final String? note;
+  final bool hasAccess;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return SurfaceCard(
       padding: const EdgeInsets.all(14),
-      onTap: () => showSoonSnack(context, monitor.label),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
         children: [
-          Text(
-            monitor.label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Flexible(
-                child: Text(
-                  monitor.value,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-              if (monitor.unit.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 3),
-                  child: Text(
-                    monitor.unit,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              if (monitor.delta.isNotEmpty) ...[
-                const Spacer(),
+          IconChip(icon: icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppType.rowTitle),
+                const SizedBox(height: 2),
                 Text(
-                  monitor.delta,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textTertiary,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                  hasAccess ? (note ?? 'No records yet') : 'Access needed',
+                  style: AppType.caption.copyWith(
+                    color: hasAccess
+                        ? AppColors.textTertiary
+                        : AppColors.yellow,
                   ),
+                  maxLines: 2,
                 ),
               ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(value, style: AppType.numM),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(unit, style: AppType.unit),
+              ),
             ],
           ),
         ],

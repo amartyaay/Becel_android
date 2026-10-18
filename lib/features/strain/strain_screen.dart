@@ -1,282 +1,228 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../domain/score_status.dart';
-import '../../widgets/charts.dart';
-import '../../widgets/components.dart';
-import '../../widgets/visuals.dart';
+import '../../data/health_connect_service.dart';
+import '../../domain/estimates.dart';
+import '../../widgets/charts_kit.dart';
+import '../../widgets/format.dart';
+import '../../widgets/kit.dart';
 
-class StrainScreen extends StatelessWidget {
+class StrainScreen extends StatefulWidget {
   const StrainScreen({super.key});
 
-  static const _zoneColors = [
-    AppColors.green,
-    Color(0xFF3EDCC4),
-    AppColors.yellow,
-    Color(0xFFFF9F45),
-    AppColors.red,
-  ];
+  @override
+  State<StrainScreen> createState() => _StrainScreenState();
+}
+
+class _StrainScreenState extends State<StrainScreen> {
+  final _health = HealthConnectService.instance;
+  HeartDetail? _heart;
+  ActivityDetail? _activity;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _health.dataRevision.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _health.dataRevision.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final results = await Future.wait<Object>([
+      _health.readHeartDetail(),
+      _health.readActivityDetail(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _heart = results[0] as HeartDetail;
+      _activity = results[1] as ActivityDetail;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final scores = MockData.todayScores;
-    final status = ScoreStatus.strain(
-      scores.strain,
-      scores.strainLow,
-      scores.strainHigh,
-    );
-    final activeStrain = MockData.workouts.fold<double>(
-      0,
-      (sum, workout) => sum + workout.strain,
-    );
-    final passiveStrain = (scores.strain - activeStrain).clamp(0, 100);
+    final heart = _heart;
+    final activity = _activity;
+    final zoneMinutes = heart?.zoneMinutes ?? const [0, 0, 0, 0, 0];
+    final zoneTotal = zoneMinutes.fold<int>(0, (sum, value) => sum + value);
+    final strain = heart?.canReadHeartRate == true
+        ? strainEstimateFromZones(zoneMinutes)
+        : null;
+    final workouts = activity?.workouts ?? const <WorkoutEntry>[];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Strain')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-        children: [
-          Center(
-            child: Column(
-              children: [
-                ScoreRing(
-                  value: scores.strain / 100,
-                  color: AppColors.strain,
-                  size: 176,
-                  stroke: 12,
-                  center: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${scores.strain}%',
-                        style: const TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _load,
+          color: AppColors.green,
+          backgroundColor: AppColors.surfaceHigh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            children: [
+              ScreenHeader(
+                onBack: () => Navigator.of(context).maybePop(),
+                eyebrow: 'CARDIOVASCULAR LOAD',
+                title: 'Strain',
+                trailing: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppColors.green,
                         ),
+                      )
+                    : StatusPill(
+                        label: strain == null ? 'NO HR ACCESS' : 'ESTIMATE',
+                        color: strain == null
+                            ? AppColors.yellow
+                            : AppColors.red,
+                        icon: Icons.bolt_rounded,
                       ),
-                      const Text(
-                        'Strain',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
+              ),
+              const SizedBox(height: 16),
+              if (heart != null && !heart.canReadHeartRate)
+                const InfoNote(
+                  text: 'Strain is calculated from heart-rate zones and needs '
+                      'heart-rate access. Enable it in Data sources.',
+                  icon: Icons.lock_outline_rounded,
+                  color: AppColors.yellow,
+                )
+              else ...[
+                SurfaceCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            strain?.toString() ?? '\u2014',
+                            style: AppType.numXl,
+                          ),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text('of 100 today', style: AppType.unit),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        strain == 0
+                            ? 'No active zone time recorded yet today.'
+                            : 'From $zoneTotal min in heart-rate zones today.',
+                        style: AppType.caption,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                StatusPill(status.label, status.color),
+                const SizedBox(height: 14),
+                const InfoNote(
+                  text: strainFormula,
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.red,
+                ),
+                const SizedBox(height: 18),
+                SectionHeader(
+                  title: 'Time in zones',
+                  caption: 'TODAY \u00b7 FIXED BANDS',
+                ),
                 const SizedBox(height: 10),
-                Text(
-                  'Target strain ${scores.strainLow}–${scores.strainHigh}%',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+                SurfaceCard(
+                  child: zoneTotal == 0
+                      ? Text(
+                          'Not enough heart-rate samples today to map zones.',
+                          style: AppType.caption,
+                        )
+                      : Column(
+                          children: [
+                            for (var index = 0; index < 5; index++)
+                              ZoneBarRow(
+                                label: heartZoneLabels[index],
+                                bpmRange: heartZoneRanges[index],
+                                minutes: zoneMinutes[index],
+                                fraction: zoneMinutes[index] / zoneTotal,
+                                color: heartZoneColors[index],
+                              ),
+                          ],
+                        ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          const SectionHeader('Today'),
-          Row(
-            children: [
-              Expanded(
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Active',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        activeStrain.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'From 3 workouts',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: 18),
+              SectionHeader(
+                title: 'Workouts',
+                caption: 'LAST 7 DAYS',
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Passive',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        passiveStrain.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Daily movement',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
+              const SizedBox(height: 10),
+              if (activity != null && !activity.canReadExercise)
+                const SurfaceCard(
+                  child: Text(
+                    'Workout access is not allowed. Enable exercise access in '
+                    'Data sources to list sessions here.',
+                    style: AppType.note,
                   ),
-                ),
+                )
+              else if (workouts.isEmpty)
+                const SurfaceCard(
+                  child: Text(
+                    'No Fitbit Air-matched workouts in the last 7 days.',
+                    style: AppType.note,
+                  ),
+                )
+              else
+                for (final workout in workouts)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SurfaceCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const IconChip(
+                            icon: Icons.fitness_center_rounded,
+                            color: AppColors.violet,
+                            size: 34,
+                            iconSize: 17,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(workout.type, style: AppType.rowTitle),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${formatDayShort(workout.start)} \u00b7 '
+                                  '${formatClock(workout.start)}',
+                                  style: AppType.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatDurationMinutes(workout.minutes),
+                            style: AppType.numS,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              const SizedBox(height: 22),
+              const TrustFooter(
+                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          const SectionHeader('30-day strain'),
-          AppCard(
-            child: TrendBarChart(
-              data: MockData.strainSeries,
-              minY: 0,
-              maxY: 100,
-              colorFor: (index, value) {
-                if (value < scores.strainLow) return AppColors.sleep;
-                if (value <= scores.strainHigh) return AppColors.green;
-                return AppColors.strain;
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-          const SectionHeader('Heart rate zones'),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            child: Column(
-              children: [
-                for (var i = 0; i < MockData.heartRateZones.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 28,
-                          child: Text(
-                            'Z${MockData.heartRateZones[i][0]}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ProgressBar(
-                            value: MockData.heartRateZones[i][1] / 60,
-                            color: _zoneColors[i],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 42,
-                          child: Text(
-                            '${MockData.heartRateZones[i][1]}m',
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const SectionHeader('Workouts'),
-          for (final workout in MockData.workouts) ...[
-            AppCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.strain.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.directions_run,
-                      size: 20,
-                      color: AppColors.strain,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          workout.title,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          [
-                            if (workout.distanceKm != null)
-                              '${workout.distanceKm} km',
-                            '${workout.durationMin}m',
-                            'Avg ${workout.avgHr} bpm',
-                          ].join(' · '),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    workout.strain.toStringAsFixed(1),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.strain,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-        ],
+        ),
       ),
     );
   }

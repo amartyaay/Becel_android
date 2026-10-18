@@ -154,6 +154,7 @@ class _TodayScreenState extends State<TodayScreen> {
                           summary?.heartRateAt,
                           'No Fitbit Air-matched reading in the last 24 hours',
                         ),
+                        onTap: () => context.push('/health/heart'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -172,6 +173,7 @@ class _TodayScreenState extends State<TodayScreen> {
                                 'No Fitbit Air-matched session in the last 36 hours',
                               )
                             : 'Session span · ended ${_formatTime(summary!.sleepEnd!)}',
+                        onTap: () => context.push('/health/sleep'),
                       ),
                     ),
                   ],

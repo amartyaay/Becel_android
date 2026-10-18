@@ -1,268 +1,285 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../domain/score_status.dart';
-import '../../widgets/charts.dart';
-import '../../widgets/components.dart';
-import '../../widgets/visuals.dart';
+import '../../data/health_connect_service.dart';
+import '../../domain/estimates.dart';
+import '../../widgets/format.dart';
+import '../../widgets/kit.dart';
 
-class RecoveryScreen extends StatelessWidget {
+class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
 
   @override
+  State<RecoveryScreen> createState() => _RecoveryScreenState();
+}
+
+class _RecoveryScreenState extends State<RecoveryScreen> {
+  final _health = HealthConnectService.instance;
+  HeartDetail? _heart;
+  HealthSummary? _summary;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _health.dataRevision.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _health.dataRevision.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final results = await Future.wait<Object>([
+      _health.readHeartDetail(),
+      _health.readSummary(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _heart = results[0] as HeartDetail;
+      _summary = results[1] as HealthSummary;
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scores = MockData.todayScores;
-    final status = ScoreStatus.recovery(scores.recovery);
+    final heart = _heart;
+    final summary = _summary;
+    final score = recoveryEstimate(
+      restingHr: heart?.restingHrBpm,
+      restingHrBaseline: heart?.restingHrBaseline,
+      hrv: heart?.hrvRmssd,
+      hrvBaseline: heart?.hrvBaseline,
+    );
+    final needingAccess = heart != null &&
+        (!heart.canReadHrv || !heart.canReadRestingHr);
+    final strain = heart?.canReadHeartRate == true
+        ? strainEstimateFromZones(heart!.zoneMinutes)
+        : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Recovery')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-        children: [
-          Center(
-            child: Column(
-              children: [
-                ScoreRing(
-                  value: scores.recovery / 100,
-                  color: AppColors.recovery,
-                  size: 176,
-                  stroke: 12,
-                  center: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${scores.recovery}%',
-                        style: const TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _load,
+          color: AppColors.green,
+          backgroundColor: AppColors.surfaceHigh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            children: [
+              ScreenHeader(
+                onBack: () => Navigator.of(context).maybePop(),
+                eyebrow: 'HOW READY YOU ARE',
+                title: 'Recovery',
+                trailing: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppColors.green,
                         ),
+                      )
+                    : StatusPill(
+                        label: score == null ? 'NOT ENOUGH DATA' : 'ESTIMATE',
+                        color: score == null
+                            ? AppColors.yellow
+                            : AppColors.green,
+                        icon: Icons.energy_savings_leaf_rounded,
                       ),
-                      const Text(
-                        'Recovery',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 16),
+              if (needingAccess)
+                const InfoNote(
+                  text: 'Recovery needs HRV and resting heart rate access. '
+                      'Enable them in Data sources; the estimate appears '
+                      'once Health Connect has records.',
+                  icon: Icons.lock_outline_rounded,
+                  color: AppColors.yellow,
+                )
+              else if (score == null)
+                const InfoNote(
+                  text: 'No HRV or resting heart-rate records yet. Fitbit '
+                      'Air data appears after Google Health syncs it.',
+                  icon: Icons.hourglass_empty_rounded,
+                  color: AppColors.yellow,
+                )
+              else ...[
+                SurfaceCard(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('$score', style: AppType.numXl),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('of 100', style: AppType.unit),
+                      ),
+                      const Spacer(),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          _recoveryWord(score).toUpperCase(),
+                          style: AppType.pill.copyWith(
+                            color: _recoveryColor(score),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                StatusPill(status.label, status.color),
+                const SizedBox(height: 14),
+                const InfoNote(
+                  text: recoveryScoreFormula,
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.green,
+                ),
+                const SizedBox(height: 18),
+                SectionHeader(title: 'Signals', caption: 'VS 14-DAY BASELINE'),
                 const SizedBox(height: 10),
-                const Text(
-                  'Your body is ready to take on strain today.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
+                SurfaceCard(
+                  child: Column(
+                    children: [
+                      _SignalRow(
+                        label: 'HRV (RMSSD)',
+                        value: heart?.hrvRmssd != null
+                            ? '${heart!.hrvRmssd!.round()} ms'
+                            : '\u2014',
+                        baseline: heart?.hrvBaseline != null
+                            ? 'Baseline ${heart!.hrvBaseline!.round()} ms'
+                            : 'No baseline',
+                        better: _higherIsBetter(
+                          heart?.hrvRmssd,
+                          heart?.hrvBaseline,
+                        ),
+                        color: AppColors.violet,
+                      ),
+                      const Divider(height: 20, color: AppColors.border),
+                      _SignalRow(
+                        label: 'Resting HR',
+                        value: heart?.restingHrBpm != null
+                            ? '${heart!.restingHrBpm} bpm'
+                            : '\u2014',
+                        baseline: heart?.restingHrBaseline != null
+                            ? 'Baseline ${heart!.restingHrBaseline} bpm'
+                            : 'No baseline',
+                        better: _lowerIsBetter(
+                          heart?.restingHrBpm,
+                          heart?.restingHrBaseline,
+                        ),
+                        color: AppColors.red,
+                      ),
+                      const Divider(height: 20, color: AppColors.border),
+                      _SignalRow(
+                        label: 'Main sleep',
+                        value: summary?.sleepSessionMinutes != null
+                            ? formatDurationMinutes(
+                                summary!.sleepSessionMinutes!,
+                              )
+                            : '\u2014',
+                        baseline: summary?.sleepEnd != null
+                            ? 'Ended ${formatClock(DateTime.parse(summary!.sleepEnd!))}'
+                            : 'No session',
+                        better: null,
+                        color: AppColors.blue,
+                      ),
+                      const Divider(height: 20, color: AppColors.border),
+                      _SignalRow(
+                        label: 'Today\u2019s strain',
+                        value: strain != null ? '$strain' : '\u2014',
+                        baseline: 'From heart-rate zones',
+                        better: null,
+                        color: AppColors.yellow,
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
+              const SizedBox(height: 22),
+              const TrustFooter(
+                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
+              ),
+            ],
           ),
-          const SizedBox(height: 28),
-          const SectionHeader('Contributors'),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            child: Column(
-              children: const [
-                _Contributor(
-                  label: 'Sleep',
-                  status: 'Good',
-                  color: AppColors.green,
-                  value: '88',
-                ),
-                _Contributor(
-                  label: 'HRV',
-                  status: 'Above baseline',
-                  color: AppColors.green,
-                  value: '68 ms',
-                ),
-                _Contributor(
-                  label: 'Resting HR',
-                  status: 'Lower than usual',
-                  color: AppColors.green,
-                  value: '54 bpm',
-                ),
-                _Contributor(
-                  label: 'Respiratory rate',
-                  status: 'Stable',
-                  color: AppColors.green,
-                  value: '14.2 /min',
-                ),
-                _Contributor(
-                  label: 'Blood oxygen',
-                  status: 'Normal',
-                  color: AppColors.green,
-                  value: '97%',
-                ),
-                _Contributor(
-                  label: 'Skin temperature',
-                  status: 'At baseline',
-                  color: AppColors.yellow,
-                  value: '-0.2°C',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const SectionHeader('Recovery trend'),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _CardTitle('Last 30 days'),
-                const SizedBox(height: 16),
-                TrendLineChart(
-                  data: MockData.recoverySeries,
-                  color: AppColors.recovery,
-                  minY: 0,
-                  maxY: 100,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const SectionHeader('Baselines'),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            child: Column(
-              children: const [
-                _Contributor(
-                  label: 'HRV baseline',
-                  status: '60-day average',
-                  color: AppColors.sleep,
-                  value: '64 ms',
-                ),
-                _Contributor(
-                  label: 'RHR baseline',
-                  status: '60-day average',
-                  color: AppColors.sleep,
-                  value: '56 bpm',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Text(
-                      'Calibration',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Spacer(),
-                    Text(
-                      'Day 12 of 42',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const ProgressBar(value: 12 / 42, color: AppColors.recovery),
-                const SizedBox(height: 8),
-                const Text(
-                  'Scores become personalized after your baseline is built.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  String _recoveryWord(int score) {
+    if (score >= 75) return 'Primed';
+    if (score >= 55) return 'Balanced';
+    if (score >= 35) return 'Take it easy';
+    return 'Rest up';
+  }
+
+  Color _recoveryColor(int score) {
+    if (score >= 75) return AppColors.green;
+    if (score >= 55) return AppColors.teal;
+    if (score >= 35) return AppColors.yellow;
+    return AppColors.red;
+  }
+
+  bool? _higherIsBetter(double? current, double? baseline) {
+    if (current == null || baseline == null || baseline == 0) return null;
+    return current >= baseline;
+  }
+
+  bool? _lowerIsBetter(int? current, int? baseline) {
+    if (current == null || baseline == null) return null;
+    return current <= baseline;
+  }
 }
 
-class _Contributor extends StatelessWidget {
-  const _Contributor({
+class _SignalRow extends StatelessWidget {
+  const _SignalRow({
     required this.label,
-    required this.status,
-    required this.color,
     required this.value,
+    required this.baseline,
+    required this.color,
+    required this.better,
   });
 
   final String label;
-  final String status;
-  final Color color;
   final String value;
+  final String baseline;
+  final Color color;
+  final bool? better;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  status,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label, style: AppType.rowTitle)),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(value, style: AppType.numS),
+            const SizedBox(height: 2),
+            Text(
+              baseline,
+              style: AppType.caption.copyWith(
+                color: better == null
+                    ? AppColors.textTertiary
+                    : better!
+                    ? AppColors.green
+                    : AppColors.yellow,
+              ),
             ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CardTitle extends StatelessWidget {
-  const _CardTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textSecondary,
-      ),
+          ],
+        ),
+      ],
     );
   }
 }

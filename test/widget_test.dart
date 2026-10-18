@@ -43,6 +43,36 @@ void main() {
     expect(find.text('Most recent workout'), findsOneWidget);
   });
 
+  testWidgets('Health tab lists measurement modules', (tester) async {
+    await _boot(tester);
+    await _openTab(tester, 'Health');
+
+    expect(find.text('Health'), findsWidgets);
+    expect(find.text('Heart'), findsOneWidget);
+    expect(find.text('Sleep'), findsOneWidget);
+    expect(find.text('Recovery'), findsOneWidget);
+    expect(find.text('Strain'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, -420));
+    await tester.pump();
+
+    expect(find.text('Energy'), findsOneWidget);
+    expect(find.text('Biology'), findsOneWidget);
+  });
+
+  testWidgets('Today heart tile opens the heart detail screen', (
+    tester,
+  ) async {
+    await _boot(tester);
+
+    await tester.tap(find.text('HEART RATE'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Heart rate'), findsOneWidget);
+  });
+
   testWidgets('Trends tab shows the air-matched history empty state', (
     tester,
   ) async {

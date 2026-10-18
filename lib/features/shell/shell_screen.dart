@@ -29,6 +29,11 @@ class ShellScreen extends StatelessWidget {
               label: 'Today',
             ),
             NavigationDestination(
+              icon: Icon(Icons.health_and_safety_outlined),
+              selectedIcon: Icon(Icons.health_and_safety_rounded),
+              label: 'Health',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.directions_run_outlined),
               selectedIcon: Icon(Icons.directions_run_rounded),
               label: 'Activity',
