@@ -177,9 +177,9 @@ class _TodayScreenState extends State<TodayScreen> {
               _RecoveryHero(
                 score: recovery?.score,
                 loading: _loading,
-                limitedCurrentSamples:
+                limitedSamples:
                     recovery != null &&
-                    (recoveryStatus?.limitedCurrentSamples ?? false),
+                    (recoveryStatus?.limitedSamples ?? false),
                 subtitle: _recoveryWaitText(recoveryStatus),
                 onTap: () => context.push('/health/recovery'),
               ),
@@ -288,7 +288,7 @@ String _activityRequirement(HeartDetail? heart, int? age) {
 }
 
 String _recoveryWaitText(RecoveryReadiness? readiness) {
-  if (readiness == null) return 'Connect sleep and overnight signals';
+  if (readiness == null) return 'Connect sleep and personal health signals';
   if (!readiness.hasSleepSession) {
     return 'Waiting for a qualifying sleep session ending within 24 hours';
   }
@@ -296,13 +296,13 @@ String _recoveryWaitText(RecoveryReadiness? readiness) {
     return 'Waiting for HRV during recorded asleep stages';
   }
   if (readiness.restingHrCurrentSampleCount == 0) {
-    return 'Waiting for resting heart rate during recorded asleep stages';
+    return 'Waiting for daily resting HR on the selected session date';
   }
   if (readiness.hrvBaselineNights < recoveryMinimumBaselineNights ||
       readiness.restingHrBaselineNights < recoveryMinimumBaselineNights) {
     return 'Baseline nights · HRV ${readiness.hrvBaselineNights}/$recoveryMinimumBaselineNights · RHR ${readiness.restingHrBaselineNights}/$recoveryMinimumBaselineNights';
   }
-  return 'Matching overnight signals';
+  return 'Matching sleep and personal signals';
 }
 
 class _TopBar extends StatelessWidget {
@@ -436,20 +436,20 @@ class _RecoveryHero extends StatelessWidget {
   const _RecoveryHero({
     required this.score,
     required this.loading,
-    required this.limitedCurrentSamples,
+    required this.limitedSamples,
     required this.subtitle,
     required this.onTap,
   });
 
   final int? score;
   final bool loading;
-  final bool limitedCurrentSamples;
+  final bool limitedSamples;
   final String subtitle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = limitedCurrentSamples ? AppColors.yellow : AppColors.teal;
+    final color = limitedSamples ? AppColors.yellow : AppColors.teal;
     return SurfaceCard(
       onTap: onTap,
       padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
@@ -491,10 +491,10 @@ class _RecoveryHero extends StatelessWidget {
                 Text(
                   score == null
                       ? loading
-                            ? 'Checking overnight signals…'
+                            ? 'Checking sleep and personal signals…'
                             : subtitle
-                      : limitedCurrentSamples
-                      ? 'Limited current readings - tap for components'
+                      : limitedSamples
+                      ? 'Limited signal or baseline coverage - tap for details'
                       : 'Becel index - tap for signals',
                   style: AppType.caption.copyWith(height: 1.35),
                 ),
@@ -526,7 +526,7 @@ class _RecoveryHero extends StatelessWidget {
                     ),
                     Text(
                       score == null ? 'WAIT' : 'OF 100',
-                      style: AppType.eyebrow.copyWith(fontSize: 9),
+                      style: AppType.eyebrow.copyWith(fontSize: 11),
                     ),
                   ],
                 ),
@@ -583,7 +583,7 @@ class _MetricTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: AppType.eyebrow.copyWith(
                   color: color,
-                  fontSize: 10,
+                  fontSize: 11,
                   letterSpacing: 0.7,
                 ),
               ),
@@ -609,7 +609,7 @@ class _MetricTile extends StatelessWidget {
           footnote,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: AppType.caption.copyWith(fontSize: 10.5, height: 1.3),
+          style: AppType.caption.copyWith(fontSize: 11, height: 1.3),
         ),
       ],
     ),

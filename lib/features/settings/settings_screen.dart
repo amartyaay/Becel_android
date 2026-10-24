@@ -447,7 +447,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                     Text(
                       'EXPERIMENTAL · DEBUG BUILD',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.9,
                         color: AppColors.green,

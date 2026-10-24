@@ -19,6 +19,25 @@ String formatDayShort(DateTime time) {
   return names[time.toLocal().weekday - 1];
 }
 
+String formatShortDate(DateTime time) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final local = time.toLocal();
+  return '${formatDayShort(local)} ${months[local.month - 1]} ${local.day}';
+}
+
 String formatDayLabel(String isoDate) {
   final parsed = DateTime.tryParse(isoDate);
   if (parsed == null) return '?';

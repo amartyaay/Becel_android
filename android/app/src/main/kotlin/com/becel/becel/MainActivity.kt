@@ -38,8 +38,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
-import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
 class MainActivity : FlutterFragmentActivity() {
     private lateinit var healthPermissionLauncher: ActivityResultLauncher<Set<String>>
@@ -371,7 +369,7 @@ class MainActivity : FlutterFragmentActivity() {
             do {
                 val response = client.readRecords(
                     ReadRecordsRequest<HeartRateRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(weekStart, now),
+                        timeRangeFilter = TimeRangeFilter.between(weekStart.minusSeconds(120), now),
                         pageSize = 1000,
                         pageToken = pageToken,
                         dataOriginFilter = AIR_SOURCE_ORIGINS,
@@ -445,96 +443,15 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
-        data["activityEstimate"] = estimateWeeklyActivity(
-            trainingSamples,
-            activityRestingHrSamples,
-            readFitnessAge(),
-            now,
-        )
+        data["activityEstimate"] = ActivityEstimator.estimate(
+            heartRateSamples = trainingSamples,
+            restingHrSamples = activityRestingHrSamples,
+            age = readFitnessAge(),
+            now = now,
+            zone = zone,
+        )?.toMethodChannelMap()
 
         return data
-    }
-
-    private fun estimateWeeklyActivity(
-        rawSamples: List<Pair<Instant, Long>>,
-        restingHrSamples: List<Pair<Instant, Double>>,
-        age: Int?,
-        now: Instant,
-    ): Map<String, Any?>? {
-        if (age == null || age !in 18..100) return null
-        val recentCutoff = now.minus(Duration.ofHours(36))
-        val restingRecord = restingHrSamples
-            .asSequence()
-            .filter { (at, bpm) ->
-                at >= recentCutoff && at <= now && bpm in 30.0..120.0
-            }
-            .maxByOrNull { it.first }
-            ?: return null
-        val resting = restingRecord.second
-
-        val maximum = 208.0 - 0.7 * age
-        val reserve = maximum - resting
-        if (reserve < 30.0) return null
-
-        val localToday = now.atZone(ZoneId.systemDefault()).toLocalDate()
-        val cutoff = localToday.minusDays(6)
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-        val ordered = rawSamples
-            .asSequence()
-            .filter { (at, bpm) -> at >= cutoff && at <= now && bpm in 30L..240L }
-            .distinct()
-            .sortedBy { it.first }
-            .toList()
-        if (ordered.size < 2) return null
-
-        val zones = DoubleArray(5)
-        val usableDays = mutableSetOf<LocalDate>()
-        var validIntervals = 0
-        for (index in 0 until ordered.lastIndex) {
-            val first = ordered[index]
-            val second = ordered[index + 1]
-            val seconds = Duration.between(first.first, second.first).seconds
-            if (seconds <= 0 || seconds > 120) continue
-            validIntervals++
-            usableDays.add(first.first.atZone(ZoneId.systemDefault()).toLocalDate())
-
-            val midpoint = (first.second + second.second) / 2.0
-            val hrr = (midpoint - resting) / reserve
-            val zone = when {
-                hrr < 0.30 -> 0
-                hrr < 0.40 -> 1
-                hrr < 0.60 -> 2
-                hrr < 0.90 -> 3
-                else -> 4
-            }
-            zones[zone] += seconds / 60.0
-        }
-        if (validIntervals == 0) return null
-
-        val moderate = zones[2]
-        val vigorous = zones[3] + zones[4]
-        val equivalent = moderate + 2 * vigorous
-        fun bpmAt(fraction: Double) = "${(resting + reserve * fraction).roundToLong()} bpm"
-
-        return mapOf(
-            "age" to age,
-            "estimatedMaxHrBpm" to maximum.roundToInt(),
-            "restingHrBpm" to resting,
-            "restingHrAt" to restingRecord.first.toEpochMilli(),
-            "progressPercent" to (equivalent / 150.0 * 100).roundToInt().coerceIn(0, 100),
-            "moderateMinutes" to moderate,
-            "vigorousMinutes" to vigorous,
-            "usableDays" to usableDays.size,
-            "zoneMinutes" to zones.toList(),
-            "zoneRanges" to listOf(
-                "<${bpmAt(0.30)}",
-                "${bpmAt(0.30)}–${bpmAt(0.40)}",
-                "${bpmAt(0.40)}–${bpmAt(0.60)}",
-                "${bpmAt(0.60)}–${bpmAt(0.90)}",
-                ">${bpmAt(0.90)}",
-            ),
-        )
     }
 
     private fun readFitnessAge(): Int? {

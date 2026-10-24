@@ -14,7 +14,7 @@ void main() {
       expect(estimate.restingHrComponent, 50);
       expect(estimate.hrvBaselineDays, 10);
       expect(estimate.restingHrBaselineDays, 10);
-      expect(result.limitedCurrentSamples, isFalse);
+      expect(result.limitedSamples, isTrue);
     });
 
     test('favorable signals can reach 100 on the displayed scale', () {
@@ -43,11 +43,29 @@ void main() {
       },
     );
 
+    test('aligns daily resting HR by sleep-end date, not sleep stage', () {
+      final result = _estimate(
+        currentRestingHrOutsideSleep: true,
+        historicalRestingHrOutsideSleep: true,
+      );
+
+      expect(result.restingHrCurrentSampleCount, 2);
+      expect(result.restingHrBaselineNights, 10);
+      expect(result.estimate, isNotNull);
+    });
+
     test('marks a one-reading current signal as limited data', () {
       final result = _estimate(currentHrvSamples: 1);
 
       expect(result.estimate, isNotNull);
-      expect(result.limitedCurrentSamples, isTrue);
+      expect(result.limitedSamples, isTrue);
+    });
+
+    test('clears the limited-data label with complete 14-night coverage', () {
+      final result = _estimate(historicalNights: 14);
+
+      expect(result.estimate, isNotNull);
+      expect(result.limitedSamples, isFalse);
     });
   });
 
@@ -79,6 +97,8 @@ RecoveryReadiness _estimate({
   double currentRestingHr = 60,
   int currentHrvSamples = 2,
   bool currentHrvOutsideSleep = false,
+  bool currentRestingHrOutsideSleep = false,
+  bool historicalRestingHrOutsideSleep = false,
 }) {
   final today = DateTime.now();
   final now = DateTime(today.year, today.month, today.day, 18);
@@ -103,7 +123,14 @@ RecoveryReadiness _estimate({
       ),
     );
     hrvSamples.add(TimedValue(at: sampleAt, value: 50));
-    restingHrSamples.add(TimedValue(at: sampleAt, value: 60));
+    restingHrSamples.add(
+      TimedValue(
+        at: historicalRestingHrOutsideSleep
+            ? end.add(const Duration(hours: 1))
+            : sampleAt,
+        value: 60,
+      ),
+    );
   }
 
   for (var index = 0; index < currentHrvSamples; index++) {
@@ -119,7 +146,9 @@ RecoveryReadiness _estimate({
   for (var index = 0; index < 2; index++) {
     restingHrSamples.add(
       TimedValue(
-        at: currentStart.add(Duration(hours: 2 + index)),
+        at: currentRestingHrOutsideSleep
+            ? currentStart.add(Duration(hours: 12 + index))
+            : currentStart.add(Duration(hours: 2 + index)),
         value: currentRestingHr,
       ),
     );

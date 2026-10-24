@@ -180,9 +180,9 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 unit: recovery == null ? '' : '/100',
                 note: recovery == null
                     ? _recoveryNote(heart, summary, recoveryStatus)
-                    : recoveryStatus?.limitedCurrentSamples == true
-                    ? 'Limited overnight readings · matched asleep-stage baseline'
-                    : 'Sleep + HRV + resting heart rate · matched asleep-stage baseline',
+                    : recoveryStatus?.limitedSamples == true
+                    ? 'Limited signal or personal-history coverage · see component counts'
+                    : 'Sleep stages + date-aligned HRV/RHR · personal baseline',
                 onTap: () => context.push('/health/recovery'),
               ),
               const SizedBox(height: 9),
@@ -197,7 +197,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                     ? summary?.canReadSleep == true
                           ? 'No session synced in the last 24 hours'
                           : 'Sleep access is needed'
-                    : 'Measured duration · 7h adult reference',
+                    : 'Stage-derived sleep duration · 7h adult reference',
                 onTap: () => context.push('/health/sleep'),
               ),
               const SizedBox(height: 9),
@@ -291,7 +291,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
       return 'Waiting for HRV during recorded asleep stages';
     }
     if (readiness.restingHrCurrentSampleCount == 0) {
-      return 'Waiting for resting heart rate during recorded asleep stages';
+      return 'Waiting for daily resting HR on the selected session date';
     }
     return 'Baseline nights · HRV ${readiness.hrvBaselineNights}/$recoveryMinimumBaselineNights · RHR ${readiness.restingHrBaselineNights}/$recoveryMinimumBaselineNights';
   }
@@ -384,7 +384,7 @@ class _PerformanceCard extends StatelessWidget {
         if (unit.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(left: 2, top: 9),
-            child: Text(unit, style: AppType.caption.copyWith(fontSize: 10)),
+            child: Text(unit, style: AppType.caption.copyWith(fontSize: 11)),
           ),
         const SizedBox(width: 5),
         const Icon(

@@ -88,7 +88,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             children: [
               ScreenHeader(
                 onBack: () => Navigator.of(context).maybePop(),
-                eyebrow: 'SLEEP + OVERNIGHT SIGNALS',
+                eyebrow: 'SLEEP + PERSONAL BASELINE',
                 title: 'Recovery',
                 trailing: _loading
                     ? const SizedBox(
@@ -102,12 +102,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     : StatusPill(
                         label: estimate == null
                             ? 'CALIBRATING'
-                            : readiness?.limitedCurrentSamples == true
+                            : readiness?.limitedSamples == true
                             ? 'LOW DATA'
                             : 'ESTIMATE',
                         color: estimate == null
                             ? AppColors.yellow
-                            : readiness?.limitedCurrentSamples == true
+                            : readiness?.limitedSamples == true
                             ? AppColors.yellow
                             : AppColors.teal,
                       ),
@@ -116,10 +116,18 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               _RecoveryCard(
                 score: estimate?.score,
                 loading: _loading,
-                limitedCurrentSamples:
-                    estimate != null &&
-                    (readiness?.limitedCurrentSamples ?? false),
+                limitedSamples:
+                    estimate != null && (readiness?.limitedSamples ?? false),
               ),
+              if (night != null) ...[
+                const SizedBox(height: 10),
+                InfoNote(
+                  text:
+                      'Selected ${formatShortDate(night.end)} · ${formatClock(night.start)}-${formatClock(night.end)} · ${formatDurationMinutes(night.minutes)} recorded sleep. Becel uses the longest synced session of at least 3 hours ending within 24 hours; a long nap may be selected. Baselines use the longest qualifying session on each prior local date.',
+                  icon: Icons.schedule_rounded,
+                  color: AppColors.blue,
+                ),
+              ],
               const SizedBox(height: 12),
               if (_readError != null)
                 Column(
@@ -176,10 +184,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                       _ComponentRow(
                         icon: Icons.favorite_rounded,
                         color: AppColors.red,
-                        label: 'Resting HR during asleep stages',
+                        label: 'Daily resting HR · selected session date',
                         value: '${estimate.restingHrCurrent.round()} bpm',
                         detail:
-                            '${estimate.restingHrComponent}/100 × 25% · ${estimate.restingHrSampleCount} asleep-stage samples · latest ${formatClock(estimate.restingHrAt)} · personal median ${estimate.restingHrBaseline.round()} bpm · ${estimate.restingHrBaselineDays} nights / 14 days',
+                            '${estimate.restingHrComponent}/100 × 25% · ${estimate.restingHrSampleCount} daily readings · latest ${formatClock(estimate.restingHrAt)} · personal median ${estimate.restingHrBaseline.round()} bpm · ${estimate.restingHrBaselineDays} dates / 14',
                       ),
                     ],
                   ),
@@ -208,7 +216,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ],
               const SizedBox(height: 21),
               const TrustFooter(
-                text: 'OVERNIGHT HEALTH CONNECT RECORDS · STORED ON DEVICE',
+                text: 'SLEEP-ALIGNED HEALTH CONNECT RECORDS · STORED ON DEVICE',
               ),
             ],
           ),
@@ -227,7 +235,7 @@ String _recoveryWaitText(RecoveryReadiness? readiness) {
     reasons.add('HRV sample needed during an asleep stage');
   }
   if (readiness.restingHrCurrentSampleCount == 0) {
-    reasons.add('Resting-HR sample needed during an asleep stage');
+    reasons.add('Daily resting-HR sample needed on the selected session date');
   }
   if (readiness.hrvBaselineNights < recoveryMinimumBaselineNights ||
       readiness.restingHrBaselineNights < recoveryMinimumBaselineNights) {
@@ -236,7 +244,7 @@ String _recoveryWaitText(RecoveryReadiness? readiness) {
     );
   }
   return reasons.isEmpty
-      ? 'Matching asleep-stage readings'
+      ? 'Matching sleep-stage HRV and date-aligned resting HR'
       : reasons.join(' | ');
 }
 
@@ -244,16 +252,16 @@ class _RecoveryCard extends StatelessWidget {
   const _RecoveryCard({
     required this.score,
     required this.loading,
-    required this.limitedCurrentSamples,
+    required this.limitedSamples,
   });
 
   final int? score;
   final bool loading;
-  final bool limitedCurrentSamples;
+  final bool limitedSamples;
 
   @override
   Widget build(BuildContext context) {
-    final color = limitedCurrentSamples ? AppColors.yellow : AppColors.teal;
+    final color = limitedSamples ? AppColors.yellow : AppColors.teal;
     return SurfaceCard(
       color: const Color(0xFF14201B),
       borderColor: color.withValues(alpha: 0.22),
@@ -266,7 +274,7 @@ class _RecoveryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  limitedCurrentSamples ? 'LIMITED SAMPLES' : 'RECOVERY INDEX',
+                  limitedSamples ? 'LIMITED DATA' : 'RECOVERY INDEX',
                   style: AppType.eyebrow.copyWith(color: color),
                 ),
                 const SizedBox(height: 11),
@@ -285,8 +293,8 @@ class _RecoveryCard extends StatelessWidget {
                       ? loading
                             ? 'Checking your latest records'
                             : 'See which signal is missing below'
-                      : limitedCurrentSamples
-                      ? 'One reading or fewer for at least one signal'
+                      : limitedSamples
+                      ? 'Current readings or personal history are incomplete'
                       : 'Compare the trend with your own signals',
                   style: AppType.caption,
                 ),
@@ -318,7 +326,7 @@ class _RecoveryCard extends StatelessWidget {
                     ),
                     Text(
                       'OF 100',
-                      style: AppType.eyebrow.copyWith(fontSize: 9),
+                      style: AppType.eyebrow.copyWith(fontSize: 11),
                     ),
                   ],
                 ),

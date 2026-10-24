@@ -427,7 +427,7 @@ class MovementHero extends StatelessWidget {
                   statusLabel,
                   style: TextStyle(
                     color: chipFg,
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.6,
                   ),
@@ -499,7 +499,7 @@ class MovementHero extends StatelessWidget {
                           'of goal',
                           style: TextStyle(
                             color: ringLabelColor,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

@@ -15,10 +15,13 @@ const sleepDurationMethod =
 
 const recoveryMethod =
     'Becel Recovery index: 40% sleep-duration progress, 35% RMSSD HRV, and '
-    '25% resting heart rate. Readings must fall inside recorded asleep stages '
-    'and are compared with matched asleep-stage readings from your previous 14 '
-    'local dates. Each signal needs 10 baseline nights. A yellow label means '
-    'fewer than 2 current readings for at least one signal. The 0-100 mapping '
+    '25% resting heart rate. HRV readings must fall inside recorded asleep '
+    'stages. Daily resting-HR readings are aligned by local date with the '
+    'selected sleep session. Both signals are compared with their own matched '
+    'values from the previous 14 local dates; each needs 10 baseline dates. '
+    'A yellow label means '
+    'fewer than 2 current readings or an incomplete 14-date baseline for '
+    'at least one signal. The 0-100 mapping '
     'is a product heuristic, not clinically validated.';
 
 const activityMethod =
@@ -29,6 +32,7 @@ const activityMethod =
     'minutes count twice. This estimates intensity from pulse; it does not '
     'confirm exercise. Missing wear time can lower the total.';
 
+const recoveryBaselineWindowDays = 14;
 const recoveryMinimumBaselineNights = 10;
 
 /// Shows progress against the seven-hour adult minimum reference.
@@ -105,7 +109,7 @@ class RecoveryReadiness {
     required this.restingHrCurrentSampleCount,
     required this.hrvBaselineNights,
     required this.restingHrBaselineNights,
-    required this.limitedCurrentSamples,
+    required this.limitedSamples,
     required this.estimate,
   });
 
@@ -114,11 +118,11 @@ class RecoveryReadiness {
   final int restingHrCurrentSampleCount;
   final int hrvBaselineNights;
   final int restingHrBaselineNights;
-  final bool limitedCurrentSamples;
+  final bool limitedSamples;
   final RecoveryEstimate? estimate;
 }
 
-/// Estimates recovery from current and historical sleep-window readings.
+/// Estimates recovery from sleep-stage HRV and sleep-date resting-HR readings.
 RecoveryReadiness recoveryReadiness({
   required List<TimedValue> hrvSamples,
   required List<TimedValue> restingHrSamples,
@@ -142,42 +146,42 @@ RecoveryReadiness recoveryReadiness({
       restingHrCurrentSampleCount: 0,
       hrvBaselineNights: 0,
       restingHrBaselineNights: 0,
-      limitedCurrentSamples: false,
+      limitedSamples: false,
       estimate: null,
     );
   }
   final currentSleepEnd = sleepEnd;
-  final hrv = _currentAndBaselineBySleep(
+  final currentSleepDay = _localDay(currentSleepEnd);
+  final hrv = _currentAndBaselineByAsleepStages(
     hrvSamples,
     reference,
-    currentSleepDay: _localDay(currentSleepEnd),
+    currentSleepDay: currentSleepDay,
     currentEnd: currentSleepEnd,
     currentAsleepIntervals: asleepIntervals,
     sleepWindows: sleepWindows,
     minValue: 5,
     maxValue: 250,
   );
-  final restingHr = _currentAndBaselineBySleep(
+  final restingHr = _currentAndBaselineBySleepDate(
     restingHrSamples,
     reference,
-    currentSleepDay: _localDay(currentSleepEnd),
-    currentEnd: currentSleepEnd,
-    currentAsleepIntervals: asleepIntervals,
+    currentSleepDay: currentSleepDay,
     sleepWindows: sleepWindows,
     minValue: 30,
     maxValue: 120,
   );
-  final hrvCurrentSampleCount = hrv?.currentSampleCount ?? 0;
-  final restingHrCurrentSampleCount = restingHr?.currentSampleCount ?? 0;
-  final hrvBaselineNights = hrv?.baselineNights ?? 0;
-  final restingHrBaselineNights = restingHr?.baselineNights ?? 0;
-  final limitedCurrentSamples =
-      hrvCurrentSampleCount < 2 || restingHrCurrentSampleCount < 2;
-  final hrvCurrent = hrv?.current;
-  final restingHrCurrent = restingHr?.current;
-  if (hrv == null ||
-      restingHr == null ||
-      hrvCurrent == null ||
+  final hrvCurrentSampleCount = hrv.currentSampleCount;
+  final restingHrCurrentSampleCount = restingHr.currentSampleCount;
+  final hrvBaselineNights = hrv.baselineNights;
+  final restingHrBaselineNights = restingHr.baselineNights;
+  final limitedSamples =
+      hrvCurrentSampleCount < 2 ||
+      restingHrCurrentSampleCount < 2 ||
+      hrvBaselineNights < recoveryBaselineWindowDays ||
+      restingHrBaselineNights < recoveryBaselineWindowDays;
+  final hrvCurrent = hrv.current;
+  final restingHrCurrent = restingHr.current;
+  if (hrvCurrent == null ||
       restingHrCurrent == null ||
       hrvBaselineNights < recoveryMinimumBaselineNights ||
       restingHrBaselineNights < recoveryMinimumBaselineNights) {
@@ -187,7 +191,7 @@ RecoveryReadiness recoveryReadiness({
       restingHrCurrentSampleCount: restingHrCurrentSampleCount,
       hrvBaselineNights: hrvBaselineNights,
       restingHrBaselineNights: restingHrBaselineNights,
-      limitedCurrentSamples: limitedCurrentSamples,
+      limitedSamples: limitedSamples,
       estimate: null,
     );
   }
@@ -244,7 +248,7 @@ RecoveryReadiness recoveryReadiness({
     restingHrCurrentSampleCount: restingHrCurrentSampleCount,
     hrvBaselineNights: hrvBaselineNights,
     restingHrBaselineNights: restingHrBaselineNights,
-    limitedCurrentSamples: limitedCurrentSamples,
+    limitedSamples: limitedSamples,
     estimate: estimate,
   );
 }
@@ -265,7 +269,7 @@ class _CurrentBaseline {
   final int baselineNights;
 }
 
-_CurrentBaseline? _currentAndBaselineBySleep(
+_CurrentBaseline _currentAndBaselineByAsleepStages(
   List<TimedValue> samples,
   DateTime now, {
   required DateTime currentSleepDay,
@@ -286,21 +290,10 @@ _CurrentBaseline? _currentAndBaselineBySleep(
       ? null
       : _median(recent.map((s) => s.value).toList());
   final currentAt = recent.isEmpty ? currentEnd : recent.first.at;
-  final firstBaselineDay = DateTime(
-    currentSleepDay.year,
-    currentSleepDay.month,
-    currentSleepDay.day - 14,
+  final windowsByDay = _baselineSleepWindowsByDate(
+    sleepWindows,
+    currentSleepDay,
   );
-  final windowsByDay = <DateTime, List<SleepWindow>>{};
-  for (final window in sleepWindows) {
-    if (window.sleepMinutes < 180) continue;
-    final day = _localDay(window.end);
-    if (!day.isBefore(currentSleepDay) || day.isBefore(firstBaselineDay)) {
-      continue;
-    }
-    (windowsByDay[day] ??= []).add(window);
-  }
-
   final baseline = <double>[];
   for (final windows in windowsByDay.values) {
     windows.sort((a, b) => b.sleepMinutes.compareTo(a.sleepMinutes));
@@ -322,6 +315,73 @@ _CurrentBaseline? _currentAndBaselineBySleep(
     baseline: baseline,
     baselineNights: baseline.length,
   );
+}
+
+_CurrentBaseline _currentAndBaselineBySleepDate(
+  List<TimedValue> samples,
+  DateTime now, {
+  required DateTime currentSleepDay,
+  required List<SleepWindow> sleepWindows,
+  required double minValue,
+  required double maxValue,
+}) {
+  final samplesByDate = <DateTime, List<TimedValue>>{};
+  for (final sample in samples) {
+    if (sample.value < minValue ||
+        sample.value > maxValue ||
+        sample.at.isAfter(now)) {
+      continue;
+    }
+    (samplesByDate[_localDay(sample.at)] ??= []).add(sample);
+  }
+
+  final current = [...?samplesByDate[currentSleepDay]]
+    ..sort((a, b) => b.at.compareTo(a.at));
+  final windowsByDay = _baselineSleepWindowsByDate(
+    sleepWindows,
+    currentSleepDay,
+  );
+  final baseline = <double>[];
+  for (final day in windowsByDay.keys) {
+    final values = samplesByDate[day];
+    if (values != null && values.isNotEmpty) {
+      baseline.add(_median(values.map((sample) => sample.value).toList()));
+    }
+  }
+
+  return _CurrentBaseline(
+    current: current.isEmpty
+        ? null
+        : _median(current.map((sample) => sample.value).toList()),
+    at: current.isEmpty ? now : current.first.at,
+    currentSampleCount: current.length,
+    baseline: baseline,
+    baselineNights: baseline.length,
+  );
+}
+
+Map<DateTime, List<SleepWindow>> _baselineSleepWindowsByDate(
+  List<SleepWindow> sleepWindows,
+  DateTime currentSleepDay,
+) {
+  final firstBaselineDay = DateTime(
+    currentSleepDay.year,
+    currentSleepDay.month,
+    currentSleepDay.day - recoveryBaselineWindowDays,
+  );
+  final windowsByDay = <DateTime, List<SleepWindow>>{};
+  for (final window in sleepWindows) {
+    if (window.sleepMinutes < 180) continue;
+    final day = _localDay(window.end);
+    if (!day.isBefore(currentSleepDay) || day.isBefore(firstBaselineDay)) {
+      continue;
+    }
+    (windowsByDay[day] ??= []).add(window);
+  }
+  for (final windows in windowsByDay.values) {
+    windows.sort((a, b) => b.sleepMinutes.compareTo(a.sleepMinutes));
+  }
+  return windowsByDay;
 }
 
 List<TimedValue> _validSamples(
