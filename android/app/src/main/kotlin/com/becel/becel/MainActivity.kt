@@ -38,6 +38,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 class MainActivity : FlutterFragmentActivity() {
     private lateinit var healthPermissionLauncher: ActivityResultLauncher<Set<String>>
@@ -72,6 +74,8 @@ class MainActivity : FlutterFragmentActivity() {
                 "requestPermissions" -> requestPermissions(result)
                 "readSummary" -> launchHealth(result) { readSummary() }
                 "readHeartDetail" -> launchHealth(result) { readHeartDetail() }
+                "readFitnessAge" -> result.success(readFitnessAge())
+                "saveFitnessAge" -> saveFitnessAge(call.argument<Int>("age"), result)
                 "readSleepDetail" -> launchHealth(result) { readSleepDetail() }
                 "readTrends7d" -> launchHealth(result) { readTrends7d() }
                 "readActivityDetail" -> launchHealth(result) { readActivityDetail() }
@@ -257,9 +261,8 @@ class MainActivity : FlutterFragmentActivity() {
                 records.addAll(airRecords)
                 pageToken = response.pageToken
             } while (!pageToken.isNullOrEmpty())
-            // Prefer the longest session that ended in the last day so the
-            // main night sleep wins over naps; fall back to the longest
-            // session in the whole 36-hour window.
+            // This is a raw recent-session summary. Recovery selects its
+            // qualifying session separately from full staged sleep detail.
             val recent = records.filter { it.endTime >= now.minus(Duration.ofHours(24)) }
             val main = (recent.ifEmpty { records }).maxByOrNull {
                 Duration.between(it.startTime, it.endTime)
@@ -342,31 +345,33 @@ class MainActivity : FlutterFragmentActivity() {
         val now = Instant.now()
         val zone = ZoneId.systemDefault()
         val todayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+        val weekStart = LocalDate.now(zone).minusDays(6).atStartOfDay(zone).toInstant()
+        val trainingSamples = mutableListOf<Pair<Instant, Long>>()
+        var activityRestingHrSamples = emptyList<Pair<Instant, Double>>()
         val data = mutableMapOf<String, Any?>(
             "status" to if (granted.isEmpty()) "permissionRequired" else "ready",
             "granted" to granted.toList().sorted(),
             "checkedAt" to now.toString(),
             "series" to emptyList<List<Long>>(),
+            "restingHrSamples" to emptyList<List<Any>>(),
+            "hrvSamples" to emptyList<List<Any>>(),
+            "activityEstimate" to null,
             "latestBpm" to null,
             "latestAt" to null,
             "minBpm" to null,
             "avgBpm" to null,
             "maxBpm" to null,
-            "zoneMinutes" to listOf(0, 0, 0, 0, 0),
             "restingHrBpm" to null,
-            "restingHrBaseline" to null,
             "hrvRmssd" to null,
-            "hrvBaseline" to null,
         )
 
         if (HealthPermission.getReadPermission(HeartRateRecord::class) in granted) {
-            val samples = mutableListOf<Pair<Instant, Long>>()
             var pageToken: String? = null
             var pages = 0
             do {
                 val response = client.readRecords(
                     ReadRecordsRequest<HeartRateRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(now.minus(Duration.ofHours(48)), now),
+                        timeRangeFilter = TimeRangeFilter.between(weekStart, now),
                         pageSize = 1000,
                         pageToken = pageToken,
                         dataOriginFilter = AIR_SOURCE_ORIGINS,
@@ -376,14 +381,14 @@ class MainActivity : FlutterFragmentActivity() {
                     .filter { isFitbitAirRecord(it.metadata) }
                     .forEach { record ->
                         record.samples.forEach { sample ->
-                            samples.add(sample.time to sample.beatsPerMinute)
+                            trainingSamples.add(sample.time to sample.beatsPerMinute)
                         }
                     }
                 pageToken = response.pageToken
                 pages++
             } while (!pageToken.isNullOrEmpty() && pages < 40)
 
-            val today = samples.filter { it.first >= todayStart }.sortedBy { it.first }
+            val today = trainingSamples.filter { it.first >= todayStart }.sortedBy { it.first }
             if (today.isNotEmpty()) {
                 val values = today.map { it.second }
                 data["minBpm"] = values.min()
@@ -404,50 +409,152 @@ class MainActivity : FlutterFragmentActivity() {
                     listOf(bucket * HEART_BUCKET_MILLIS, entry[1] / entry[0])
                 }
 
-                val zoneMinutes = DoubleArray(5)
-                for (index in 1 until today.size) {
-                    val gapMinutes = Duration.between(today[index - 1].first, today[index].first)
-                        .toSeconds() / 60.0
-                    if (gapMinutes <= 0.0 || gapMinutes > 10.0) continue
-                    zoneMinutes[heartZoneIndex(today[index - 1].second)] += gapMinutes
-                }
-                data["zoneMinutes"] = zoneMinutes.map { it.toLong() }
             }
         }
 
         if (HealthPermission.getReadPermission(RestingHeartRateRecord::class) in granted) {
             val records = readAirRecords<RestingHeartRateRecord>(
                 client,
-                now.minus(Duration.ofDays(14)),
+                now.minus(Duration.ofDays(17)),
                 now,
             )
             if (records.isNotEmpty()) {
-                data["restingHrBpm"] = records.maxByOrNull { it.time }?.beatsPerMinute
-                data["restingHrBaseline"] = records.map { it.beatsPerMinute }.average().toLong()
+                val ordered = records.sortedBy { it.time }
+                data["restingHrBpm"] = ordered.last().beatsPerMinute
+                activityRestingHrSamples = ordered.map { record ->
+                    record.time to record.beatsPerMinute.toDouble()
+                }
+                data["restingHrSamples"] = activityRestingHrSamples.map { (time, bpm) ->
+                    listOf(time.toEpochMilli(), bpm)
+                }
             }
         }
 
         if (HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class) in granted) {
             val records = readAirRecords<HeartRateVariabilityRmssdRecord>(
                 client,
-                now.minus(Duration.ofDays(14)),
+                now.minus(Duration.ofDays(17)),
                 now,
             )
             if (records.isNotEmpty()) {
-                data["hrvRmssd"] = records.maxByOrNull { it.time }?.heartRateVariabilityMillis
-                data["hrvBaseline"] = records.map { it.heartRateVariabilityMillis }.average().toLong()
+                val ordered = records.sortedBy { it.time }
+                data["hrvRmssd"] = ordered.last().heartRateVariabilityMillis
+                data["hrvSamples"] = ordered.map { record ->
+                    listOf(record.time.toEpochMilli(), record.heartRateVariabilityMillis)
+                }
             }
         }
+
+        data["activityEstimate"] = estimateWeeklyActivity(
+            trainingSamples,
+            activityRestingHrSamples,
+            readFitnessAge(),
+            now,
+        )
 
         return data
     }
 
-    private fun heartZoneIndex(bpm: Long): Int = when {
-        bpm < 90 -> 0
-        bpm < 110 -> 1
-        bpm < 130 -> 2
-        bpm < 150 -> 3
-        else -> 4
+    private fun estimateWeeklyActivity(
+        rawSamples: List<Pair<Instant, Long>>,
+        restingHrSamples: List<Pair<Instant, Double>>,
+        age: Int?,
+        now: Instant,
+    ): Map<String, Any?>? {
+        if (age == null || age !in 18..100) return null
+        val recentCutoff = now.minus(Duration.ofHours(36))
+        val restingRecord = restingHrSamples
+            .asSequence()
+            .filter { (at, bpm) ->
+                at >= recentCutoff && at <= now && bpm in 30.0..120.0
+            }
+            .maxByOrNull { it.first }
+            ?: return null
+        val resting = restingRecord.second
+
+        val maximum = 208.0 - 0.7 * age
+        val reserve = maximum - resting
+        if (reserve < 30.0) return null
+
+        val localToday = now.atZone(ZoneId.systemDefault()).toLocalDate()
+        val cutoff = localToday.minusDays(6)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+        val ordered = rawSamples
+            .asSequence()
+            .filter { (at, bpm) -> at >= cutoff && at <= now && bpm in 30L..240L }
+            .distinct()
+            .sortedBy { it.first }
+            .toList()
+        if (ordered.size < 2) return null
+
+        val zones = DoubleArray(5)
+        val usableDays = mutableSetOf<LocalDate>()
+        var validIntervals = 0
+        for (index in 0 until ordered.lastIndex) {
+            val first = ordered[index]
+            val second = ordered[index + 1]
+            val seconds = Duration.between(first.first, second.first).seconds
+            if (seconds <= 0 || seconds > 120) continue
+            validIntervals++
+            usableDays.add(first.first.atZone(ZoneId.systemDefault()).toLocalDate())
+
+            val midpoint = (first.second + second.second) / 2.0
+            val hrr = (midpoint - resting) / reserve
+            val zone = when {
+                hrr < 0.30 -> 0
+                hrr < 0.40 -> 1
+                hrr < 0.60 -> 2
+                hrr < 0.90 -> 3
+                else -> 4
+            }
+            zones[zone] += seconds / 60.0
+        }
+        if (validIntervals == 0) return null
+
+        val moderate = zones[2]
+        val vigorous = zones[3] + zones[4]
+        val equivalent = moderate + 2 * vigorous
+        fun bpmAt(fraction: Double) = "${(resting + reserve * fraction).roundToLong()} bpm"
+
+        return mapOf(
+            "age" to age,
+            "estimatedMaxHrBpm" to maximum.roundToInt(),
+            "restingHrBpm" to resting,
+            "restingHrAt" to restingRecord.first.toEpochMilli(),
+            "progressPercent" to (equivalent / 150.0 * 100).roundToInt().coerceIn(0, 100),
+            "moderateMinutes" to moderate,
+            "vigorousMinutes" to vigorous,
+            "usableDays" to usableDays.size,
+            "zoneMinutes" to zones.toList(),
+            "zoneRanges" to listOf(
+                "<${bpmAt(0.30)}",
+                "${bpmAt(0.30)}–${bpmAt(0.40)}",
+                "${bpmAt(0.40)}–${bpmAt(0.60)}",
+                "${bpmAt(0.60)}–${bpmAt(0.90)}",
+                ">${bpmAt(0.90)}",
+            ),
+        )
+    }
+
+    private fun readFitnessAge(): Int? {
+        val age = getSharedPreferences(FITNESS_PROFILE_PREFS, MODE_PRIVATE)
+            .getInt(FITNESS_AGE_KEY, -1)
+        return age.takeIf { it in 18..100 }
+    }
+
+    private fun saveFitnessAge(age: Int?, result: MethodChannel.Result) {
+        if (age != null && age !in 18..100) {
+            result.success(false)
+            return
+        }
+        val preferences = getSharedPreferences(FITNESS_PROFILE_PREFS, MODE_PRIVATE)
+        val saved = if (age == null) {
+            preferences.edit().remove(FITNESS_AGE_KEY).commit()
+        } else {
+            preferences.edit().putInt(FITNESS_AGE_KEY, age).commit()
+        }
+        result.success(saved)
     }
 
     private suspend fun readSleepDetail(): Map<String, Any?> {
@@ -466,7 +573,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(SleepSessionRecord::class) in granted) {
             val records = readAirRecords<SleepSessionRecord>(
                 client,
-                now.minus(Duration.ofDays(14)),
+                now.minus(Duration.ofDays(17)),
                 now,
             )
             records.sortedByDescending { it.endTime }.forEach { record ->
@@ -474,6 +581,7 @@ class MainActivity : FlutterFragmentActivity() {
                 var light = 0L
                 var deep = 0L
                 var rem = 0L
+                val asleepIntervals = mutableListOf<List<Long>>()
                 record.stages.forEach { stage ->
                     val minutes = Duration.between(stage.startTime, stage.endTime)
                         .toMinutes().coerceAtLeast(0)
@@ -481,16 +589,33 @@ class MainActivity : FlutterFragmentActivity() {
                         SleepSessionRecord.STAGE_TYPE_AWAKE,
                         SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
                         -> awake += minutes
-                        SleepSessionRecord.STAGE_TYPE_DEEP -> deep += minutes
-                        SleepSessionRecord.STAGE_TYPE_REM -> rem += minutes
-                        else -> light += minutes
+                        SleepSessionRecord.STAGE_TYPE_LIGHT -> {
+                            light += minutes
+                            asleepIntervals.add(
+                                listOf(stage.startTime.toEpochMilli(), stage.endTime.toEpochMilli()),
+                            )
+                        }
+                        SleepSessionRecord.STAGE_TYPE_DEEP -> {
+                            deep += minutes
+                            asleepIntervals.add(
+                                listOf(stage.startTime.toEpochMilli(), stage.endTime.toEpochMilli()),
+                            )
+                        }
+                        SleepSessionRecord.STAGE_TYPE_REM -> {
+                            rem += minutes
+                            asleepIntervals.add(
+                                listOf(stage.startTime.toEpochMilli(), stage.endTime.toEpochMilli()),
+                            )
+                        }
+                        else -> Unit
                     }
                 }
                 sessions.add(
                     mapOf(
                         "start" to record.startTime.toString(),
                         "end" to record.endTime.toString(),
-                        "minutes" to Duration.between(record.startTime, record.endTime).toMinutes(),
+                        "minutes" to light + deep + rem,
+                        "asleepIntervals" to asleepIntervals,
                         "awakeMinutes" to awake,
                         "lightMinutes" to light,
                         "deepMinutes" to deep,
@@ -551,8 +676,19 @@ class MainActivity : FlutterFragmentActivity() {
             readAirRecords<SleepSessionRecord>(client, weekStart, now).forEach { record ->
                 val index = dates.indexOf(record.endTime.atZone(zone).toLocalDate())
                 if (index >= 0) {
-                    val minutes = Duration.between(record.startTime, record.endTime).toMinutes()
-                    if (minutes > sleepMinutes[index]) sleepMinutes[index] = minutes
+                    val asleepMinutes = record.stages.sumOf { stage ->
+                        when (stage.stage) {
+                            SleepSessionRecord.STAGE_TYPE_LIGHT,
+                            SleepSessionRecord.STAGE_TYPE_DEEP,
+                            SleepSessionRecord.STAGE_TYPE_REM,
+                            -> Duration.between(stage.startTime, stage.endTime)
+                                .toMinutes().coerceAtLeast(0)
+                            else -> 0L
+                        }
+                    }
+                    if (asleepMinutes > sleepMinutes[index]) {
+                        sleepMinutes[index] = asleepMinutes
+                    }
                 }
             }
         }
@@ -801,6 +937,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         private const val CHANNEL_NAME = "com.becel/health_connect"
+        private const val FITNESS_PROFILE_PREFS = "becel_fitness_profile"
+        private const val FITNESS_AGE_KEY = "age"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
         private const val HEART_BUCKET_MILLIS = 5L * 60L * 1000L
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"

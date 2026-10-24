@@ -35,9 +35,7 @@ class SparkArea extends StatelessWidget {
     if (values.length < 2) {
       return SizedBox(
         height: height,
-        child: Center(
-          child: Text(emptyLabel, style: AppType.caption),
-        ),
+        child: Center(child: Text(emptyLabel, style: AppType.caption)),
       );
     }
     return SizedBox(
@@ -76,10 +74,7 @@ class _SparkAreaPainter extends CustomPainter {
     for (var index = 0; index < values.length; index++) {
       final normalized = (values[index] - bottom) / (top - bottom);
       points.add(
-        Offset(
-          index * stepX,
-          size.height - normalized * (size.height - 8) - 4,
-        ),
+        Offset(index * stepX, size.height - normalized * (size.height - 8) - 4),
       );
     }
 
@@ -122,11 +117,7 @@ class _SparkAreaPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    canvas.drawCircle(
-      points.last,
-      3.5,
-      Paint()..color = color,
-    );
+    canvas.drawCircle(points.last, 3.5, Paint()..color = color);
   }
 
   @override
@@ -202,7 +193,8 @@ class TrendBars extends StatelessWidget {
                           color: values[index] == null
                               ? AppColors.border
                               : color.withValues(
-                                  alpha: (highlightLast &&
+                                  alpha:
+                                      (highlightLast &&
                                           index == values.length - 1)
                                       ? 1
                                       : 0.38,
@@ -257,7 +249,10 @@ class StageBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = segments.fold<int>(0, (sum, segment) => sum + segment.minutes);
+    final total = segments.fold<int>(
+      0,
+      (sum, segment) => sum + segment.minutes,
+    );
     if (total <= 0) {
       return Text('No stage data for this session', style: AppType.caption);
     }
@@ -340,10 +335,7 @@ class ZoneBarRow extends StatelessWidget {
             width: 34,
             child: Text(label, style: AppType.caption.copyWith(color: color)),
           ),
-          SizedBox(
-            width: 74,
-            child: Text(bpmRange, style: AppType.caption),
-          ),
+          SizedBox(width: 74, child: Text(bpmRange, style: AppType.caption)),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),

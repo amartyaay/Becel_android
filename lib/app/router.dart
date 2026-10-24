@@ -76,9 +76,10 @@ GoRouter buildRouter() => GoRouter(
       builder: (context, state) => const RecoveryScreen(),
     ),
     GoRoute(
-      path: '/health/strain',
+      path: '/health/zones',
       builder: (context, state) => const StrainScreen(),
     ),
+    GoRoute(path: '/health/strain', redirect: (context, state) => '/health/zones'),
     GoRoute(
       path: '/health/energy',
       builder: (context, state) => const EnergyScreen(),

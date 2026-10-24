@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
+import '../domain/estimates.dart';
+
 class HealthConnectService {
   HealthConnectService._();
 
@@ -8,8 +10,16 @@ class HealthConnectService {
   static const _channel = MethodChannel('com.becel/health_connect');
 
   final dataRevision = ValueNotifier<int>(0);
+  HeartDetail? _heartCache;
+  DateTime? _heartCacheAt;
+  Future<HeartDetail>? _heartRead;
 
-  void notifyDataChanged() => dataRevision.value++;
+  void notifyDataChanged() {
+    _heartCache = null;
+    _heartCacheAt = null;
+    _heartRead = null;
+    dataRevision.value++;
+  }
 
   Future<HealthConnectInspection> inspect() async {
     try {
@@ -52,7 +62,35 @@ class HealthConnectService {
     }
   }
 
-  Future<HeartDetail> readHeartDetail() async {
+  Future<HeartDetail> readHeartDetail({bool refresh = false}) async {
+    if (refresh) {
+      _heartCache = null;
+      _heartCacheAt = null;
+    }
+    final cached = _heartCache;
+    final cachedAt = _heartCacheAt;
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < const Duration(minutes: 1)) {
+      return cached;
+    }
+    final activeRead = _heartRead;
+    if (activeRead != null) return activeRead;
+    final request = _readHeartDetailFromPlatform();
+    _heartRead = request;
+    try {
+      final result = await request;
+      if (identical(_heartRead, request)) {
+        _heartCache = result;
+        _heartCacheAt = DateTime.now();
+      }
+      return result;
+    } finally {
+      if (identical(_heartRead, request)) _heartRead = null;
+    }
+  }
+
+  Future<HeartDetail> _readHeartDetailFromPlatform() async {
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readHeartDetail',
@@ -64,6 +102,34 @@ class HealthConnectService {
       return HeartDetail.error(
         'Health Connect is available in the Android app only.',
       );
+    }
+  }
+
+  ActivityEstimate? activityEstimateFor(HeartDetail heart, int? age) {
+    if (age == null || age != heart.activityEstimateAge) return null;
+    return heart.activityEstimate;
+  }
+
+  Future<int?> readFitnessAge() async {
+    try {
+      return await _channel.invokeMethod<int>('readFitnessAge');
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  Future<bool> saveFitnessAge(int? age) async {
+    try {
+      return await _channel.invokeMethod<bool>('saveFitnessAge', {
+            'age': age,
+          }) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 
@@ -321,11 +387,12 @@ class HeartDetail {
     this.minBpm,
     this.avgBpm,
     this.maxBpm,
-    this.zoneMinutes = const [0, 0, 0, 0, 0],
     this.restingHrBpm,
-    this.restingHrBaseline,
     this.hrvRmssd,
-    this.hrvBaseline,
+    this.activityEstimate,
+    this.activityEstimateAge,
+    this.restingHrSamples = const [],
+    this.hrvSamples = const [],
     this.error,
   });
 
@@ -339,10 +406,17 @@ class HeartDetail {
         final bpm = _intFrom(entry[1]);
         if (millis == null || bpm == null) continue;
         samples.add(
-          HeartSample(at: DateTime.fromMillisecondsSinceEpoch(millis), bpm: bpm),
+          HeartSample(
+            at: DateTime.fromMillisecondsSinceEpoch(millis),
+            bpm: bpm,
+          ),
         );
       }
     }
+    final rawActivityEstimate = map['activityEstimate'];
+    final activityEstimateMap = rawActivityEstimate is Map
+        ? Map<String, dynamic>.from(rawActivityEstimate)
+        : null;
     return HeartDetail(
       status: map['status'] as String? ?? 'unavailable',
       granted: HealthConnectInspection._stringList(map['granted']),
@@ -353,19 +427,19 @@ class HeartDetail {
       minBpm: _intFrom(map['minBpm']),
       avgBpm: _intFrom(map['avgBpm']),
       maxBpm: _intFrom(map['maxBpm']),
-      zoneMinutes: _intListFrom(map['zoneMinutes']).map((e) => e ?? 0).toList(),
       restingHrBpm: _intFrom(map['restingHrBpm']),
-      restingHrBaseline: _intFrom(map['restingHrBaseline']),
       hrvRmssd: _doubleFrom(map['hrvRmssd']),
-      hrvBaseline: _doubleFrom(map['hrvBaseline']),
+      activityEstimate: activityEstimateMap == null
+          ? null
+          : _activityEstimateFrom(activityEstimateMap),
+      activityEstimateAge: _intFrom(activityEstimateMap?['age']),
+      restingHrSamples: _timedValuesFrom(map['restingHrSamples']),
+      hrvSamples: _timedValuesFrom(map['hrvSamples']),
     );
   }
 
-  factory HeartDetail.error(String message) => HeartDetail(
-    status: 'error',
-    granted: const [],
-    error: message,
-  );
+  factory HeartDetail.error(String message) =>
+      HeartDetail(status: 'error', granted: const [], error: message);
 
   final String status;
   final List<String> granted;
@@ -376,11 +450,12 @@ class HeartDetail {
   final int? minBpm;
   final int? avgBpm;
   final int? maxBpm;
-  final List<int> zoneMinutes;
   final int? restingHrBpm;
-  final int? restingHrBaseline;
   final double? hrvRmssd;
-  final double? hrvBaseline;
+  final ActivityEstimate? activityEstimate;
+  final int? activityEstimateAge;
+  final List<TimedValue> restingHrSamples;
+  final List<TimedValue> hrvSamples;
   final String? error;
 
   bool get hasAccess => granted.isNotEmpty;
@@ -388,8 +463,68 @@ class HeartDetail {
       granted.contains('android.permission.health.READ_HEART_RATE');
   bool get canReadRestingHr =>
       granted.contains('android.permission.health.READ_RESTING_HEART_RATE');
-  bool get canReadHrv => granted.contains(
-    'android.permission.health.READ_HEART_RATE_VARIABILITY',
+  bool get canReadHrv =>
+      granted.contains('android.permission.health.READ_HEART_RATE_VARIABILITY');
+}
+
+List<TimedValue> _timedValuesFrom(Object? value) {
+  if (value is! List) return const [];
+  final samples = <TimedValue>[];
+  for (final entry in value) {
+    if (entry is! List || entry.length < 2) continue;
+    final millis = _intFrom(entry[0]);
+    final number = _doubleFrom(entry[1]);
+    if (millis == null || number == null) continue;
+    samples.add(
+      TimedValue(
+        at: DateTime.fromMillisecondsSinceEpoch(millis),
+        value: number,
+      ),
+    );
+  }
+  return samples;
+}
+
+ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
+  final rawZones = map['zoneMinutes'];
+  final rawRanges = map['zoneRanges'];
+  if (rawZones is! List || rawRanges is! List) return null;
+  final zones = rawZones.map(_doubleFrom).toList();
+  final ranges = rawRanges.whereType<String>().toList();
+  if (zones.length != 5 ||
+      zones.any((value) => value == null) ||
+      ranges.length != 5) {
+    return null;
+  }
+  final moderate = _doubleFrom(map['moderateMinutes']);
+  final vigorous = _doubleFrom(map['vigorousMinutes']);
+  final progress = _intFrom(map['progressPercent']);
+  final usableDays = _intFrom(map['usableDays']);
+  final age = _intFrom(map['age']);
+  final estimatedMaxHrBpm = _intFrom(map['estimatedMaxHrBpm']);
+  final restingHrBpm = _doubleFrom(map['restingHrBpm']);
+  final restingHrAt = _intFrom(map['restingHrAt']);
+  if (moderate == null ||
+      vigorous == null ||
+      progress == null ||
+      usableDays == null ||
+      age == null ||
+      estimatedMaxHrBpm == null ||
+      restingHrBpm == null ||
+      restingHrAt == null) {
+    return null;
+  }
+  return ActivityEstimate(
+    age: age,
+    estimatedMaxHrBpm: estimatedMaxHrBpm,
+    restingHrBpm: restingHrBpm,
+    restingHrAt: DateTime.fromMillisecondsSinceEpoch(restingHrAt),
+    progressPercent: progress.clamp(0, 100),
+    moderateMinutes: moderate,
+    vigorousMinutes: vigorous,
+    usableDays: usableDays,
+    zoneMinutes: zones.cast<double>(),
+    zoneRanges: ranges,
   );
 }
 
@@ -402,6 +537,7 @@ class SleepNight {
     required this.lightMinutes,
     required this.deepMinutes,
     required this.remMinutes,
+    required this.asleepIntervals,
   });
 
   factory SleepNight.fromMap(Map<String, dynamic> map) {
@@ -413,6 +549,7 @@ class SleepNight {
       lightMinutes: _intFrom(map['lightMinutes']) ?? 0,
       deepMinutes: _intFrom(map['deepMinutes']) ?? 0,
       remMinutes: _intFrom(map['remMinutes']) ?? 0,
+      asleepIntervals: _asleepIntervalsFrom(map['asleepIntervals']),
     );
   }
 
@@ -423,8 +560,27 @@ class SleepNight {
   final int lightMinutes;
   final int deepMinutes;
   final int remMinutes;
+  final List<AsleepInterval> asleepIntervals;
 
   int get deepRemMinutes => deepMinutes + remMinutes;
+}
+
+List<AsleepInterval> _asleepIntervalsFrom(Object? value) {
+  if (value is! List) return const [];
+  final intervals = <AsleepInterval>[];
+  for (final entry in value) {
+    if (entry is! List || entry.length < 2) continue;
+    final start = _intFrom(entry[0]);
+    final end = _intFrom(entry[1]);
+    if (start == null || end == null || end <= start) continue;
+    intervals.add(
+      AsleepInterval(
+        start: DateTime.fromMillisecondsSinceEpoch(start),
+        end: DateTime.fromMillisecondsSinceEpoch(end),
+      ),
+    );
+  }
+  return intervals;
 }
 
 class SleepDetail {
@@ -458,11 +614,8 @@ class SleepDetail {
     );
   }
 
-  factory SleepDetail.error(String message) => SleepDetail(
-    status: 'error',
-    granted: const [],
-    error: message,
-  );
+  factory SleepDetail.error(String message) =>
+      SleepDetail(status: 'error', granted: const [], error: message);
 
   final String status;
   final List<String> granted;
@@ -474,12 +627,26 @@ class SleepDetail {
   bool get canReadSleep =>
       granted.contains('android.permission.health.READ_SLEEP');
 
-  SleepNight? get lastNight {
+  List<SleepWindow> get sleepWindows => sessions
+      .map(
+        (session) => SleepWindow(
+          start: session.start,
+          end: session.end,
+          sleepMinutes: session.minutes,
+          asleepIntervals: session.asleepIntervals,
+        ),
+      )
+      .toList(growable: false);
+
+  SleepNight? get selectedRecentSession {
     final now = DateTime.now();
-    final recent = sessions
-        .where((session) => now.difference(session.end).inHours <= 24)
-        .toList();
-    if (recent.isEmpty) return sessions.isEmpty ? null : sessions.first;
+    final recent = sessions.where((session) {
+      final age = now.difference(session.end);
+      return session.minutes >= 180 &&
+          !age.isNegative &&
+          age <= const Duration(hours: 24);
+    }).toList();
+    if (recent.isEmpty) return null;
     recent.sort((a, b) => b.minutes.compareTo(a.minutes));
     return recent.first;
   }
@@ -503,18 +670,17 @@ class Trends7d {
       status: map['status'] as String? ?? 'unavailable',
       granted: HealthConnectInspection._stringList(map['granted']),
       checkedAt: map['checkedAt'] as String?,
-      dates: rawDates is List ? rawDates.whereType<String>().toList() : const [],
+      dates: rawDates is List
+          ? rawDates.whereType<String>().toList()
+          : const [],
       steps: _intListFrom(map['steps']),
       hrAvg: _intListFrom(map['hrAvg']),
       sleepMinutes: _intListFrom(map['sleepMinutes']),
     );
   }
 
-  factory Trends7d.error(String message) => Trends7d(
-    status: 'error',
-    granted: const [],
-    error: message,
-  );
+  factory Trends7d.error(String message) =>
+      Trends7d(status: 'error', granted: const [], error: message);
 
   final String status;
   final List<String> granted;
@@ -535,7 +701,11 @@ class Trends7d {
 }
 
 class WorkoutEntry {
-  const WorkoutEntry({required this.type, required this.start, required this.minutes});
+  const WorkoutEntry({
+    required this.type,
+    required this.start,
+    required this.minutes,
+  });
 
   factory WorkoutEntry.fromMap(Map<String, dynamic> map) {
     return WorkoutEntry(
@@ -589,11 +759,8 @@ class ActivityDetail {
     );
   }
 
-  factory ActivityDetail.error(String message) => ActivityDetail(
-    status: 'error',
-    granted: const [],
-    error: message,
-  );
+  factory ActivityDetail.error(String message) =>
+      ActivityDetail(status: 'error', granted: const [], error: message);
 
   final String status;
   final List<String> granted;
@@ -614,9 +781,8 @@ class ActivityDetail {
       granted.contains('android.permission.health.READ_FLOORS_CLIMBED');
   bool get canReadCaloriesTotal =>
       granted.contains('android.permission.health.READ_TOTAL_CALORIES_BURNED');
-  bool get canReadCaloriesActive => granted.contains(
-    'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
-  );
+  bool get canReadCaloriesActive =>
+      granted.contains('android.permission.health.READ_ACTIVE_CALORIES_BURNED');
 }
 
 class BodyDetail {
@@ -649,11 +815,8 @@ class BodyDetail {
     );
   }
 
-  factory BodyDetail.error(String message) => BodyDetail(
-    status: 'error',
-    granted: const [],
-    error: message,
-  );
+  factory BodyDetail.error(String message) =>
+      BodyDetail(status: 'error', granted: const [], error: message);
 
   final String status;
   final List<String> granted;

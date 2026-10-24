@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
+import '../../domain/estimates.dart';
 import '../../widgets/charts_kit.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
@@ -18,6 +20,8 @@ class HeartScreen extends StatefulWidget {
 class _HeartScreenState extends State<HeartScreen> {
   final _health = HealthConnectService.instance;
   HeartDetail? _heart;
+  ActivityEstimate? _activityEstimate;
+  int? _age;
   bool _loading = true;
   Timer? _refreshTimer;
 
@@ -25,10 +29,7 @@ class _HeartScreenState extends State<HeartScreen> {
   void initState() {
     super.initState();
     _health.dataRevision.addListener(_load);
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) => _load(),
-    );
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) => _load());
     _load();
   }
 
@@ -39,11 +40,15 @@ class _HeartScreenState extends State<HeartScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final heart = await _health.readHeartDetail();
+  Future<void> _load({bool forceRefresh = false}) async {
+    final heart = await _health.readHeartDetail(refresh: forceRefresh);
+    final age = await _health.readFitnessAge();
+    final activity = _health.activityEstimateFor(heart, age);
     if (!mounted) return;
     setState(() {
       _heart = heart;
+      _activityEstimate = activity;
+      _age = age;
       _loading = false;
     });
   }
@@ -57,14 +62,15 @@ class _HeartScreenState extends State<HeartScreen> {
     final seriesValues = heart == null
         ? const <double>[]
         : heart.series.map((sample) => sample.bpm.toDouble()).toList();
-    final zoneMinutes = heart?.zoneMinutes ?? const [0, 0, 0, 0, 0];
-    final zoneTotal = zoneMinutes.fold<int>(0, (sum, value) => sum + value);
+    final activity = _activityEstimate;
+    final zoneMinutes = activity?.zoneMinutes ?? const <double>[];
+    final zoneTotal = zoneMinutes.fold<double>(0, (sum, value) => sum + value);
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(forceRefresh: true),
           color: AppColors.green,
           backgroundColor: AppColors.surfaceHigh,
           child: ListView(
@@ -96,15 +102,34 @@ class _HeartScreenState extends State<HeartScreen> {
               ),
               const SizedBox(height: 16),
               if (heart?.error != null)
-                InfoNote(text: heart!.error!)
-              else if (heart != null && !heart.canReadHeartRate)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoNote(
+                      text: 'Could not read Health Connect: ${heart!.error}',
+                      textColor: AppColors.red,
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _load(forceRefresh: true),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                )
+              else if (heart != null && !heart.canReadHeartRate) ...[
                 const InfoNote(
-                  text: 'Heart-rate access is not allowed. Enable it in Data '
-                      'sources to see your curve.',
+                  text:
+                      'Heart-rate access is off. Allow it to see your curve and activity zones.',
                   icon: Icons.lock_outline_rounded,
                   color: AppColors.yellow,
-                )
-              else ...[
+                ),
+                const SizedBox(height: 9),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/data'),
+                  icon: const Icon(Icons.sensors_rounded),
+                  label: const Text('Review data access'),
+                ),
+              ] else ...[
                 SurfaceCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,27 +200,41 @@ class _HeartScreenState extends State<HeartScreen> {
                 ),
                 const SizedBox(height: 18),
                 SectionHeader(
-                  title: 'Heart-rate zones',
-                  caption: 'TODAY \u00b7 FIXED BANDS',
+                  title: 'Activity intensity',
+                  caption: '7-DAY HR RESERVE',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
-                  child: zoneTotal == 0
+                  child: activity == null
                       ? Text(
-                          'Not enough samples today to map zones.',
+                          _age == null
+                              ? 'Add your age in Settings to estimate personal heart-rate zones.'
+                              : 'No continuous heart-rate samples to estimate zones yet.',
                           style: AppType.caption,
                         )
                       : Column(
                           children: [
                             for (var index = 0; index < 5; index++)
                               ZoneBarRow(
-                                label: heartZoneLabels[index],
-                                bpmRange: heartZoneRanges[index],
-                                minutes: zoneMinutes[index],
+                                label: const [
+                                  'Very light',
+                                  'Light',
+                                  'Moderate',
+                                  'Vigorous',
+                                  'Near max',
+                                ][index],
+                                bpmRange: activity.zoneRanges[index],
+                                minutes: zoneMinutes[index].round(),
                                 fraction: zoneTotal == 0
                                     ? 0
                                     : zoneMinutes[index] / zoneTotal,
-                                color: heartZoneColors[index],
+                                color: const [
+                                  AppColors.blue,
+                                  AppColors.teal,
+                                  AppColors.green,
+                                  AppColors.yellow,
+                                  AppColors.red,
+                                ][index],
                               ),
                           ],
                         ),
@@ -219,8 +258,7 @@ class _HeartScreenState extends State<HeartScreen> {
                             : '\u2014',
                         unit: 'bpm',
                         note: _baselineNote(
-                          heart?.restingHrBaseline,
-                          'bpm',
+                          heart?.restingHrSamples ?? const <TimedValue>[],
                           heart?.canReadRestingHr == true,
                         ),
                       ),
@@ -236,8 +274,7 @@ class _HeartScreenState extends State<HeartScreen> {
                             : '\u2014',
                         unit: 'ms',
                         note: _baselineNote(
-                          heart?.hrvBaseline,
-                          'ms',
+                          heart?.hrvSamples ?? const <TimedValue>[],
                           heart?.canReadHrv == true,
                         ),
                       ),
@@ -256,11 +293,10 @@ class _HeartScreenState extends State<HeartScreen> {
     );
   }
 
-  String _baselineNote(num? baseline, String unit, bool hasAccess) {
-    if (baseline == null) {
-      return hasAccess ? 'No records yet' : 'Access needed';
-    }
-    return 'Baseline ${baseline.round()} $unit';
+  String _baselineNote(List<TimedValue> samples, bool hasAccess) {
+    if (!hasAccess) return 'Access needed';
+    if (samples.isEmpty) return 'No recent records';
+    return '${samples.length} readings · last 14 days';
   }
 }
 
@@ -275,10 +311,7 @@ class _Stat extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            value?.toString() ?? '\u2014',
-            style: AppType.numM,
-          ),
+          Text(value?.toString() ?? '\u2014', style: AppType.numM),
           const SizedBox(height: 2),
           Text(label.toUpperCase(), style: AppType.caption),
         ],

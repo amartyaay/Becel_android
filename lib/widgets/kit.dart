@@ -213,10 +213,7 @@ class SectionHeader extends StatelessWidget {
       children: [
         Expanded(child: Text(title, style: AppType.sectionTitle)),
         if (caption != null)
-          Text(
-            caption!,
-            style: AppType.eyebrow.copyWith(letterSpacing: 0.8),
-          ),
+          Text(caption!, style: AppType.eyebrow.copyWith(letterSpacing: 0.8)),
         if (action != null)
           TextButton(
             onPressed: onAction,
@@ -421,10 +418,7 @@ class MovementHero extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
                 decoration: BoxDecoration(
                   color: chipBg,
                   borderRadius: BorderRadius.circular(99),
@@ -498,9 +492,7 @@ class MovementHero extends StatelessWidget {
                             fontSize: 21,
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.6,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures(),
-                            ],
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                         Text(

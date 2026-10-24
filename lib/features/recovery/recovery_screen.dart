@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
@@ -16,7 +17,9 @@ class RecoveryScreen extends StatefulWidget {
 class _RecoveryScreenState extends State<RecoveryScreen> {
   final _health = HealthConnectService.instance;
   HeartDetail? _heart;
-  HealthSummary? _summary;
+  SleepDetail? _sleep;
+  RecoveryReadiness? _readiness;
+  String? _readError;
   bool _loading = true;
 
   @override
@@ -32,15 +35,29 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final results = await Future.wait<Object>([
-      _health.readHeartDetail(),
-      _health.readSummary(),
+  Future<void> _load({bool forceRefresh = false}) async {
+    final values = await Future.wait<Object>([
+      _health.readHeartDetail(refresh: forceRefresh),
+      _health.readSleepDetail(),
     ]);
+    final heart = values[0] as HeartDetail;
+    final sleep = values[1] as SleepDetail;
+    final night = sleep.selectedRecentSession;
+    final readiness = recoveryReadiness(
+      hrvSamples: heart.hrvSamples,
+      restingHrSamples: heart.restingHrSamples,
+      sleepMinutes: night?.minutes,
+      sleepStart: night?.start,
+      sleepEnd: night?.end,
+      asleepIntervals: night?.asleepIntervals ?? const <AsleepInterval>[],
+      sleepWindows: sleep.sleepWindows,
+    );
     if (!mounted) return;
     setState(() {
-      _heart = results[0] as HeartDetail;
-      _summary = results[1] as HealthSummary;
+      _heart = heart;
+      _sleep = sleep;
+      _readiness = readiness;
+      _readError = heart.error ?? sleep.error;
       _loading = false;
     });
   }
@@ -48,161 +65,150 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final heart = _heart;
-    final summary = _summary;
-    final score = recoveryEstimate(
-      restingHr: heart?.restingHrBpm,
-      restingHrBaseline: heart?.restingHrBaseline,
-      hrv: heart?.hrvRmssd,
-      hrvBaseline: heart?.hrvBaseline,
-    );
-    final needingAccess = heart != null &&
-        (!heart.canReadHrv || !heart.canReadRestingHr);
-    final strain = heart?.canReadHeartRate == true
-        ? strainEstimateFromZones(heart!.zoneMinutes)
-        : null;
+    final night = _sleep?.selectedRecentSession;
+    final readiness = _readiness;
+    final estimate = readiness?.estimate;
+    final accessMissing =
+        _readError == null &&
+        heart != null &&
+        (!heart.canReadHrv ||
+            !heart.canReadRestingHr ||
+            _sleep?.canReadSleep != true);
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(forceRefresh: true),
           color: AppColors.green,
           backgroundColor: AppColors.surfaceHigh,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
             children: [
               ScreenHeader(
                 onBack: () => Navigator.of(context).maybePop(),
-                eyebrow: 'HOW READY YOU ARE',
+                eyebrow: 'SLEEP + OVERNIGHT SIGNALS',
                 title: 'Recovery',
                 trailing: _loading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: AppColors.green,
+                          strokeWidth: 2.2,
+                          color: AppColors.teal,
                         ),
                       )
                     : StatusPill(
-                        label: score == null ? 'NOT ENOUGH DATA' : 'ESTIMATE',
-                        color: score == null
+                        label: estimate == null
+                            ? 'CALIBRATING'
+                            : readiness?.limitedCurrentSamples == true
+                            ? 'LOW DATA'
+                            : 'ESTIMATE',
+                        color: estimate == null
                             ? AppColors.yellow
-                            : AppColors.green,
-                        icon: Icons.energy_savings_leaf_rounded,
+                            : readiness?.limitedCurrentSamples == true
+                            ? AppColors.yellow
+                            : AppColors.teal,
                       ),
               ),
-              const SizedBox(height: 16),
-              if (needingAccess)
-                const InfoNote(
-                  text: 'Recovery needs HRV and resting heart rate access. '
-                      'Enable them in Data sources; the estimate appears '
-                      'once Health Connect has records.',
-                  icon: Icons.lock_outline_rounded,
-                  color: AppColors.yellow,
+              const SizedBox(height: 17),
+              _RecoveryCard(
+                score: estimate?.score,
+                loading: _loading,
+                limitedCurrentSamples:
+                    estimate != null &&
+                    (readiness?.limitedCurrentSamples ?? false),
+              ),
+              const SizedBox(height: 12),
+              if (_readError != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoNote(
+                      icon: Icons.error_outline_rounded,
+                      color: AppColors.red,
+                      text: 'Could not read Health Connect: $_readError',
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _load(forceRefresh: true),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
                 )
-              else if (score == null)
-                const InfoNote(
-                  text: 'No HRV or resting heart-rate records yet. Fitbit '
-                      'Air data appears after Google Health syncs it.',
-                  icon: Icons.hourglass_empty_rounded,
+              else if (estimate == null)
+                InfoNote(
+                  icon: accessMissing
+                      ? Icons.lock_outline_rounded
+                      : Icons.hourglass_empty_rounded,
                   color: AppColors.yellow,
+                  text: accessMissing
+                      ? 'Allow sleep, HRV, and resting heart-rate access. The estimate needs all three signals.'
+                      : _recoveryWaitText(readiness),
                 )
               else ...[
+                const SectionHeader(title: 'Signals behind the estimate'),
+                const SizedBox(height: 9),
                 SurfaceCard(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('$score', style: AppType.numXl),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text('of 100', style: AppType.unit),
-                      ),
-                      const Spacer(),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          _recoveryWord(score).toUpperCase(),
-                          style: AppType.pill.copyWith(
-                            color: _recoveryColor(score),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const InfoNote(
-                  text: recoveryScoreFormula,
-                  icon: Icons.info_outline_rounded,
-                  color: AppColors.green,
-                ),
-                const SizedBox(height: 18),
-                SectionHeader(title: 'Signals', caption: 'VS 14-DAY BASELINE'),
-                const SizedBox(height: 10),
-                SurfaceCard(
+                  padding: const EdgeInsets.fromLTRB(15, 4, 15, 4),
                   child: Column(
                     children: [
-                      _SignalRow(
-                        label: 'HRV (RMSSD)',
-                        value: heart?.hrvRmssd != null
-                            ? '${heart!.hrvRmssd!.round()} ms'
-                            : '\u2014',
-                        baseline: heart?.hrvBaseline != null
-                            ? 'Baseline ${heart!.hrvBaseline!.round()} ms'
-                            : 'No baseline',
-                        better: _higherIsBetter(
-                          heart?.hrvRmssd,
-                          heart?.hrvBaseline,
-                        ),
-                        color: AppColors.violet,
-                      ),
-                      const Divider(height: 20, color: AppColors.border),
-                      _SignalRow(
-                        label: 'Resting HR',
-                        value: heart?.restingHrBpm != null
-                            ? '${heart!.restingHrBpm} bpm'
-                            : '\u2014',
-                        baseline: heart?.restingHrBaseline != null
-                            ? 'Baseline ${heart!.restingHrBaseline} bpm'
-                            : 'No baseline',
-                        better: _lowerIsBetter(
-                          heart?.restingHrBpm,
-                          heart?.restingHrBaseline,
-                        ),
-                        color: AppColors.red,
-                      ),
-                      const Divider(height: 20, color: AppColors.border),
-                      _SignalRow(
-                        label: 'Main sleep',
-                        value: summary?.sleepSessionMinutes != null
-                            ? formatDurationMinutes(
-                                summary!.sleepSessionMinutes!,
-                              )
-                            : '\u2014',
-                        baseline: summary?.sleepEnd != null
-                            ? 'Ended ${formatClock(DateTime.parse(summary!.sleepEnd!))}'
-                            : 'No session',
-                        better: null,
+                      _ComponentRow(
+                        icon: Icons.bedtime_rounded,
                         color: AppColors.blue,
+                        label: 'Sleep duration',
+                        value: formatDurationMinutes(night!.minutes),
+                        detail:
+                            '${estimate.sleepComponent}/100 duration progress × 40% · selected session',
                       ),
-                      const Divider(height: 20, color: AppColors.border),
-                      _SignalRow(
-                        label: 'Today\u2019s strain',
-                        value: strain != null ? '$strain' : '\u2014',
-                        baseline: 'From heart-rate zones',
-                        better: null,
-                        color: AppColors.yellow,
+                      const Divider(height: 1),
+                      _ComponentRow(
+                        icon: Icons.monitor_heart_rounded,
+                        color: AppColors.violet,
+                        label: 'RMSSD HRV during asleep stages',
+                        value: '${estimate.hrvCurrent.round()} ms',
+                        detail:
+                            '${estimate.hrvComponent}/100 × 35% · ${estimate.hrvSampleCount} asleep-stage samples · latest ${formatClock(estimate.hrvAt)} · personal median ${estimate.hrvBaseline.round()} ms · ${estimate.hrvBaselineDays} nights / 14 days',
+                      ),
+                      const Divider(height: 1),
+                      _ComponentRow(
+                        icon: Icons.favorite_rounded,
+                        color: AppColors.red,
+                        label: 'Resting HR during asleep stages',
+                        value: '${estimate.restingHrCurrent.round()} bpm',
+                        detail:
+                            '${estimate.restingHrComponent}/100 × 25% · ${estimate.restingHrSampleCount} asleep-stage samples · latest ${formatClock(estimate.restingHrAt)} · personal median ${estimate.restingHrBaseline.round()} bpm · ${estimate.restingHrBaselineDays} nights / 14 days',
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 13),
+                const InfoNote(
+                  text: recoveryMethod,
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.teal,
+                ),
+                const SizedBox(height: 10),
+                const InfoNote(
+                  text:
+                      'Use this as a trend to compare with how you feel and your training plan. It is not a diagnosis or medical clearance to exercise.',
+                  icon: Icons.self_improvement_rounded,
+                  color: AppColors.blue,
+                ),
               ],
-              const SizedBox(height: 22),
+              if (estimate == null && accessMissing) ...[
+                const SizedBox(height: 9),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/data'),
+                  icon: const Icon(Icons.sensors_rounded),
+                  label: const Text('Review data access'),
+                ),
+              ],
+              const SizedBox(height: 21),
               const TrustFooter(
-                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
+                text: 'OVERNIGHT HEALTH CONNECT RECORDS · STORED ON DEVICE',
               ),
             ],
           ),
@@ -210,76 +216,156 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       ),
     );
   }
-
-  String _recoveryWord(int score) {
-    if (score >= 75) return 'Primed';
-    if (score >= 55) return 'Balanced';
-    if (score >= 35) return 'Take it easy';
-    return 'Rest up';
-  }
-
-  Color _recoveryColor(int score) {
-    if (score >= 75) return AppColors.green;
-    if (score >= 55) return AppColors.teal;
-    if (score >= 35) return AppColors.yellow;
-    return AppColors.red;
-  }
-
-  bool? _higherIsBetter(double? current, double? baseline) {
-    if (current == null || baseline == null || baseline == 0) return null;
-    return current >= baseline;
-  }
-
-  bool? _lowerIsBetter(int? current, int? baseline) {
-    if (current == null || baseline == null) return null;
-    return current <= baseline;
-  }
 }
 
-class _SignalRow extends StatelessWidget {
-  const _SignalRow({
-    required this.label,
-    required this.value,
-    required this.baseline,
-    required this.color,
-    required this.better,
+String _recoveryWaitText(RecoveryReadiness? readiness) {
+  if (readiness == null || !readiness.hasSleepSession) {
+    return 'Waiting for a qualifying sleep session ending within the last 24 hours.';
+  }
+  final reasons = <String>[];
+  if (readiness.hrvCurrentSampleCount == 0) {
+    reasons.add('HRV sample needed during an asleep stage');
+  }
+  if (readiness.restingHrCurrentSampleCount == 0) {
+    reasons.add('Resting-HR sample needed during an asleep stage');
+  }
+  if (readiness.hrvBaselineNights < recoveryMinimumBaselineNights ||
+      readiness.restingHrBaselineNights < recoveryMinimumBaselineNights) {
+    reasons.add(
+      '14-day baseline: HRV ${readiness.hrvBaselineNights}/$recoveryMinimumBaselineNights nights, RHR ${readiness.restingHrBaselineNights}/$recoveryMinimumBaselineNights nights',
+    );
+  }
+  return reasons.isEmpty
+      ? 'Matching asleep-stage readings'
+      : reasons.join(' | ');
+}
+
+class _RecoveryCard extends StatelessWidget {
+  const _RecoveryCard({
+    required this.score,
+    required this.loading,
+    required this.limitedCurrentSamples,
   });
 
-  final String label;
-  final String value;
-  final String baseline;
-  final Color color;
-  final bool? better;
+  final int? score;
+  final bool loading;
+  final bool limitedCurrentSamples;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: Text(label, style: AppType.rowTitle)),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(value, style: AppType.numS),
-            const SizedBox(height: 2),
-            Text(
-              baseline,
-              style: AppType.caption.copyWith(
-                color: better == null
-                    ? AppColors.textTertiary
-                    : better!
-                    ? AppColors.green
-                    : AppColors.yellow,
-              ),
+    final color = limitedCurrentSamples ? AppColors.yellow : AppColors.teal;
+    return SurfaceCard(
+      color: const Color(0xFF14201B),
+      borderColor: color.withValues(alpha: 0.22),
+      radius: 24,
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  limitedCurrentSamples ? 'LIMITED SAMPLES' : 'RECOVERY INDEX',
+                  style: AppType.eyebrow.copyWith(color: color),
+                ),
+                const SizedBox(height: 11),
+                Text(
+                  score == null ? 'Recovery unavailable' : 'Recovery index',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  score == null
+                      ? loading
+                            ? 'Checking your latest records'
+                            : 'See which signal is missing below'
+                      : limitedCurrentSamples
+                      ? 'One reading or fewer for at least one signal'
+                      : 'Compare the trend with your own signals',
+                  style: AppType.caption,
+                ),
+              ],
             ),
-          ],
-        ),
-      ],
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 96,
+            height: 96,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: (score ?? 0) / 100,
+                    strokeWidth: 8,
+                    strokeCap: StrokeCap.round,
+                    backgroundColor: AppColors.surfaceHigher,
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      score?.toString() ?? '—',
+                      style: AppType.numM.copyWith(fontSize: 30),
+                    ),
+                    Text(
+                      'OF 100',
+                      style: AppType.eyebrow.copyWith(fontSize: 9),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
+
+class _ComponentRow extends StatelessWidget {
+  const _ComponentRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 13),
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: AppType.rowTitle),
+              const SizedBox(height: 3),
+              Text(detail, style: AppType.caption),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(value, style: AppType.numS.copyWith(fontSize: 14)),
+      ],
+    ),
+  );
 }

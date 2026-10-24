@@ -16,12 +16,16 @@ class HealthHubScreen extends StatefulWidget {
 
 class _HealthHubScreenState extends State<HealthHubScreen> {
   final _health = HealthConnectService.instance;
-
   HealthConnectInspection? _inspection;
   HealthSummary? _summary;
   HeartDetail? _heart;
+  SleepDetail? _sleep;
   ActivityDetail? _activity;
   BodyDetail? _body;
+  int? _age;
+  RecoveryReadiness? _recoveryStatus;
+  ActivityEstimate? _activityEstimate;
+  String? _readError;
   bool _loading = true;
 
   @override
@@ -37,31 +41,62 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     final inspection = await _health.inspect();
     HealthSummary? summary;
     HeartDetail? heart;
+    SleepDetail? sleep;
     ActivityDetail? activity;
     BodyDetail? body;
     if (inspection.isAvailable && inspection.hasAnyPermission) {
-      final results = await Future.wait<Object>([
+      final values = await Future.wait<Object>([
         _health.readSummary(),
-        _health.readHeartDetail(),
+        _health.readHeartDetail(refresh: forceRefresh),
         _health.readActivityDetail(),
         _health.readBodyDetail(),
+        _health.readSleepDetail(),
       ]);
-      summary = results[0] as HealthSummary;
-      heart = results[1] as HeartDetail;
-      activity = results[2] as ActivityDetail;
-      body = results[3] as BodyDetail;
+      summary = values[0] as HealthSummary;
+      heart = values[1] as HeartDetail;
+      activity = values[2] as ActivityDetail;
+      body = values[3] as BodyDetail;
+      sleep = values[4] as SleepDetail;
     }
+    final age = await _health.readFitnessAge();
+    final night = sleep?.selectedRecentSession;
+    final recoveryStatus = heart == null
+        ? null
+        : recoveryReadiness(
+            hrvSamples: heart.hrvSamples,
+            restingHrSamples: heart.restingHrSamples,
+            sleepMinutes: night?.minutes,
+            sleepStart: night?.start,
+            sleepEnd: night?.end,
+            asleepIntervals: night?.asleepIntervals ?? const <AsleepInterval>[],
+            sleepWindows: sleep?.sleepWindows ?? const <SleepWindow>[],
+          );
+    final activityEstimate = heart == null
+        ? null
+        : _health.activityEstimateFor(heart, age);
+    final error =
+        heart?.error ??
+        sleep?.error ??
+        activity?.error ??
+        body?.error ??
+        summary?.error ??
+        inspection.error;
     if (!mounted) return;
     setState(() {
       _inspection = inspection;
       _summary = summary;
       _heart = heart;
+      _sleep = sleep;
       _activity = activity;
       _body = body;
+      _age = age;
+      _recoveryStatus = recoveryStatus;
+      _activityEstimate = activityEstimate;
+      _readError = error;
       _loading = false;
     });
   }
@@ -71,8 +106,13 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     final inspection = _inspection;
     final summary = _summary;
     final heart = _heart;
-    final activity = _activity;
+    final sleep = _sleep;
+    final night = sleep?.selectedRecentSession;
+    final activityDetail = _activity;
     final body = _body;
+    final recoveryStatus = _recoveryStatus;
+    final recovery = recoveryStatus?.estimate;
+    final activity = _activityEstimate;
     final partial =
         inspection != null &&
         inspection.isAvailable &&
@@ -82,130 +122,150 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(forceRefresh: true),
           color: AppColors.green,
           backgroundColor: AppColors.surfaceHigh,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
             children: [
               ScreenHeader(
-                eyebrow: 'EVERY MEASUREMENT',
-                title: 'Health',
+                eyebrow: 'BODY SIGNALS',
+                title: 'Vitals',
                 trailing: _loading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: AppColors.green,
+                          strokeWidth: 2.2,
+                          color: AppColors.teal,
                         ),
                       )
                     : StatusPill(
-                        label: inspection?.stateLabel ?? 'Check status',
+                        label: inspection?.stateLabel ?? 'Check data access',
                         color: inspection?.allPermissionsGranted == true
                             ? AppColors.green
                             : AppColors.yellow,
                       ),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Measured Fitbit Air data, plus calculations Becel labels as '
-                'estimates. Tap a card for detail.',
+              const Text(
+                'Recovery today · selected sleep session · activity over 7 days',
                 style: AppType.note,
               ),
-              const SizedBox(height: 16),
-              _ModuleCard(
-                icon: Icons.favorite_rounded,
-                color: AppColors.red,
-                title: 'Heart',
-                value: summary?.heartRateBpm != null
-                    ? '${summary!.heartRateBpm} bpm'
-                    : '—',
-                note: _heartNote(summary, heart),
-                needsAccess: heart != null && !heart.canReadHeartRate,
-                onTap: () => context.push('/health/heart'),
+              if (_readError != null) ...[
+                const SizedBox(height: 10),
+                InfoNote(
+                  text:
+                      'Health Connect could not load some records: $_readError',
+                  textColor: AppColors.red,
+                ),
+                TextButton.icon(
+                  onPressed: () => _load(forceRefresh: true),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+              const SizedBox(height: 20),
+              const SectionHeader(
+                title: 'Fitness snapshot',
+                caption: 'ESTIMATES',
               ),
               const SizedBox(height: 10),
-              _ModuleCard(
-                icon: Icons.nightlight_round,
-                color: AppColors.blue,
-                title: 'Sleep',
-                value: summary?.sleepSessionMinutes != null
-                    ? formatDurationMinutes(summary!.sleepSessionMinutes!)
-                    : '—',
-                note: _sleepNote(summary),
-                needsAccess: summary != null && !summary.canReadSleep,
-                onTap: () => context.push('/health/sleep'),
-              ),
-              const SizedBox(height: 10),
-              _ModuleCard(
+              _PerformanceCard(
                 icon: Icons.energy_savings_leaf_rounded,
-                color: AppColors.green,
+                color: AppColors.teal,
                 title: 'Recovery',
-                value: _recoveryValue(heart),
-                note: _recoveryNote(heart),
-                needsAccess:
-                    heart != null &&
-                    (!heart.canReadHrv || !heart.canReadRestingHr),
+                value: recovery == null ? '—' : '${recovery.score}',
+                unit: recovery == null ? '' : '/100',
+                note: recovery == null
+                    ? _recoveryNote(heart, summary, recoveryStatus)
+                    : recoveryStatus?.limitedCurrentSamples == true
+                    ? 'Limited overnight readings · matched asleep-stage baseline'
+                    : 'Sleep + HRV + resting heart rate · matched asleep-stage baseline',
                 onTap: () => context.push('/health/recovery'),
               ),
-              const SizedBox(height: 10),
-              _ModuleCard(
-                icon: Icons.bolt_rounded,
-                color: AppColors.red,
-                title: 'Strain',
-                value: heart?.canReadHeartRate == true
-                    ? '${strainEstimateFromZones(heart!.zoneMinutes)}'
-                    : '—',
-                note: heart?.canReadHeartRate == true
-                    ? 'Today\u2019s load from heart-rate zones'
-                    : 'Needs heart-rate access',
-                needsAccess: heart != null && !heart.canReadHeartRate,
-                onTap: () => context.push('/health/strain'),
+              const SizedBox(height: 9),
+              _PerformanceCard(
+                icon: Icons.nightlight_round,
+                color: AppColors.blue,
+                title: 'Sleep · selected session',
+                value: night == null
+                    ? '—'
+                    : formatDurationMinutes(night.minutes),
+                note: night == null
+                    ? summary?.canReadSleep == true
+                          ? 'No session synced in the last 24 hours'
+                          : 'Sleep access is needed'
+                    : 'Measured duration · 7h adult reference',
+                onTap: () => context.push('/health/sleep'),
               ),
+              const SizedBox(height: 9),
+              _PerformanceCard(
+                icon: Icons.directions_run_rounded,
+                color: AppColors.orange,
+                title: 'Activity · last 7 days',
+                value: activity == null
+                    ? '—'
+                    : '${activity.equivalentMinutes.round()}',
+                unit: activity == null ? '' : ' min',
+                note: activity == null
+                    ? _activityNote(heart, _age)
+                    : 'of 150 moderate-equivalent min · ≥1 interval on ${activity.usableDays}/7 days',
+                onTap: () => context.go('/fitness'),
+              ),
+              const SizedBox(height: 20),
+              const SectionHeader(title: 'Measured signals'),
               const SizedBox(height: 10),
-              _ModuleCard(
+              _SignalCard(
+                icon: Icons.favorite_rounded,
+                color: AppColors.red,
+                title: 'Heart rate',
+                value: summary?.heartRateBpm == null
+                    ? '—'
+                    : '${summary!.heartRateBpm} bpm',
+                note: _heartNote(summary, heart),
+                onTap: () => context.push('/health/heart'),
+              ),
+              const SizedBox(height: 9),
+              _SignalCard(
                 icon: Icons.local_fire_department_rounded,
-                color: AppColors.teal,
+                color: AppColors.orange,
                 title: 'Energy',
-                value: activity?.caloriesTotalToday != null
-                    ? '${activity!.caloriesTotalToday} kcal'
-                    : '—',
-                note: _energyNote(activity),
-                needsAccess:
-                    activity != null && !activity.canReadCaloriesTotal,
+                value: activityDetail?.caloriesTotalToday == null
+                    ? '—'
+                    : '${activityDetail!.caloriesTotalToday} kcal',
+                note: _energyNote(activityDetail),
                 onTap: () => context.push('/health/energy'),
               ),
-              const SizedBox(height: 10),
-              _ModuleCard(
+              const SizedBox(height: 9),
+              _SignalCard(
                 icon: Icons.science_rounded,
                 color: AppColors.violet,
-                title: 'Biology',
+                title: 'Body metrics',
                 value: body?.spo2Percent != null
-                    ? '${body!.spo2Percent!.round()}% SpO\u2082'
+                    ? '${body!.spo2Percent!.round()}% SpO₂'
                     : '—',
                 note: _biologyNote(body),
-                needsAccess:
-                    body != null &&
-                    !body.canReadSpo2 &&
-                    !body.canReadRespiratory &&
-                    !body.canReadSkinTemp &&
-                    !body.canReadVo2Max,
                 onTap: () => context.push('/health/biology'),
               ),
               if (partial) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 InfoNote(
-                  text: 'Some metrics need more Health Connect access. Review '
-                      'permissions in Data sources.',
+                  text: 'Some readings need additional Health Connect access.',
                   icon: Icons.lock_outline_rounded,
                   color: AppColors.yellow,
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/data'),
+                  icon: const Icon(Icons.sensors_rounded),
+                  label: const Text('Review data access'),
+                ),
               ],
-              const SizedBox(height: 22),
+              const SizedBox(height: 20),
               const TrustFooter(
-                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
+                text: 'MEASUREMENTS COME FROM HEALTH CONNECT · READ ONLY',
               ),
             ],
           ),
@@ -214,82 +274,137 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     );
   }
 
+  String _recoveryNote(
+    HeartDetail? heart,
+    HealthSummary? summary,
+    RecoveryReadiness? readiness,
+  ) {
+    if (heart == null) return 'Connect a source to start your baseline';
+    if (summary?.canReadSleep != true) return 'Needs sleep access';
+    if (!heart.canReadHrv || !heart.canReadRestingHr) {
+      return 'Needs HRV and resting heart-rate access';
+    }
+    if (readiness == null || !readiness.hasSleepSession) {
+      return 'Waiting for a qualifying sleep session ending within 24 hours';
+    }
+    if (readiness.hrvCurrentSampleCount == 0) {
+      return 'Waiting for HRV during recorded asleep stages';
+    }
+    if (readiness.restingHrCurrentSampleCount == 0) {
+      return 'Waiting for resting heart rate during recorded asleep stages';
+    }
+    return 'Baseline nights · HRV ${readiness.hrvBaselineNights}/$recoveryMinimumBaselineNights · RHR ${readiness.restingHrBaselineNights}/$recoveryMinimumBaselineNights';
+  }
+
+  String _activityNote(HeartDetail? heart, int? age) {
+    if (age == null) return 'Add your age in Settings for estimated HR zones';
+    if (heart == null || !heart.canReadHeartRate) {
+      return 'Needs heart-rate access';
+    }
+    if (!heart.canReadRestingHr) return 'Needs resting heart-rate access';
+    return 'Waiting for continuous Fitbit Air heart-rate samples';
+  }
+
   String _heartNote(HealthSummary? summary, HeartDetail? heart) {
     final latest = heart?.latestAt;
-    if (latest == null) return 'Waiting for a heart-rate sample';
+    if (latest == null) return 'No recent Fitbit Air sample';
     final at = DateTime.tryParse(latest);
     if (at == null) return 'Sample time unavailable';
-    return 'Updated ${formatClock(at)} \u00b7 ${formatAgo(at)}';
-  }
-
-  String _sleepNote(HealthSummary? summary) {
-    if (summary?.sleepSessionMinutes == null) {
-      return summary?.canReadSleep == true
-          ? 'No session in the last 36 hours'
-          : 'Needs sleep access';
-    }
-    final end = summary!.sleepEnd == null
-        ? null
-        : DateTime.tryParse(summary.sleepEnd!);
-    if (end == null) return 'Main session';
-    return 'Main session \u00b7 ended ${formatClock(end)}';
-  }
-
-  String _recoveryValue(HeartDetail? heart) {
-    final estimate = recoveryEstimate(
-      restingHr: heart?.restingHrBpm,
-      restingHrBaseline: heart?.restingHrBaseline,
-      hrv: heart?.hrvRmssd,
-      hrvBaseline: heart?.hrvBaseline,
-    );
-    return estimate == null ? '—' : '$estimate';
-  }
-
-  String _recoveryNote(HeartDetail? heart) {
-    final hrv = heart?.hrvRmssd;
-    final rhr = heart?.restingHrBpm;
-    if (hrv == null || rhr == null) {
-      return heart?.canReadHrv == true && heart?.canReadRestingHr == true
-          ? 'No HRV or resting HR records yet'
-          : 'Needs HRV + resting HR access';
-    }
-    return 'HRV ${hrv.round()} ms \u00b7 Resting $rhr bpm';
+    return 'Measured ${formatClock(at)} · ${formatAgo(at)}';
   }
 
   String _energyNote(ActivityDetail? activity) {
     final total = activity?.caloriesTotalToday;
     final active = activity?.caloriesActiveToday;
-    if (total == null) return 'Needs calorie access';
-    if (active == null) return 'Total burned today';
-    return 'Active $active \u00b7 Resting ${total - active} kcal';
+    if (total == null) return 'No calorie record available';
+    if (active == null) return 'Total burned today · source estimate';
+    return 'Active $active · resting ${total - active} kcal';
   }
 
   String _biologyNote(BodyDetail? body) {
-    if (body == null || !body.hasAccess) return 'Needs Health Connect access';
+    if (body == null || !body.hasAccess) return 'No recent body signals';
     final parts = <String>[];
     if (body.respiratoryRate != null) {
-      parts.add('${body.respiratoryRate!.round()} br/min');
+      parts.add('${body.respiratoryRate!.round()} breaths/min');
     }
     if (body.skinTempDeviationC != null) {
-      final deviation = body.skinTempDeviationC!;
-      final sign = deviation >= 0 ? '+' : '';
-      parts.add('temp $sign${deviation.toStringAsFixed(1)}\u00b0C');
+      final value = body.skinTempDeviationC!;
+      parts.add('temp ${value >= 0 ? '+' : ''}${value.toStringAsFixed(1)}°C');
     }
-    if (body.vo2Max != null) parts.add('VO\u2082 max ${body.vo2Max!.round()}');
-    if (parts.isEmpty) return 'No body-metric records yet';
-    return parts.join(' \u00b7 ');
+    if (body.vo2Max != null) parts.add('VO₂ max ${body.vo2Max!.round()}');
+    return parts.isEmpty ? 'No recent body signals' : parts.join(' · ');
   }
 }
 
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
+class _PerformanceCard extends StatelessWidget {
+  const _PerformanceCard({
     required this.icon,
     required this.color,
     required this.title,
     required this.value,
     required this.note,
     required this.onTap,
-    this.needsAccess = false,
+    this.unit = '',
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String value;
+  final String unit;
+  final String note;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SurfaceCard(
+    onTap: onTap,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    child: Row(
+      children: [
+        IconChip(icon: icon, color: color, size: 39, iconSize: 19, radius: 13),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppType.rowTitle),
+              const SizedBox(height: 3),
+              Text(note, maxLines: 2, style: AppType.caption),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: AppType.numM.copyWith(
+            color: value == '—' ? AppColors.textTertiary : color,
+            fontSize: value.length > 5 ? 18 : 23,
+          ),
+        ),
+        if (unit.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 2, top: 9),
+            child: Text(unit, style: AppType.caption.copyWith(fontSize: 10)),
+          ),
+        const SizedBox(width: 5),
+        const Icon(
+          Icons.chevron_right_rounded,
+          color: AppColors.textTertiary,
+          size: 19,
+        ),
+      ],
+    ),
+  );
+}
+
+class _SignalCard extends StatelessWidget {
+  const _SignalCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.value,
+    required this.note,
+    required this.onTap,
   });
 
   final IconData icon;
@@ -298,60 +413,40 @@ class _ModuleCard extends StatelessWidget {
   final String value;
   final String note;
   final VoidCallback onTap;
-  final bool needsAccess;
 
   @override
-  Widget build(BuildContext context) {
-    return SurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          IconChip(icon: icon, color: color),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppType.rowTitle),
-                const SizedBox(height: 2),
-                Text(note, style: AppType.caption, maxLines: 2),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+  Widget build(BuildContext context) => SurfaceCard(
+    onTap: onTap,
+    color: AppColors.surface,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(title, style: AppType.rowTitle),
+              const SizedBox(height: 3),
               Text(
-                value,
-                style: AppType.numS.copyWith(
-                  color: needsAccess ? AppColors.textTertiary : AppColors.textPrimary,
-                ),
+                note,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.caption,
               ),
-              if (needsAccess)
-                const Padding(
-                  padding: EdgeInsets.only(top: 3),
-                  child: Text(
-                    'ACCESS NEEDED',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: AppColors.yellow,
-                    ),
-                  ),
-                ),
             ],
           ),
-          const SizedBox(width: 6),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textTertiary,
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+        const SizedBox(width: 8),
+        Text(value, style: AppType.numS.copyWith(fontSize: 14)),
+        const SizedBox(width: 4),
+        const Icon(
+          Icons.chevron_right_rounded,
+          size: 18,
+          color: AppColors.textTertiary,
+        ),
+      ],
+    ),
+  );
 }

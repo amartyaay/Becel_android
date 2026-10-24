@@ -1,15 +1,3 @@
-import '../app/theme.dart';
-
-const heartZoneLabels = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'];
-const heartZoneRanges = ['<90 bpm', '90-109', '110-129', '130-149', '150+'];
-const heartZoneColors = [
-  AppColors.blue,
-  AppColors.teal,
-  AppColors.green,
-  AppColors.yellow,
-  AppColors.red,
-];
-
 String formatClock(DateTime time) {
   final local = time.toLocal();
   final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;

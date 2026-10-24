@@ -4,10 +4,108 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../data/health_connect_service.dart';
 import '../../widgets/kit.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _health = HealthConnectService.instance;
+  int? _age;
+  bool _loadingAge = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAge();
+  }
+
+  Future<void> _loadAge() async {
+    final age = await _health.readFitnessAge();
+    if (!mounted) return;
+    setState(() {
+      _age = age;
+      _loadingAge = false;
+    });
+  }
+
+  Future<void> _editFitnessAge() async {
+    final controller = TextEditingController(text: _age?.toString() ?? '');
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        var invalid = false;
+        return StatefulBuilder(
+          builder: (context, updateDialog) => AlertDialog(
+            title: const Text('Personalize activity zones'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Age helps Becel estimate your maximum heart rate and heart-rate reserve. The estimate is used only for activity intensity zones.',
+                  style: AppType.note,
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => updateDialog(() => invalid = false),
+                  decoration: InputDecoration(
+                    labelText: 'Age',
+                    suffixText: 'years',
+                    hintText: '18–100',
+                    errorText: invalid ? 'Enter an age from 18 to 100.' : null,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(-1),
+                child: const Text('Clear'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final age = int.tryParse(controller.text);
+                  if (age == null || age < 18 || age > 100) {
+                    updateDialog(() => invalid = true);
+                    return;
+                  }
+                  Navigator.of(context).pop(age);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    if (selected == null || !mounted) return;
+    final age = selected < 0 ? null : selected;
+    final saved = await _health.saveFitnessAge(age);
+    if (!mounted) return;
+    if (saved) {
+      setState(() => _age = age);
+      _health.notifyDataChanged();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save the activity profile.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +117,8 @@ class SettingsScreen extends StatelessWidget {
           const InfoNote(
             icon: Icons.info_outline_rounded,
             color: AppColors.yellow,
-            text: 'Health Connect read access is available in Data Sources. '
+            text:
+                'Health Connect read access is available in Data Sources. '
                 'Other features are being built.',
           ),
           if (kDebugMode) ...[
@@ -27,6 +126,24 @@ class SettingsScreen extends StatelessWidget {
             const _AirHapticsTester(),
           ],
           const SizedBox(height: 26),
+          const Text('FITNESS PROFILE', style: AppType.eyebrow),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            children: [
+              _SettingsRow(
+                icon: Icons.monitor_heart_rounded,
+                color: AppColors.green,
+                title: 'Heart-rate zones',
+                subtitle: _loadingAge
+                    ? 'Loading local profile'
+                    : _age == null
+                    ? 'Add age to estimate personal zones'
+                    : 'Age $_age · stored on this device',
+                onTap: _editFitnessAge,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           const Text('YOUR DATA', style: AppType.eyebrow),
           const SizedBox(height: 10),
           _SettingsCard(
@@ -136,7 +253,6 @@ class SettingsScreen extends StatelessWidget {
         SnackBar(content: Text('$feature will be added in a later milestone.')),
       );
   }
-
 }
 
 class _AirHapticsTester extends StatefulWidget {
@@ -186,8 +302,10 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
           .map((device) => Map<String, dynamic>.from(device))
           .toList();
       if (devices.isEmpty) {
-        setState(() => _status =
-            'Fitbit Air has not advertised yet. Keep it nearby; if Google Health is syncing, Becel will keep checking while the band becomes available.');
+        setState(
+          () => _status =
+              'Fitbit Air has not advertised yet. Keep it nearby; if Google Health is syncing, Becel will keep checking while the band becomes available.',
+        );
         return;
       }
       final selected = await showModalBottomSheet<Map<String, dynamic>>(
@@ -221,7 +339,9 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                         : 'Fitbit device',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: Text('Bluetooth signal ${device['rssi'] ?? '—'} dBm'),
+                  subtitle: Text(
+                    'Bluetooth signal ${device['rssi'] ?? '—'} dBm',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).pop(device),
                 ),
@@ -253,7 +373,9 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
       _lastTestRestored = null;
     });
     try {
-      final result = await _channel.invokeMapMethod<String, dynamic>('air.test');
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'air.test',
+      );
       if (!mounted) return;
       final restored = result?['restored'] == true;
       setState(() {
@@ -287,8 +409,8 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
     final statusColor = _lastTestRestored == true
         ? AppColors.green
         : _lastTestRestored == false
-            ? AppColors.red
-            : AppColors.textSecondary;
+        ? AppColors.red
+        : AppColors.textSecondary;
     return Container(
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
@@ -373,7 +495,9 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
                   const SizedBox(width: 8),
                 ] else if (_lastTestRestored != null) ...[
                   Icon(
-                    _lastTestRestored! ? Icons.check_circle : Icons.error_outline,
+                    _lastTestRestored!
+                        ? Icons.check_circle
+                        : Icons.error_outline,
                     color: statusColor,
                     size: 16,
                   ),
@@ -456,7 +580,13 @@ class _SettingsRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 13),
         child: Row(
           children: [
-            IconChip(icon: icon, color: color, size: 38, iconSize: 19, radius: 13),
+            IconChip(
+              icon: icon,
+              color: color,
+              size: 38,
+              iconSize: 19,
+              radius: 13,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

@@ -68,8 +68,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 34),
             children: [
               ScreenHeader(
-                eyebrow: 'ZOOM OUT',
-                title: 'Trends',
+                eyebrow: 'YOUR LAST 7 DAYS',
+                title: 'History',
                 trailing: _loading
                     ? const SizedBox(
                         width: 20,
@@ -88,9 +88,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               const SizedBox(height: 22),
               if (!hasAnyData)
-                _EmptyTrends(
-                  onReviewAccess: () => context.go('/data'),
-                )
+                _EmptyTrends(onReviewAccess: () => context.go('/data'))
               else ...[
                 Text(
                   'Last 7 days from Health Connect, Fitbit Air records only. '
@@ -124,7 +122,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 14),
                 _TrendCard(
-                  title: 'Sleep (main session)',
+                  title: 'Longest asleep session',
                   icon: Icons.nightlight_round,
                   color: AppColors.blue,
                   values: trends.sleepMinutes
@@ -166,9 +164,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _sleepSummary(Trends7d trends) {
     final values = trends.sleepMinutes.whereType<int>().toList();
     if (values.isEmpty) return 'No sleep sessions this week';
-    final average =
-        (values.reduce((a, b) => a + b) / values.length).round();
-    return 'Main sessions on ${values.length} night'
+    final average = (values.reduce((a, b) => a + b) / values.length).round();
+    return 'Longest asleep session on ${values.length} day'
         '${values.length == 1 ? '' : 's'} \u00b7 ${formatDurationMinutes(average)}'
         ' average';
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
@@ -17,8 +18,10 @@ class StrainScreen extends StatefulWidget {
 class _StrainScreenState extends State<StrainScreen> {
   final _health = HealthConnectService.instance;
   HeartDetail? _heart;
-  ActivityDetail? _activity;
+  int? _age;
+  ActivityEstimate? _estimate;
   bool _loading = true;
+  String? _readError;
 
   @override
   void initState() {
@@ -33,15 +36,22 @@ class _StrainScreenState extends State<StrainScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final results = await Future.wait<Object>([
-      _health.readHeartDetail(),
-      _health.readActivityDetail(),
+  Future<void> _load({bool forceRefresh = false}) async {
+    final values = await Future.wait<Object?>([
+      _health.readHeartDetail(refresh: forceRefresh),
+      _health.readFitnessAge(),
     ]);
+    final heart = values[0] as HeartDetail?;
+    final age = values[1] as int?;
+    final estimate = heart == null
+        ? null
+        : _health.activityEstimateFor(heart, age);
     if (!mounted) return;
     setState(() {
-      _heart = results[0] as HeartDetail;
-      _activity = results[1] as ActivityDetail;
+      _heart = heart;
+      _age = age;
+      _estimate = estimate;
+      _readError = heart?.error;
       _loading = false;
     });
   }
@@ -49,180 +59,240 @@ class _StrainScreenState extends State<StrainScreen> {
   @override
   Widget build(BuildContext context) {
     final heart = _heart;
-    final activity = _activity;
-    final zoneMinutes = heart?.zoneMinutes ?? const [0, 0, 0, 0, 0];
-    final zoneTotal = zoneMinutes.fold<int>(0, (sum, value) => sum + value);
-    final strain = heart?.canReadHeartRate == true
-        ? strainEstimateFromZones(zoneMinutes)
-        : null;
-    final workouts = activity?.workouts ?? const <WorkoutEntry>[];
+    final estimate = _estimate;
+    final zones = estimate?.zoneMinutes ?? const <double>[];
+    final zoneTotal = zones.fold<double>(0, (sum, value) => sum + value);
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(forceRefresh: true),
           color: AppColors.green,
           backgroundColor: AppColors.surfaceHigh,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
             children: [
               ScreenHeader(
                 onBack: () => Navigator.of(context).maybePop(),
-                eyebrow: 'CARDIOVASCULAR LOAD',
-                title: 'Strain',
+                eyebrow: 'WEEKLY INTENSITY',
+                title: 'Heart-rate zones',
                 trailing: _loading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: AppColors.green,
+                          strokeWidth: 2.2,
+                          color: AppColors.orange,
                         ),
                       )
                     : StatusPill(
-                        label: strain == null ? 'NO HR ACCESS' : 'ESTIMATE',
-                        color: strain == null
+                        label: _readError != null
+                            ? 'READ ERROR'
+                            : estimate == null
+                            ? 'NEEDS DATA'
+                            : '7-DAY VIEW',
+                        color: _readError != null || estimate == null
                             ? AppColors.yellow
-                            : AppColors.red,
-                        icon: Icons.bolt_rounded,
+                            : AppColors.orange,
+                        icon: Icons.monitor_heart_rounded,
                       ),
               ),
+              const SizedBox(height: 8),
+              const Text(
+                'Recorded heart-rate intervals classified into estimated intensity bands; they do not confirm exercise.',
+                style: AppType.note,
+              ),
               const SizedBox(height: 16),
-              if (heart != null && !heart.canReadHeartRate)
-                const InfoNote(
-                  text: 'Strain is calculated from heart-rate zones and needs '
-                      'heart-rate access. Enable it in Data sources.',
-                  icon: Icons.lock_outline_rounded,
-                  color: AppColors.yellow,
+              if (_readError != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoNote(
+                      text: 'Could not read Health Connect: $_readError',
+                      textColor: AppColors.red,
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _load(forceRefresh: true),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                )
+              else if (estimate == null)
+                _SetupCard(
+                  age: _age,
+                  heart: heart,
+                  onSettings: () => context.push('/settings'),
+                  onData: () => context.go('/data'),
+                  onRetry: _load,
                 )
               else ...[
-                SurfaceCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            strain?.toString() ?? '\u2014',
-                            style: AppType.numXl,
-                          ),
-                          const SizedBox(width: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text('of 100 today', style: AppType.unit),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        strain == 0
-                            ? 'No active zone time recorded yet today.'
-                            : 'From $zoneTotal min in heart-rate zones today.',
-                        style: AppType.caption,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const InfoNote(
-                  text: strainFormula,
-                  icon: Icons.info_outline_rounded,
-                  color: AppColors.red,
-                ),
-                const SizedBox(height: 18),
-                SectionHeader(
-                  title: 'Time in zones',
-                  caption: 'TODAY \u00b7 FIXED BANDS',
+                const SectionHeader(
+                  title: 'Time by zone',
+                  caption: 'HRR ESTIMATE · LAST 7 DAYS',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
-                  child: zoneTotal == 0
-                      ? Text(
-                          'Not enough heart-rate samples today to map zones.',
-                          style: AppType.caption,
-                        )
-                      : Column(
-                          children: [
-                            for (var index = 0; index < 5; index++)
-                              ZoneBarRow(
-                                label: heartZoneLabels[index],
-                                bpmRange: heartZoneRanges[index],
-                                minutes: zoneMinutes[index],
-                                fraction: zoneMinutes[index] / zoneTotal,
-                                color: heartZoneColors[index],
-                              ),
-                          ],
+                  child: Column(
+                    children: [
+                      for (var index = 0; index < 5; index++)
+                        ZoneBarRow(
+                          label: const [
+                            'Very light',
+                            'Light',
+                            'Moderate',
+                            'Vigorous',
+                            'Near max',
+                          ][index],
+                          bpmRange: estimate.zoneRanges[index],
+                          minutes: zones[index].round(),
+                          fraction: zoneTotal == 0
+                              ? 0
+                              : zones[index] / zoneTotal,
+                          color: const [
+                            AppColors.blue,
+                            AppColors.teal,
+                            AppColors.green,
+                            AppColors.yellow,
+                            AppColors.red,
+                          ][index],
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'At least one usable interval on ${estimate.usableDays}/7 local days. This does not measure full-day wear; gaps and unworn time can miss activity.',
+                  style: AppType.caption,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Inputs: age ${estimate.age}, predicted max ${estimate.estimatedMaxHrBpm} bpm, and resting HR ${estimate.restingHrBpm.round()} bpm from ${formatClock(estimate.restingHrAt)}. The same recent resting value sets zones for all 7 dates.',
+                  style: AppType.caption,
+                ),
+                const SizedBox(height: 13),
+                const InfoNote(
+                  text: activityMethod,
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.orange,
                 ),
               ],
               const SizedBox(height: 18),
-              SectionHeader(
-                title: 'Workouts',
-                caption: 'LAST 7 DAYS',
-              ),
-              const SizedBox(height: 10),
-              if (activity != null && !activity.canReadExercise)
-                const SurfaceCard(
-                  child: Text(
-                    'Workout access is not allowed. Enable exercise access in '
-                    'Data sources to list sessions here.',
-                    style: AppType.note,
-                  ),
-                )
-              else if (workouts.isEmpty)
-                const SurfaceCard(
-                  child: Text(
-                    'No Fitbit Air-matched workouts in the last 7 days.',
-                    style: AppType.note,
-                  ),
-                )
-              else
-                for (final workout in workouts)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: SurfaceCard(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          const IconChip(
-                            icon: Icons.fitness_center_rounded,
-                            color: AppColors.violet,
-                            size: 34,
-                            iconSize: 17,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(workout.type, style: AppType.rowTitle),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${formatDayShort(workout.start)} \u00b7 '
-                                  '${formatClock(workout.start)}',
-                                  style: AppType.caption,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            formatDurationMinutes(workout.minutes),
-                            style: AppType.numS,
-                          ),
-                        ],
+              SurfaceCard(
+                color: AppColors.surface,
+                onTap: () => context.go('/fitness'),
+                padding: const EdgeInsets.all(14),
+                child: const Row(
+                  children: [
+                    IconChip(
+                      icon: Icons.directions_run_rounded,
+                      color: AppColors.orange,
+                      size: 38,
+                      iconSize: 19,
+                    ),
+                    SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        'Back to weekly activity',
+                        style: AppType.rowTitle,
                       ),
                     ),
-                  ),
-              const SizedBox(height: 22),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 18,
+                      color: AppColors.orange,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               const TrustFooter(
-                text: 'READ ONLY \u00b7 NO HEALTH DATA IS UPLOADED',
+                text: 'HEART-RATE ESTIMATE · NOT A WORKOUT DETECTOR',
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SetupCard extends StatelessWidget {
+  const _SetupCard({
+    required this.age,
+    required this.heart,
+    required this.onSettings,
+    required this.onData,
+    required this.onRetry,
+  });
+
+  final int? age;
+  final HeartDetail? heart;
+  final VoidCallback onSettings;
+  final VoidCallback onData;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final recentCutoff = DateTime.now().subtract(const Duration(hours: 36));
+    final hasRecentRestingHr =
+        heart?.restingHrSamples.any(
+          (sample) =>
+              !sample.at.isBefore(recentCutoff) &&
+              sample.value >= 30 &&
+              sample.value <= 120,
+        ) ==
+        true;
+    final title = age == null
+        ? 'Add age for estimated zones'
+        : heart == null || !heart!.canReadHeartRate || !heart!.canReadRestingHr
+        ? 'Connect heart-rate data'
+        : !hasRecentRestingHr
+        ? 'Waiting for a recent resting reading'
+        : 'No usable intervals yet';
+    final body = age == null
+        ? 'Becel uses age and a recent resting heart rate to estimate heart-rate reserve. Age stays on this device.'
+        : heart == null || !heart!.canReadHeartRate || !heart!.canReadRestingHr
+        ? 'Allow Fitbit Air heart-rate and resting heart-rate records in Data Sources.'
+        : !hasRecentRestingHr
+        ? 'A resting-heart-rate record from the last 36 hours is needed to set your zones.'
+        : 'Zones need consecutive heart-rate samples no more than two minutes apart.';
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppType.rowTitle),
+          const SizedBox(height: 5),
+          Text(body, style: AppType.note),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 8,
+            children: [
+              if (age == null)
+                TextButton.icon(
+                  onPressed: onSettings,
+                  icon: const Icon(Icons.tune_rounded),
+                  label: const Text('Add age'),
+                ),
+              if (heart == null ||
+                  !heart!.canReadHeartRate ||
+                  !heart!.canReadRestingHr)
+                TextButton.icon(
+                  onPressed: onData,
+                  icon: const Icon(Icons.sensors_rounded),
+                  label: const Text('Data sources'),
+                ),
+              if (age != null && heart != null)
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

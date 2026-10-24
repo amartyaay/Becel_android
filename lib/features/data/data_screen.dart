@@ -389,7 +389,7 @@ class _HealthSummaryCard extends StatelessWidget {
         Icons.favorite_rounded,
       ),
       (
-        'Main sleep session',
+        'Recent sleep session',
         summary.sleepSessionMinutes == null
             ? '—'
             : _formatDuration(summary.sleepSessionMinutes!),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
@@ -44,14 +45,13 @@ class _SleepScreenState extends State<SleepScreen> {
   @override
   Widget build(BuildContext context) {
     final sleep = _sleep;
-    final lastNight = sleep?.lastNight;
-    final score = lastNight == null
+    final currentSession = sleep?.selectedRecentSession;
+    final selectedSession =
+        currentSession ??
+        (sleep?.sessions.isNotEmpty == true ? sleep!.sessions.first : null);
+    final durationProgress = currentSession == null
         ? null
-        : sleepScoreEstimate(
-            minutes: lastNight.minutes,
-            deepMinutes: lastNight.deepMinutes,
-            remMinutes: lastNight.remMinutes,
-          );
+        : sleepDurationProgressPercent(minutes: currentSession.minutes);
     final recent = sleep?.sessions.take(7).toList() ?? const <SleepNight>[];
     final chronological = recent.reversed.toList();
 
@@ -80,32 +80,64 @@ class _SleepScreenState extends State<SleepScreen> {
                         ),
                       )
                     : StatusPill(
-                        label: lastNight == null
+                        label: selectedSession == null
                             ? 'NO SESSION'
-                            : formatDurationMinutes(lastNight.minutes),
-                        color: lastNight == null
+                            : durationProgress == null
+                            ? 'OLDER SESSION'
+                            : formatDurationMinutes(selectedSession.minutes),
+                        color: selectedSession == null
                             ? AppColors.yellow
+                            : durationProgress == null
+                            ? AppColors.textSecondary
                             : AppColors.blue,
                         icon: Icons.nightlight_round,
                       ),
               ),
               const SizedBox(height: 16),
               if (sleep?.error != null)
-                InfoNote(text: sleep!.error!)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoNote(
+                      text: 'Could not read Health Connect: ${sleep!.error}',
+                      textColor: AppColors.red,
+                    ),
+                    TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                )
               else if (sleep != null && !sleep.canReadSleep)
                 const InfoNote(
-                  text: 'Sleep access is not allowed. Enable it in Data '
+                  text:
+                      'Sleep access is not allowed. Enable it in Data '
                       'sources to see sessions and stages.',
                   icon: Icons.lock_outline_rounded,
                   color: AppColors.yellow,
                 )
-              else if (lastNight == null)
-                const SurfaceCard(
-                  child: Text(
-                    'No Fitbit Air-matched sleep sessions in the last '
-                    '14 days. Sessions appear here after Google Health '
-                    'syncs them.',
-                    style: AppType.note,
+              else if (selectedSession == null)
+                SurfaceCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sleep has not synced yet',
+                        style: AppType.rowTitle,
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'When Fitbit Air sleep records arrive through Health Connect, Becel will show duration and stages here.',
+                        style: AppType.note,
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton.icon(
+                        onPressed: () => context.go('/data'),
+                        icon: const Icon(Icons.sensors_rounded),
+                        label: const Text('Review data sources'),
+                      ),
+                    ],
                   ),
                 )
               else ...[
@@ -117,46 +149,75 @@ class _SleepScreenState extends State<SleepScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            lastNight.minutes < 60
-                                ? '${lastNight.minutes}m'
-                                : formatDurationMinutes(lastNight.minutes),
+                            selectedSession.minutes < 60
+                                ? '${selectedSession.minutes}m'
+                                : formatDurationMinutes(
+                                    selectedSession.minutes,
+                                  ),
                             style: AppType.numXl,
                           ),
                           const Spacer(),
-                          if (score != null)
+                          if (durationProgress != null)
                             StatusPill(
-                              label: '$score ESTIMATE',
+                              label: '$durationProgress% OF 7H REFERENCE',
                               color: AppColors.blue,
                             ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Main session \u00b7 ${formatClock(lastNight.start)} '
-                        '\u2013 ${formatClock(lastNight.end)}',
+                        'Selected session · ${formatClock(selectedSession.start)} '
+                        '– ${formatClock(selectedSession.end)}',
                         style: AppType.caption,
                       ),
+                      if (durationProgress == null) ...[
+                        const SizedBox(height: 5),
+                        const Text(
+                          'No qualifying session ended in the last 24 hours. Showing the latest record; it is not used for today’s Recovery.',
+                          style: AppType.caption,
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Duration progress · $durationProgress% of the 7-hour adult reference',
+                          style: AppType.caption.copyWith(
+                            color: AppColors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: durationProgress / 100,
+                            minHeight: 6,
+                            backgroundColor: AppColors.surfaceHigher,
+                            valueColor: const AlwaysStoppedAnimation(
+                              AppColors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       StageBar(
                         segments: [
                           ChartSegment(
                             label: 'Awake',
-                            minutes: lastNight.awakeMinutes,
+                            minutes: selectedSession.awakeMinutes,
                             color: AppColors.yellow,
                           ),
                           ChartSegment(
                             label: 'Light',
-                            minutes: lastNight.lightMinutes,
+                            minutes: selectedSession.lightMinutes,
                             color: AppColors.blue,
                           ),
                           ChartSegment(
                             label: 'Deep',
-                            minutes: lastNight.deepMinutes,
+                            minutes: selectedSession.deepMinutes,
                             color: AppColors.violet,
                           ),
                           ChartSegment(
                             label: 'REM',
-                            minutes: lastNight.remMinutes,
+                            minutes: selectedSession.remMinutes,
                             color: AppColors.teal,
                           ),
                         ],
@@ -166,7 +227,14 @@ class _SleepScreenState extends State<SleepScreen> {
                 ),
                 const SizedBox(height: 14),
                 const InfoNote(
-                  text: sleepScoreFormula,
+                  text:
+                      'Recovery uses the longest synced session of at least 3 hours ending in the past 24 hours. A long nap can be selected; check the session times above.',
+                  icon: Icons.schedule_rounded,
+                  color: AppColors.blue,
+                ),
+                const SizedBox(height: 10),
+                const InfoNote(
+                  text: sleepDurationMethod,
                   icon: Icons.info_outline_rounded,
                   color: AppColors.blue,
                 ),
@@ -192,10 +260,7 @@ class _SleepScreenState extends State<SleepScreen> {
                   ),
                   const SizedBox(height: 18),
                 ],
-                SectionHeader(
-                  title: 'Sessions',
-                  caption: 'LAST 14 DAYS',
-                ),
+                SectionHeader(title: 'Sessions', caption: 'LAST 14 DAYS'),
                 const SizedBox(height: 10),
                 for (final night in recent)
                   Padding(
