@@ -49,7 +49,7 @@ void main() {
         historicalRestingHrOutsideSleep: true,
       );
 
-      expect(result.restingHrCurrentSampleCount, 2);
+      expect(result.restingHrCurrentSampleCount, 1);
       expect(result.restingHrBaselineNights, 10);
       expect(result.estimate, isNotNull);
     });
@@ -58,6 +58,25 @@ void main() {
       final result = _estimate(currentHrvSamples: 1);
 
       expect(result.estimate, isNotNull);
+      expect(result.limitedSamples, isTrue);
+    });
+
+    test('accepts one daily resting-HR reading as complete current coverage', () {
+      final result = _estimate(
+        historicalNights: 14,
+        currentRestingHrSamples: 1,
+      );
+
+      expect(result.restingHrCurrentSampleCount, 1);
+      expect(result.estimate, isNotNull);
+      expect(result.limitedSamples, isFalse);
+    });
+
+    test('requires a current daily resting-HR reading', () {
+      final result = _estimate(currentRestingHrSamples: 0);
+
+      expect(result.restingHrCurrentSampleCount, 0);
+      expect(result.estimate, isNull);
       expect(result.limitedSamples, isTrue);
     });
 
@@ -96,6 +115,7 @@ RecoveryReadiness _estimate({
   double currentHrv = 50,
   double currentRestingHr = 60,
   int currentHrvSamples = 2,
+  int currentRestingHrSamples = 1,
   bool currentHrvOutsideSleep = false,
   bool currentRestingHrOutsideSleep = false,
   bool historicalRestingHrOutsideSleep = false,
@@ -143,7 +163,7 @@ RecoveryReadiness _estimate({
       ),
     );
   }
-  for (var index = 0; index < 2; index++) {
+  for (var index = 0; index < currentRestingHrSamples; index++) {
     restingHrSamples.add(
       TimedValue(
         at: currentRestingHrOutsideSleep

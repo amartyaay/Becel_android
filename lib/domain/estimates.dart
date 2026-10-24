@@ -19,8 +19,8 @@ const recoveryMethod =
     'stages. Daily resting-HR readings are aligned by local date with the '
     'selected sleep session. Both signals are compared with their own matched '
     'values from the previous 14 local dates; each needs 10 baseline dates. '
-    'A yellow label means '
-    'fewer than 2 current readings or an incomplete 14-date baseline for '
+    'A yellow label means fewer than 2 current HRV readings, no current daily '
+    'RHR reading, or an incomplete 14-date baseline for '
     'at least one signal. The 0-100 mapping '
     'is a product heuristic, not clinically validated.';
 
@@ -176,7 +176,7 @@ RecoveryReadiness recoveryReadiness({
   final restingHrBaselineNights = restingHr.baselineNights;
   final limitedSamples =
       hrvCurrentSampleCount < 2 ||
-      restingHrCurrentSampleCount < 2 ||
+      restingHrCurrentSampleCount < 1 ||
       hrvBaselineNights < recoveryBaselineWindowDays ||
       restingHrBaselineNights < recoveryBaselineWindowDays;
   final hrvCurrent = hrv.current;

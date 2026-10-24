@@ -40,6 +40,7 @@ internal data class ActivityEstimate(
 internal object ActivityEstimator {
     private const val WINDOW_DAYS = 7L
     private const val MAX_SAMPLE_GAP_SECONDS = 120L
+    private val MAX_SAMPLE_GAP = Duration.ofSeconds(MAX_SAMPLE_GAP_SECONDS)
     private const val RESTING_HR_MAX_AGE_HOURS = 36L
 
     fun estimate(
@@ -75,8 +76,9 @@ internal object ActivityEstimator {
                 at >= cutoff.minusSeconds(MAX_SAMPLE_GAP_SECONDS) &&
                     at <= now && bpm in 30L..240L
             }
-            .distinct()
-            .sortedBy { it.first }
+            .groupBy({ it.first }, { it.second.toDouble() })
+            .toSortedMap()
+            .map { (at, readings) -> at to median(readings) }
             .toList()
         if (ordered.size < 2) return null
 
@@ -86,8 +88,8 @@ internal object ActivityEstimator {
         for (index in 0 until ordered.lastIndex) {
             val first = ordered[index]
             val second = ordered[index + 1]
-            val gap = Duration.between(first.first, second.first).seconds
-            if (gap <= 0 || gap > MAX_SAMPLE_GAP_SECONDS) continue
+            val gap = Duration.between(first.first, second.first)
+            if (gap.isZero || gap.isNegative || gap > MAX_SAMPLE_GAP) continue
 
             var cursor = maxOf(first.first, cutoff)
             val intervalEnd = minOf(second.first, now)
@@ -110,9 +112,9 @@ internal object ActivityEstimator {
                     .atStartOfDay(zone)
                     .toInstant()
                 val segmentEnd = minOf(intervalEnd, nextLocalDay)
-                val segmentSeconds = Duration.between(cursor, segmentEnd).seconds
-                if (segmentSeconds <= 0) break
-                zones[zoneIndex] += segmentSeconds / 60.0
+                val segmentDuration = Duration.between(cursor, segmentEnd)
+                if (segmentDuration.isZero || segmentDuration.isNegative) break
+                zones[zoneIndex] += segmentDuration.toMillis() / 60_000.0
                 usableDays.add(localDate)
                 cursor = segmentEnd
             }
@@ -142,5 +144,15 @@ internal object ActivityEstimator {
                 ">${bpmAt(0.90)}",
             ),
         )
+    }
+
+    private fun median(values: List<Double>): Double {
+        val ordered = values.sorted()
+        val middle = ordered.size / 2
+        return if (ordered.size % 2 == 0) {
+            (ordered[middle - 1] + ordered[middle]) / 2.0
+        } else {
+            ordered[middle]
+        }
     }
 }

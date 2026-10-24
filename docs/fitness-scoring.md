@@ -36,7 +36,7 @@ Recovery index = round(0.40 * Sleep + 0.35 * HRV + 0.25 * RHR)
 
 The `1.4826` factor expresses median absolute deviation (MAD) on a standard-deviation-like scale for normally distributed noise. The 0.10 log-unit HRV floor and 2 bpm resting-HR floor keep repeated, rounded wearable values from creating a zero denominator. HRV is compared in log space because it is a positive, right-skewed measure. A score can span 0-100; the component values and their weights are displayed so the total can be checked.
 
-When either current signal has fewer than two valid readings, or either baseline has fewer than all 14 possible dates, Becel marks the result **Limited data**. The estimate remains available with one current reading and with 10-13 baseline dates, but the badge and component detail make the thinner coverage visible. Historical baseline still requires at least 10 valid dates per signal. The date association for daily RHR is an explicit product rule and has not been checked against real Fitbit Air Health Connect records. These thresholds, weights, noise floors, and score mapping are Becel product choices; they have not been validated against clinical or athletic outcomes. HRV is most useful for longitudinal, individual interpretation ([applied sport review](https://pubmed.ncbi.nlm.nih.gov/42647345/)).
+When current sleep-stage HRV has fewer than two valid readings, the current daily RHR is missing, or either baseline has fewer than all 14 possible dates, Becel marks the result **Limited data**. One daily RHR record is sufficient current coverage because Health Connect defines RHR as a daily instantaneous value. The estimate remains available with one current HRV reading and with 10-13 baseline dates, but the badge and component detail make the thinner coverage visible. Historical baseline still requires at least 10 valid dates per signal. The date association for daily RHR is an explicit product rule and has not been checked against real Fitbit Air Health Connect records. These thresholds, weights, noise floors, and score mapping are Becel product choices; they have not been validated against clinical or athletic outcomes. HRV is most useful for longitudinal, individual interpretation ([applied sport review](https://pubmed.ncbi.nlm.nih.gov/42647345/)).
 
 WHOOP and Bevel are design references for presenting recovery alongside sleep and physiological signals and for using personal baselines. Becel does not reproduce their proprietary formulas ([WHOOP Basics](https://support.whoop.com/s/article/WHOOP-Basics), [Bevel Recovery](https://help.bevel.health/en/articles/11258177), [Bevel baseline requirements](https://help.bevel.health/en/articles/11257601)).
 
@@ -49,7 +49,7 @@ moderate_equivalent_minutes = moderate_minutes + 2 * vigorous_minutes
 progress = min(moderate_equivalent_minutes / 150, 1) * 100
 ```
 
-For adjacent Fitbit Air heart-rate samples no more than 120 seconds apart, Becel classifies the interval using midpoint heart rate and heart-rate reserve (HRR):
+For adjacent Fitbit Air heart-rate samples no more than 120 seconds apart, Becel classifies the interval using midpoint heart rate and heart-rate reserve (HRR). Multiple valid values with the same timestamp are coalesced to their median BPM before intervals are built:
 
 ```text
 estimated_max_HR = 208 - 0.7 * age

@@ -47,22 +47,36 @@ class ActivityEstimatorTest {
 
         val tooWideStart = now.minusSeconds(121)
         assertNull(estimate(heartRates = listOf(tooWideStart to 120L, now to 120L)))
+
+        val fractionalTooWideStart = now.minusMillis(120_900)
+        assertNull(
+            estimate(heartRates = listOf(fractionalTooWideStart to 120L, now to 120L)),
+        )
     }
 
     @Test
-    fun repeatedTimestampsDoNotCreateOrDoubleCountIntervals() {
+    fun conflictingRepeatedTimestampsAreCoalescedIndependentOfInputOrder() {
         val start = now.minusSeconds(60)
-        val estimate = estimate(
+        val firstOrder = estimate(
             heartRates = listOf(
                 start to 120L,
+                start to 180L,
+                now to 120L,
+            ),
+        )
+        val reversedOrder = estimate(
+            heartRates = listOf(
+                start to 180L,
                 start to 120L,
                 now to 120L,
             ),
         )
 
-        assertNotNull(estimate)
-        assertEquals(1.0, estimate!!.moderateMinutes, 0.0001)
-        assertEquals(1, estimate.usableDays)
+        assertNotNull(firstOrder)
+        assertNotNull(reversedOrder)
+        assertEquals(firstOrder!!.zoneMinutes, reversedOrder!!.zoneMinutes)
+        assertEquals(1.0, firstOrder.vigorousMinutes, 0.0001)
+        assertEquals(1, firstOrder.usableDays)
     }
 
     @Test
