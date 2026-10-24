@@ -1,5 +1,11 @@
 package com.becel.becel
 
+import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
@@ -33,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -79,6 +86,26 @@ class MainActivity : FlutterFragmentActivity() {
                 "readActivityDetail" -> launchHealth(result) { readActivityDetail() }
                 "readBodyDetail" -> launchHealth(result) { readBodyDetail() }
                 "openProviderStore" -> openProviderStore(result)
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            LOCAL_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "read" -> result.success(readLocalLog())
+                "write" -> result.success(
+                    writeLocalLog(call.argument<String>("json") ?: "{}"),
+                )
+                "clear" -> result.success(clearLocalData())
+                "shareText" -> shareText(
+                    call.argument<String>("text") ?: "",
+                    result,
+                )
+                "exportCsv" -> result.success(
+                    exportCsv(call.argument<String>("csv") ?: ""),
+                )
                 else -> result.notImplemented()
             }
         }
@@ -474,6 +501,81 @@ class MainActivity : FlutterFragmentActivity() {
         result.success(saved)
     }
 
+    private fun readLocalLog(): String? =
+        getSharedPreferences(LOCAL_LOG_PREFS, MODE_PRIVATE)
+            .getString(LOCAL_LOG_KEY, null)
+
+    private fun writeLocalLog(json: String): Boolean =
+        getSharedPreferences(LOCAL_LOG_PREFS, MODE_PRIVATE)
+            .edit()
+            .putString(LOCAL_LOG_KEY, json)
+            .commit()
+
+    private fun clearLocalData(): Boolean {
+        val logCleared = getSharedPreferences(LOCAL_LOG_PREFS, MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+        val profileCleared = getSharedPreferences(FITNESS_PROFILE_PREFS, MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+        return logCleared && profileCleared
+    }
+
+    private fun shareText(text: String, result: MethodChannel.Result) {
+        if (text.isBlank()) {
+            result.success(false)
+            return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            startActivity(Intent.createChooser(intent, "Share Becel summary"))
+            result.success(true)
+        } catch (error: Exception) {
+            result.success(false)
+        }
+    }
+
+    private fun exportCsv(csv: String): String? {
+        if (csv.isBlank()) return null
+        val fileName = "becel-week-${LocalDate.now()}.csv"
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                    put(
+                        MediaStore.MediaColumns.RELATIVE_PATH,
+                        "${Environment.DIRECTORY_DOWNLOADS}/Becel",
+                    )
+                }
+                val uri = contentResolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    values,
+                ) ?: return null
+                contentResolver.openOutputStream(uri)?.use {
+                    it.write(csv.toByteArray(Charsets.UTF_8))
+                }
+                uri.toString()
+            } else {
+                val directory = File(
+                    getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+                    "Becel",
+                )
+                if (!directory.exists()) directory.mkdirs()
+                val file = File(directory, fileName)
+                file.writeText(csv, Charsets.UTF_8)
+                Uri.fromFile(file).toString()
+            }
+        } catch (error: Exception) {
+            null
+        }
+    }
+
     private suspend fun readSleepDetail(): Map<String, Any?> {
         val availability = HealthConnectClient.getSdkStatus(this, PROVIDER_PACKAGE)
         if (availability != HealthConnectClient.SDK_AVAILABLE) {
@@ -854,6 +956,9 @@ class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         private const val CHANNEL_NAME = "com.becel/health_connect"
+        private const val LOCAL_CHANNEL = "com.becel/local"
+        private const val LOCAL_LOG_PREFS = "becel_local_log"
+        private const val LOCAL_LOG_KEY = "log_v1"
         private const val FITNESS_PROFILE_PREFS = "becel_fitness_profile"
         private const val FITNESS_AGE_KEY = "age"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"

@@ -1,10 +1,9 @@
 import 'package:go_router/go_router.dart';
 
+import '../features/activity/activity_screen.dart';
 import '../features/biology/biology_screen.dart';
 import '../features/data/data_screen.dart';
 import '../features/energy/energy_screen.dart';
-import '../features/fitness/fitness_screen.dart';
-import '../features/health/health_hub_screen.dart';
 import '../features/health/heart_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/recovery/recovery_screen.dart';
@@ -32,16 +31,16 @@ GoRouter buildRouter() => GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/health',
-              builder: (context, state) => const HealthHubScreen(),
+              path: '/activity',
+              builder: (context, state) => const ActivityScreen(),
             ),
           ],
         ),
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/fitness',
-              builder: (context, state) => const FitnessScreen(),
+              path: '/sleep',
+              builder: (context, state) => const SleepScreen(),
             ),
           ],
         ),
@@ -56,41 +55,28 @@ GoRouter buildRouter() => GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/data',
-              builder: (context, state) => const DataScreen(),
+              path: '/settings',
+              builder: (context, state) => const SettingsScreen(),
             ),
           ],
         ),
       ],
     ),
     GoRoute(
-      path: '/health/heart',
-      builder: (context, state) => const HeartScreen(),
-    ),
-    GoRoute(
-      path: '/health/sleep',
-      builder: (context, state) => const SleepScreen(),
-    ),
-    GoRoute(
-      path: '/health/recovery',
+      path: '/recovery',
       builder: (context, state) => const RecoveryScreen(),
     ),
+    GoRoute(path: '/heart', builder: (context, state) => const HeartScreen()),
+    GoRoute(path: '/zones', builder: (context, state) => const StrainScreen()),
+    GoRoute(path: '/strain', redirect: (context, state) => '/zones'),
     GoRoute(
-      path: '/health/zones',
-      builder: (context, state) => const StrainScreen(),
-    ),
-    GoRoute(path: '/health/strain', redirect: (context, state) => '/health/zones'),
-    GoRoute(
-      path: '/health/energy',
+      path: '/energy',
       builder: (context, state) => const EnergyScreen(),
     ),
     GoRoute(
-      path: '/health/biology',
+      path: '/biology',
       builder: (context, state) => const BiologyScreen(),
     ),
-    GoRoute(
-      path: '/settings',
-      builder: (context, state) => const SettingsScreen(),
-    ),
+    GoRoute(path: '/data', builder: (context, state) => const DataScreen()),
   ],
 );

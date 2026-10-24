@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
+import '../../data/health_store.dart';
 import '../../widgets/kit.dart';
 
 class DataScreen extends StatefulWidget {
@@ -26,18 +27,15 @@ class _DataScreenState extends State<DataScreen> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final inspection = await _health.inspect();
-    HealthSummary? summary;
-    if (inspection.isAvailable && inspection.hasAnyPermission) {
-      summary = await _health.readSummary();
-    }
+    await HealthStore.instance.refresh(force: true);
+    final snapshot = HealthStore.instance.snapshot;
+    final inspection = snapshot?.inspection ?? await _health.inspect();
     if (!mounted) return;
     setState(() {
       _inspection = inspection;
-      _summary = summary;
+      _summary = snapshot?.summary;
       _loading = false;
     });
-    _health.notifyDataChanged();
   }
 
   Future<void> _connect() async {
@@ -98,6 +96,7 @@ class _DataScreenState extends State<DataScreen> {
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
             children: [
               ScreenHeader(
+                onBack: () => Navigator.of(context).maybePop(),
                 eyebrow: 'YOUR INFORMATION',
                 title: 'Data sources',
                 trailing: _loading
@@ -575,7 +574,7 @@ class _HealthSummaryCard extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(
                             item.$3!,
-                            maxLines: 1,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: AppType.caption,
                           ),
@@ -588,7 +587,7 @@ class _HealthSummaryCard extends StatelessWidget {
                     child: Text(
                       item.$2,
                       textAlign: TextAlign.right,
-                      maxLines: 1,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: AppType.numS,
                     ),

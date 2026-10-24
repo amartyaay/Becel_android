@@ -150,18 +150,18 @@ class ScreenHeader extends StatelessWidget {
             children: [
               InkWell(
                 onTap: onBack,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
-                  width: 34,
-                  height: 34,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: AppColors.surfaceHigh,
                     border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
                     Icons.arrow_back_rounded,
-                    size: 18,
+                    size: 20,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -218,9 +218,8 @@ class SectionHeader extends StatelessWidget {
           TextButton(
             onPressed: onAction,
             style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(48, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(48, 48),
             ),
             child: Text(action!),
           ),
@@ -634,3 +633,247 @@ class MetricTile extends StatelessWidget {
     );
   }
 }
+
+/// A compact provenance line: source, measurement time, and freshness.
+class SourceLine extends StatelessWidget {
+  const SourceLine({
+    super.key,
+    required this.text,
+    this.icon = Icons.verified_outlined,
+    this.color = AppColors.textTertiary,
+  });
+
+  final String text;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 13, color: color),
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text,
+            style: AppType.caption.copyWith(color: color, fontSize: 11.5),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Horizontal personal-range gauge.
+///
+/// A marker shows today's value while a shaded band shows the person's usual
+/// range. The number is deliberately secondary so a single morning is not
+/// read as a percentage of capacity.
+class RangeGauge extends StatelessWidget {
+  const RangeGauge({
+    super.key,
+    required this.value,
+    required this.low,
+    required this.high,
+    this.min = 0,
+    this.max = 100,
+    this.color = AppColors.teal,
+    this.semanticsLabel,
+    this.minLabel,
+    this.maxLabel,
+    this.bandLabel,
+  });
+
+  final int? value;
+  final int? low;
+  final int? high;
+  final int min;
+  final int max;
+  final Color color;
+  final String? semanticsLabel;
+  final String? minLabel;
+  final String? maxLabel;
+  final String? bandLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final range = (max - min).toDouble();
+    double fraction(num? input) {
+      if (input == null || range <= 0) return 0;
+      return ((input - min) / range).clamp(0.0, 1.0).toDouble();
+    }
+
+    final lowFraction = fraction(low);
+    final highFraction = fraction(high);
+    final valueFraction = fraction(value);
+
+    return Semantics(
+      label:
+          semanticsLabel ??
+          '${value == null ? 'No value' : '$value out of $max'}. '
+              'Usual range ${low ?? 'unknown'} to ${high ?? 'unknown'}.',
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            return Column(
+              children: [
+                SizedBox(
+                  height: 26,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 9,
+                        child: Container(
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceHigher,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      if (low != null && high != null)
+                        Positioned(
+                          left: lowFraction * width,
+                          width: ((highFraction - lowFraction) * width).clamp(
+                            2.0,
+                            width,
+                          ),
+                          top: 9,
+                          child: Container(
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.34),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ),
+                      if (value != null)
+                        Positioned(
+                          left: (valueFraction * width - 5).clamp(
+                            0.0,
+                            (width - 10).clamp(0.0, width),
+                          ),
+                          top: 4,
+                          child: Container(
+                            width: 10,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: AppColors.bg,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Text(
+                      minLabel ?? '$min',
+                      style: AppType.caption.copyWith(fontSize: 10),
+                    ),
+                    const Spacer(),
+                    if (low != null && high != null)
+                      Text(
+                        bandLabel ?? 'usual $low–$high',
+                        style: AppType.caption.copyWith(fontSize: 10),
+                      ),
+                    const Spacer(),
+                    Text(
+                      maxLabel ?? '$max',
+                      style: AppType.caption.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared loading, empty, and error card so every screen renders the same
+/// state vocabulary instead of inventing its own.
+class StateCard extends StatelessWidget {
+  const StateCard({
+    super.key,
+    required this.title,
+    required this.body,
+    this.icon = Icons.hourglass_empty_rounded,
+    this.color = AppColors.teal,
+    this.actionLabel,
+    this.onAction,
+    this.loading = false,
+  });
+
+  final String title;
+  final String body;
+  final IconData icon;
+  final Color color;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      color: AppColors.surface,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconChip(icon: icon, color: color, size: 40, iconSize: 19),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppType.rowTitle),
+                const SizedBox(height: 4),
+                Text(body, style: AppType.caption),
+                if (loading) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      backgroundColor: AppColors.surfaceHigher,
+                      valueColor: AlwaysStoppedAnimation(color),
+                    ),
+                  ),
+                ],
+                if (actionLabel != null && onAction != null) ...[
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: onAction,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      minimumSize: const Size(48, 44),
+                    ),
+                    child: Text(actionLabel!),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

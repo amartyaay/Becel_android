@@ -289,9 +289,10 @@ RecoveryReadiness recoveryReadiness({
   );
   final hrvScore = (50 + hrvZ * 25).round().clamp(0, 100);
   final restingHrScore = (50 - restingHrZ * 25).round().clamp(0, 100);
-  final score = (sleepProgress * 0.40 + hrvScore * 0.35 + restingHrScore * 0.25)
-      .round()
-      .clamp(0, 100);
+  // Sleep anchors the overnight window and is displayed separately. It is
+  // deliberately not weighted here, so the index reflects autonomic signals
+  // instead of counting a short night twice.
+  final score = (hrvScore * 0.60 + restingHrScore * 0.40).round().clamp(0, 100);
 
   final estimate = RecoveryEstimate(
     score: score,
@@ -520,6 +521,16 @@ class ActivityEstimate {
       (displayedEquivalentMinutes * 100 ~/ activityAerobicReferenceMinutes)
           .clamp(0, 100)
           .toInt();
+
+  /// Upper-bound estimate if days without usable heart-rate coverage matched
+  /// the covered days. This is a sensitivity check, not a measurement.
+  int get potentialEquivalentMinutes {
+    final observed = displayedEquivalentMinutes;
+    if (observed <= 0) return 0;
+    final covered = usableDays.clamp(1, 7);
+    if (covered >= 7) return observed;
+    return (equivalentMinutes * 7 / covered).ceil();
+  }
 
   int get minutesToAerobicReference =>
       displayedEquivalentMinutes < activityAerobicReferenceMinutes

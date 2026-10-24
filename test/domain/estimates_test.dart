@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('recoveryReadiness', () {
-    test('neutral personal signals produce a transparent 70-point index', () {
+    test('neutral personal signals produce a transparent 50-point index', () {
       final result = _estimate();
       final estimate = result.estimate!;
 
-      expect(estimate.score, 70);
+      expect(estimate.score, 50);
       expect(estimate.sleepComponent, 100);
       expect(estimate.hrvComponent, 50);
       expect(estimate.restingHrComponent, 50);
@@ -89,6 +89,16 @@ void main() {
       expect(result.estimate, isNotNull);
       expect(result.limitedSamples, isFalse);
     });
+
+    test('sleep duration anchors the window but does not change the score', () {
+      final short = _estimate(sleepMinutes: 300);
+      final long = _estimate(sleepMinutes: 540);
+
+      expect(short.estimate?.score, 50);
+      expect(long.estimate?.score, 50);
+      expect(short.estimate?.sleepComponent, lessThan(100));
+      expect(long.estimate?.sleepComponent, 100);
+    });
   });
 
   test('selected session is the longest qualifying session ending in 24h', () {
@@ -152,7 +162,7 @@ void main() {
       expect(history[7].readiness, isNull);
       expect(history.last.date, DateTime(2026, 10, 24));
       expect(history.last.sleepMinutes, 420);
-      expect(history.last.readiness?.estimate?.score, 70);
+      expect(history.last.readiness?.estimate?.score, 50);
       expect(history.last.readiness?.hrvBaselineNights, 13);
     },
   );
@@ -160,9 +170,13 @@ void main() {
   test('activity total, progress, and remaining minutes share one rule', () {
     final below = _activityEstimate(149.5);
     expect(below.displayedEquivalentMinutes, 149);
+    expect(below.potentialEquivalentMinutes, 175);
     expect(below.progressPercent, 99);
     expect(below.minutesToAerobicReference, 1);
     expect(below.minutesAboveAerobicReference, 0);
+
+    final fullCoverage = _activityEstimate(149.5, usableDays: 7);
+    expect(fullCoverage.potentialEquivalentMinutes, 149);
 
     final justOver = _activityEstimate(150.5);
     expect(justOver.displayedEquivalentMinutes, 150);
@@ -176,18 +190,20 @@ void main() {
   });
 }
 
-ActivityEstimate _activityEstimate(double equivalentMinutes) =>
-    ActivityEstimate(
-      age: 40,
-      estimatedMaxHrBpm: 180,
-      restingHrBpm: 60,
-      restingHrAt: DateTime(2026, 10, 24),
-      moderateMinutes: equivalentMinutes,
-      vigorousMinutes: 0,
-      usableDays: 7,
-      zoneMinutes: List.filled(5, 0),
-      zoneRanges: List.filled(5, 'n/a'),
-    );
+ActivityEstimate _activityEstimate(
+  double equivalentMinutes, {
+  int usableDays = 6,
+}) => ActivityEstimate(
+  age: 40,
+  estimatedMaxHrBpm: 180,
+  restingHrBpm: 60,
+  restingHrAt: DateTime(2026, 10, 24),
+  moderateMinutes: equivalentMinutes,
+  vigorousMinutes: 0,
+  usableDays: usableDays,
+  zoneMinutes: List.filled(5, 0),
+  zoneRanges: List.filled(5, 'n/a'),
+);
 
 RecoveryReadiness _estimate({
   int historicalNights = 10,
@@ -195,6 +211,7 @@ RecoveryReadiness _estimate({
   double currentRestingHr = 60,
   int currentHrvSamples = 2,
   int currentRestingHrSamples = 1,
+  int sleepMinutes = 420,
   bool currentHrvOutsideSleep = false,
   bool currentRestingHrOutsideSleep = false,
   bool historicalRestingHrOutsideSleep = false,
@@ -256,7 +273,7 @@ RecoveryReadiness _estimate({
   return recoveryReadiness(
     hrvSamples: hrvSamples,
     restingHrSamples: restingHrSamples,
-    sleepMinutes: 420,
+    sleepMinutes: sleepMinutes,
     sleepStart: currentStart,
     sleepEnd: currentEnd,
     asleepIntervals: [currentInterval],

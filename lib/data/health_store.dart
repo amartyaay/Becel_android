@@ -1,0 +1,230 @@
+import 'package:flutter/foundation.dart';
+
+import '../domain/coaching.dart';
+import '../domain/estimates.dart';
+import 'health_connect_service.dart';
+
+/// One consistent read of every Health Connect surface Becel uses.
+///
+/// All tabs read from the same snapshot, so Today, Activity, Sleep, History,
+/// and Settings cannot disagree about the same night, session, or estimate.
+class HealthSnapshot {
+  const HealthSnapshot({
+    required this.inspection,
+    required this.summary,
+    required this.heart,
+    required this.sleep,
+    required this.activity,
+    required this.body,
+    required this.trends,
+    required this.age,
+    required this.recoveryStatus,
+    required this.recoveryHistory,
+    required this.recoveryContext,
+    required this.activityEstimate,
+    required this.loadedAt,
+  });
+
+  final HealthConnectInspection inspection;
+  final HealthSummary? summary;
+  final HeartDetail? heart;
+  final SleepDetail? sleep;
+  final ActivityDetail? activity;
+  final BodyDetail? body;
+  final Trends7d? trends;
+  final int? age;
+  final RecoveryReadiness? recoveryStatus;
+  final List<RecoveryHistoryPoint> recoveryHistory;
+  final RecoveryContext recoveryContext;
+  final ActivityEstimate? activityEstimate;
+  final DateTime loadedAt;
+
+  bool get isAvailable => inspection.isAvailable;
+  bool get hasAccess => inspection.hasAnyPermission;
+  bool get allPermissionsGranted => inspection.allPermissionsGranted;
+  bool get airMatched => summary?.fitbitAirMetadataMatched == true;
+  SleepNight? get selectedNight => sleep?.selectedRecentSession;
+  RecoveryEstimate? get recovery => recoveryStatus?.estimate;
+
+  String? get error =>
+      heart?.error ??
+      sleep?.error ??
+      activity?.error ??
+      body?.error ??
+      summary?.error ??
+      trends?.error ??
+      inspection.error;
+
+  bool get hasAnyRecord =>
+      summary?.stepCount != null ||
+      summary?.heartRateBpm != null ||
+      summary?.sleepSessionMinutes != null ||
+      recovery != null ||
+      (activity?.workouts.isNotEmpty ?? false) ||
+      (trends?.steps.any((value) => value != null) ?? false) ||
+      (trends?.hrAvg.any((value) => value != null) ?? false) ||
+      (trends?.sleepMinutes.any((value) => value != null) ?? false);
+
+  SleepTrend get sleepTrend =>
+      buildSleepTrend(sleep?.sessions ?? const <SleepNight>[], now: loadedAt);
+
+  List<StrengthCandidate> get strengthCandidates => [
+    for (final workout in activity?.workouts ?? const <WorkoutEntry>[])
+      StrengthCandidate(at: workout.start, type: workout.type),
+  ];
+
+  WeeklyReview weeklyReview({
+    required Iterable<DateTime> loggedStrengthDays,
+    Set<String> checkInTags = const <String>{},
+  }) => buildWeeklyReview(
+    sleepSessions: sleep?.sessions ?? const <SleepNight>[],
+    workouts: strengthCandidates,
+    loggedStrengthDays: loggedStrengthDays,
+    activity: activityEstimate,
+    recoveryHistory: recoveryHistory,
+    steps: trends?.steps ?? const <int?>[],
+    checkInTags: checkInTags,
+    now: loadedAt,
+  );
+}
+
+/// Shared, coalesced Health Connect loader.
+///
+/// A permission change or explicit invalidation bumps
+/// [HealthConnectService.dataRevision]; every screen then re-renders from one
+/// new snapshot instead of each starting its own batch of platform reads.
+class HealthStore extends ChangeNotifier {
+  HealthStore._() {
+    HealthConnectService.instance.dataRevision.addListener(_onRevision);
+  }
+
+  static final instance = HealthStore._();
+  static final _service = HealthConnectService.instance;
+
+  HealthSnapshot? _snapshot;
+  bool _loading = true;
+  String? _error;
+  Future<void>? _inFlight;
+  int _generation = 0;
+
+  HealthSnapshot? get snapshot => _snapshot;
+  bool get loading => _loading;
+  String? get error => _error ?? _snapshot?.error;
+  bool get hasSnapshot => _snapshot != null;
+
+  void _onRevision() {
+    _snapshot = null;
+    _error = null;
+    refresh(force: true);
+  }
+
+  Future<void> ensureLoaded() {
+    if (_snapshot != null) return Future<void>.value();
+    return refresh();
+  }
+
+  Future<void> refresh({bool force = false}) {
+    final active = _inFlight;
+    if (active != null) return active;
+    _loading = true;
+    notifyListeners();
+    final request = _load(force: force);
+    _inFlight = request;
+    return request;
+  }
+
+  Future<void> _load({required bool force}) async {
+    final generation = _generation;
+    try {
+      final inspection = await _service.inspect();
+      HealthSummary? summary;
+      HeartDetail? heart;
+      SleepDetail? sleep;
+      ActivityDetail? activity;
+      BodyDetail? body;
+      Trends7d? trends;
+      if (inspection.isAvailable && inspection.hasAnyPermission) {
+        final values = await Future.wait<Object?>([
+          _service.readSummary(),
+          _service.readHeartDetail(refresh: force),
+          _service.readSleepDetail(),
+          _service.readActivityDetail(),
+          _service.readBodyDetail(),
+          _service.readTrends7d(),
+        ]);
+        summary = values[0] as HealthSummary?;
+        heart = values[1] as HeartDetail?;
+        sleep = values[2] as SleepDetail?;
+        activity = values[3] as ActivityDetail?;
+        body = values[4] as BodyDetail?;
+        trends = values[5] as Trends7d?;
+      }
+      if (generation != _generation) return;
+      final age = await _service.readFitnessAge();
+      if (generation != _generation) return;
+      final night = sleep?.selectedRecentSession;
+      final recoveryStatus = heart == null
+          ? null
+          : recoveryReadiness(
+              hrvSamples: heart.hrvSamples,
+              restingHrSamples: heart.restingHrSamples,
+              sleepMinutes: night?.minutes,
+              sleepStart: night?.start,
+              sleepEnd: night?.end,
+              asleepIntervals:
+                  night?.asleepIntervals ?? const <AsleepInterval>[],
+              sleepWindows: sleep?.sleepWindows ?? const <SleepWindow>[],
+            );
+      final history = heart == null || sleep == null
+          ? const <RecoveryHistoryPoint>[]
+          : recoveryHistory(
+              hrvSamples: heart.hrvSamples,
+              restingHrSamples: heart.restingHrSamples,
+              sleepWindows: sleep.sleepWindows,
+              now: DateTime.now(),
+            );
+      final now = DateTime.now();
+      final snapshot = HealthSnapshot(
+        inspection: inspection,
+        summary: summary,
+        heart: heart,
+        sleep: sleep,
+        activity: activity,
+        body: body,
+        trends: trends,
+        age: age,
+        recoveryStatus: recoveryStatus,
+        recoveryHistory: history,
+        recoveryContext: buildRecoveryContext(
+          currentScore: recoveryStatus?.estimate?.score,
+          history: history,
+          now: now,
+        ),
+        activityEstimate: heart == null
+            ? null
+            : _service.activityEstimateFor(heart, age),
+        loadedAt: now,
+      );
+      if (generation != _generation) return;
+      _snapshot = snapshot;
+      _error = snapshot.error;
+    } catch (error) {
+      if (generation == _generation) _error = error.toString();
+    } finally {
+      if (generation == _generation) {
+        _loading = false;
+        _inFlight = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  @visibleForTesting
+  void resetForTest() {
+    _generation++;
+    _snapshot = null;
+    _error = null;
+    _loading = true;
+    _inFlight = null;
+  }
+}

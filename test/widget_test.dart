@@ -1,273 +1,345 @@
+import 'package:becel/data/health_connect_service.dart';
+import 'package:becel/data/health_store.dart';
+import 'package:becel/data/local_store.dart';
 import 'package:becel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:becel/data/health_connect_service.dart';
 
 const _healthConnectChannel = MethodChannel('com.becel/health_connect');
+const _localChannel = MethodChannel('com.becel/local');
+
+String? _localJson;
 
 Future<void> _boot(WidgetTester tester) async {
+  HealthConnectService.instance.notifyDataChanged();
+  HealthStore.instance.resetForTest();
+  LocalStore.instance.resetForTest();
   await tester.pumpWidget(const BecelApp());
+  await tester.pump();
   await tester.pump(const Duration(seconds: 1));
   await tester.pump(const Duration(seconds: 1));
 }
 
 Future<void> _openTab(WidgetTester tester, String label) async {
-  await tester.tap(find.text(label));
+  final destination = find.descendant(
+    of: find.byType(NavigationBar),
+    matching: find.text(label),
+  );
+  await tester.tap(destination);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pump(const Duration(milliseconds: 500));
 }
 
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    260,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pump();
+}
+
+void _setPhone(WidgetTester tester) {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
+List<String> _semanticsLabels(WidgetTester tester) => tester
+    .widgetList<Semantics>(find.byType(Semantics))
+    .map((semantics) => semantics.properties.label)
+    .whereType<String>()
+    .toList();
+
 void main() {
-  testWidgets('Today shows the three fitness measures', (tester) async {
-    await _boot(tester);
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    expect(find.text('Your fitness snapshot'), findsOneWidget);
-    expect(find.text('RECOVERY'), findsOneWidget);
-    expect(find.text('SLEEP DURATION'), findsOneWidget);
-    expect(find.text('WEEKLY ACTIVITY'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView).first, const Offset(0, -420));
-    await tester.pump();
-
-    expect(find.text('Today’s movement'), findsOneWidget);
+  setUp(() {
+    _localJson = null;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_localChannel, (call) async {
+      switch (call.method) {
+        case 'read':
+          return _localJson;
+        case 'write':
+          _localJson = (call.arguments as Map)['json'] as String;
+          return true;
+        case 'clear':
+          _localJson = null;
+          return true;
+        case 'shareText':
+        case 'exportCsv':
+          return true;
+        default:
+          return null;
+      }
+    });
   });
 
-  testWidgets('Activity tab shows the estimate and synced workouts', (
+  tearDown(() {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_localChannel, null);
+    messenger.setMockMethodCallHandler(_healthConnectChannel, null);
+    HealthConnectService.instance.notifyDataChanged();
+    HealthStore.instance.resetForTest();
+    LocalStore.instance.resetForTest();
+  });
+
+  testWidgets('Today shows the morning brief, range, and one focus', (
     tester,
   ) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
+    await _boot(tester);
+
+    expect(find.textContaining('brief'), findsOneWidget);
+    expect(find.text('How do you feel this morning?'), findsOneWidget);
+    expect(find.text('RECOVERY · PERSONAL RANGE'), findsOneWidget);
+    expect(find.text('Within your usual range'), findsOneWidget);
+    expect(find.text('SLEEP · LAST NIGHT'), findsOneWidget);
+    expect(find.text('AEROBIC · HR ESTIMATE'), findsOneWidget);
+    expect(find.text('≈149 min'), findsOneWidget);
+    expect(
+      _semanticsLabels(tester),
+      contains(
+        'Recovery within your usual range. Today 50 out of 100. '
+        'Usual range 44 to 56.',
+      ),
+    );
+
+    await _scrollTo(tester, find.text('ONE THING THIS WEEK'));
+    expect(find.text('Two strength sessions this week'), findsOneWidget);
+    expect(find.text('Log strength'), findsOneWidget);
+
+    await _scrollTo(tester, find.text('Today’s movement'));
+    expect(find.text('Latest signals'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Today explains when permission is missing', (tester) async {
+    _setPhone(tester);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
+      if (call.method == 'inspect') {
+        return {
+          'availability': 'available',
+          'granted': const <String>[],
+          'requested': const <String>[],
+        };
+      }
+      if (call.method == 'readFitnessAge') return null;
+      return <String, Object?>{};
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_healthConnectChannel, null),
+    );
+    await _boot(tester);
+
+    expect(find.text('Connect your health data'), findsOneWidget);
+    expect(find.text('Open data sources'), findsOneWidget);
+  });
+
+  testWidgets('Today distinguishes no records from no permission', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _installEmptyDataFixture();
+    await _boot(tester);
+
+    expect(find.text('No Fitbit Air records yet'), findsOneWidget);
+    expect(find.text('Connect your health data'), findsNothing);
+  });
+
+  testWidgets('Activity shows the observed floor and potential ceiling', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
     await _boot(tester);
     await _openTab(tester, 'Activity');
 
-    expect(find.text('WEEKLY ACTIVITY'), findsOneWidget);
-    expect(find.text('Steps'), findsOneWidget);
-    expect(find.text('Recent workouts'), findsOneWidget);
-    expect(find.text('HR zones'), findsOneWidget);
+    expect(find.text('AEROBIC · HR ESTIMATE'), findsOneWidget);
+    expect(find.text('≈149'), findsOneWidget);
+    expect(find.text('observed floor'), findsOneWidget);
+    expect(
+      find.text('Up to 175 min if every day had heart-rate coverage.'),
+      findsOneWidget,
+    );
+    expect(
+      _semanticsLabels(tester),
+      contains(
+        'Observed aerobic estimate 149 minutes. Potential up to 175 minutes. '
+        'Adult guideline floor 150 minutes.',
+      ),
+    );
+
+    await _scrollTo(tester, find.text('Synced workouts'));
+    expect(find.text('Log strength day'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'fitness summaries share threshold numbers and disclose HR estimates',
-    (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final activityMinutes = _installReadyDataFixture();
-      await _boot(tester);
+  testWidgets('Activity logs a manual strength day', (tester) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
+    await _boot(tester);
+    await _openTab(tester, 'Activity');
 
-      for (final (raw, displayed) in [
-        (149.5, 149),
-        (150.5, 150),
-        (151.5, 151),
-      ]) {
-        if (raw != 149.5) {
-          await _changeActivityMinutes(tester, activityMinutes, raw);
-        }
-        expect(find.text('$displayed min'), findsOneWidget);
-      }
-      expect(find.textContaining('strength not counted'), findsOneWidget);
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'Today fits without layout overflow at 360 px.',
-      );
+    await _scrollTo(tester, find.text('Log strength day'));
+    await tester.tap(find.text('Log strength day'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-      await _openTab(tester, 'Vitals');
-      await _changeActivityMinutes(tester, activityMinutes, 149.5);
-      for (final (raw, displayed) in [
-        (149.5, 149),
-        (150.5, 150),
-        (151.5, 151),
-      ]) {
-        if (raw != 149.5) {
-          await _changeActivityMinutes(tester, activityMinutes, raw);
-        }
-        expect(find.text('$displayed'), findsOneWidget);
-      }
-      expect(find.textContaining('strength not counted'), findsOneWidget);
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'Vitals fits without layout overflow at 360 px.',
-      );
+    expect(find.text('Log a strength day'), findsOneWidget);
+    await tester.ensureVisible(find.text('I did strength today'));
+    await tester.tap(find.text('I did strength today'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-      await _openTab(tester, 'Activity');
-      await _changeActivityMinutes(tester, activityMinutes, 149.5);
-      for (final (raw, displayed, progress) in [
-        (149.5, 149, 99),
-        (150.5, 150, 100),
-        (151.5, 151, 100),
-      ]) {
-        if (raw != 149.5) {
-          await _changeActivityMinutes(tester, activityMinutes, raw);
-        }
-        expect(find.text('$displayed'), findsOneWidget);
-        expect(
-          _semanticsLabels(tester),
-          contains('$progress percent of the 150 minute aerobic reference'),
-        );
-      }
-      expect(find.textContaining('no usable HR interval'), findsOneWidget);
-      expect(find.text('of 150 min aerobic reference'), findsOneWidget);
-      expect(find.textContaining('strength days'), findsOneWidget);
-      expect(
-        find.text(
-          'One recent resting-HR reading is applied to all seven dates.',
-        ),
-        findsOneWidget,
-      );
-      final labels = _semanticsLabels(tester);
-      expect(
-        labels.any((label) => label.contains('no usable heart-rate coverage')),
-        isTrue,
-      );
-      expect(
-        labels.any(
-          (label) => label.contains('0 estimated moderate-equivalent minutes'),
-        ),
-        isTrue,
-      );
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'Activity fits without layout overflow at 360 px.',
-      );
-    },
-  );
+    expect(find.text('Strength day logged.'), findsOneWidget);
+    expect(find.text('1 / 2 DAYS'), findsOneWidget);
+    expect(_localJson, contains('strengthDays'));
+  });
 
-  testWidgets('Recovery history date chips show selected session details', (
+  testWidgets('Check-in adds context and changes the focus', (tester) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
+    await _boot(tester);
+
+    await tester.tap(find.text('How do you feel this morning?'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Morning check-in'), findsOneWidget);
+    await tester.ensureVisible(find.text('Unwell'));
+    await tester.tap(find.text('Unwell'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save check-in'));
+    await tester.tap(find.text('Save check-in'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Checked in: Unwell'), findsOneWidget);
+    await _scrollTo(tester, find.text('ONE THING THIS WEEK'));
+    expect(find.text('Make today lighter'), findsOneWidget);
+    expect(_localJson, contains('unwell'));
+  });
+
+  testWidgets('Sleep shows duration, adult range, stages, and pattern', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    _setPhone(tester);
+    _installReadyDataFixture();
+    await _boot(tester);
+    await _openTab(tester, 'Sleep');
+
+    expect(find.text('REST & REPAIR'), findsOneWidget);
+    expect(find.text('7–9H RANGE'), findsOneWidget);
+    expect(find.text('STAGES'), findsOneWidget);
+    expect(
+      find.text('Stages are shown for context. Becel does not grade them.'),
+      findsOneWidget,
+    );
+    expect(
+      _semanticsLabels(tester),
+      contains('Awake 0m. Light 7h. Deep 0m. REM 0m.'),
+    );
+
+    await _scrollTo(tester, find.text('7-NIGHT PATTERN'));
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('History builds a weekly review with share and CSV', (
+    tester,
+  ) async {
+    _setPhone(tester);
     _installReadyDataFixture();
     await _boot(tester);
     await _openTab(tester, 'History');
 
+    expect(find.text('WEEKLY REVIEW'), findsOneWidget);
+    expect(find.textContaining('WEEK OF'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('CSV'), findsOneWidget);
+
+    await _scrollTo(tester, find.text('AEROBIC + STRENGTH'));
+    expect(find.text('AEROBIC + STRENGTH'), findsOneWidget);
+
     final chips = find.byType(ChoiceChip);
     expect(chips, findsNWidgets(14));
-    await tester.ensureVisible(chips.last);
-    await tester.tap(chips.last);
+    await _scrollTo(tester, chips.first);
+    await tester.ensureVisible(chips.first);
+    await tester.pump();
+    await tester.tap(chips.first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
     final selectedBar = find.byKey(const ValueKey('recovery-selected-bar'));
     await tester.ensureVisible(selectedBar);
     expect(selectedBar, findsOneWidget);
-    final chartBounds = tester.getRect(selectedBar);
-    expect(chartBounds.left, greaterThanOrEqualTo(0));
-    expect(chartBounds.right, lessThanOrEqualTo(360));
-    expect(
-      tester.takeException(),
-      isNull,
-      reason:
-          'Recovery history fits and keeps the selected bar visible at 360 px.',
-    );
-
-    final session = find.textContaining('SESSION |');
-    await tester.ensureVisible(session);
-    await tester.pump();
-    expect(session, findsOneWidget);
-    expect(find.textContaining('LIMITED DATA'), findsOneWidget);
-    expect(find.textContaining('HRV samples |'), findsOneWidget);
-    expect(find.textContaining(DateTime.now().year.toString()), findsOneWidget);
+    await _scrollTo(tester, find.text('LIMITED'));
+    expect(find.text('LIMITED'), findsOneWidget);
+    expect(find.textContaining('asleep'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Sleep lists every session in its 14-day window', (tester) async {
-    _installReadyDataFixture();
-    await _boot(tester);
-    final sleepTile = find.text('SLEEP DURATION');
-    await tester.ensureVisible(sleepTile);
-    await tester.tap(sleepTile);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(
-      find.text('REST & REPAIR'),
-      findsOneWidget,
-      reason: tester
-          .widgetList<Text>(find.byType(Text))
-          .map((text) => text.data)
-          .whereType<String>()
-          .join(' | '),
-    );
-    expect(find.text('Recent sessions'), findsOneWidget);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
-    await tester.pump();
-
-    expect(find.text('LAST 14 DAYS'), findsOneWidget);
-    final currentEnd = DateTime.now().subtract(const Duration(hours: 2));
-    final oldestSessionEnd = DateTime(
-      currentEnd.year,
-      currentEnd.month,
-      currentEnd.day - 10,
-      7,
-    );
-    final oldestSession = find.byKey(
-      ValueKey('sleep-session-${oldestSessionEnd.toIso8601String()}'),
-    );
-    await tester.dragUntilVisible(
-      oldestSession,
-      find.byType(ListView).first,
-      const Offset(0, -320),
-    );
-    expect(oldestSession, findsOneWidget);
-  });
-
-  testWidgets('Vitals tab lists measured signals and fitness snapshot', (
+  testWidgets('History reports a failed read instead of an empty week', (
     tester,
   ) async {
-    await _boot(tester);
-    await _openTab(tester, 'Vitals');
-
-    expect(find.text('Vitals'), findsWidgets);
-    expect(find.text('Fitness snapshot'), findsOneWidget);
-    expect(find.text('Recovery'), findsOneWidget);
-    expect(find.text('Heart rate'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView).first, const Offset(0, -420));
-    await tester.pump();
-
-    expect(find.text('Energy'), findsOneWidget);
-    expect(find.text('Body metrics'), findsOneWidget);
-  });
-
-  testWidgets('Today heart tile opens the heart detail screen', (tester) async {
-    await _boot(tester);
-
-    await tester.drag(find.byType(ListView).first, const Offset(0, -520));
-    await tester.pump();
-    await tester.tap(find.text('Heart rate'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.text('Heart rate'), findsOneWidget);
-  });
-
-  testWidgets('History tab shows the air-matched empty state', (tester) async {
+    _setPhone(tester);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
+      if (call.method == 'inspect') return _inspectionFixture();
+      if (call.method == 'readHeartDetail' ||
+          call.method == 'readSleepDetail') {
+        throw PlatformException(code: 'test_read_error', message: 'Fixture');
+      }
+      if (call.method == 'readFitnessAge') return null;
+      return <String, Object?>{};
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_healthConnectChannel, null),
+    );
     await _boot(tester);
     await _openTab(tester, 'History');
 
-    expect(find.text('No Fitbit Air-matched history yet'), findsOneWidget);
-    expect(find.text('Review data access'), findsOneWidget);
+    expect(find.text('History could not load'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('No week to review yet'), findsNothing);
   });
 
-  testWidgets('Sources tab shows connection sections', (tester) async {
+  testWidgets('Settings exposes check-ins, data, and about sections', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
     await _boot(tester);
-    await _openTab(tester, 'Sources');
+    await _openTab(tester, 'Settings');
 
-    expect(find.text('Data sources'), findsOneWidget);
+    expect(find.text('PREFERENCES'), findsOneWidget);
+    expect(find.text('Morning check-ins'), findsOneWidget);
+    expect(find.text('FITNESS PROFILE'), findsOneWidget);
+    expect(find.text('YOUR DATA'), findsOneWidget);
 
-    await tester.drag(find.byType(ListView).first, const Offset(0, -420));
-    await tester.pump();
+    await _scrollTo(tester, find.text('Delete local data'));
+    expect(find.text('Delete local data'), findsOneWidget);
 
-    expect(find.text('CONNECTIONS'), findsOneWidget);
+    await _scrollTo(tester, find.text('ABOUT'));
+    expect(find.text('ABOUT'), findsOneWidget);
   });
 
-  testWidgets('Settings opens from Today', (tester) async {
+  testWidgets('Today settings button switches to the Settings tab', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _installReadyDataFixture();
     await _boot(tester);
 
     await tester.tap(find.byIcon(Icons.tune_rounded).first);
@@ -275,85 +347,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('YOUR DATA'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
-    await tester.pump();
-
-    expect(find.text('ABOUT'), findsOneWidget);
+    expect(find.text('PREFERENCES'), findsOneWidget);
+    expect(find.text('Morning check-ins'), findsOneWidget);
   });
 
-  testWidgets('Recovery shows its Health Connect error and retry action', (
+  testWidgets('All tabs survive 360 px and large text without overflow', (
     tester,
   ) async {
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
-      if (call.method == 'readHeartDetail' ||
-          call.method == 'readSleepDetail') {
-        throw PlatformException(code: 'test_read_error', message: 'Fixture');
-      }
-      if (call.method == 'inspect') return _inspectionFixture();
-      if (call.method == 'readFitnessAge') return null;
-      return <String, Object?>{};
-    });
-    addTearDown(() {
-      messenger.setMockMethodCallHandler(_healthConnectChannel, null);
-      HealthConnectService.instance.notifyDataChanged();
-    });
-    HealthConnectService.instance.notifyDataChanged();
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    _installReadyDataFixture();
     await _boot(tester);
 
-    await tester.tap(find.text('Recovery unavailable'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(
-      find.textContaining('Could not read Health Connect'),
-      findsOneWidget,
-    );
-    expect(find.text('Retry'), findsOneWidget);
-  });
-
-  testWidgets('Recovery marks a one-sample signal as limited data', (
-    tester,
-  ) async {
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
-      if (call.method == 'inspect') return _inspectionFixture();
-      if (call.method == 'readHeartDetail') return _heartFixture();
-      if (call.method == 'readSleepDetail') return _sleepFixture();
-      if (call.method == 'readFitnessAge') return 40;
-      return <String, Object?>{};
-    });
-    addTearDown(() {
-      messenger.setMockMethodCallHandler(_healthConnectChannel, null);
-      HealthConnectService.instance.notifyDataChanged();
-    });
-    HealthConnectService.instance.notifyDataChanged();
-    await _boot(tester);
-
-    expect(
-      find.text('Recovery trend'),
-      findsOneWidget,
-      reason: tester
-          .widgetList<Text>(find.byType(Text))
-          .map((text) => text.data)
-          .whereType<String>()
-          .join(' | '),
-    );
-    await tester.tap(find.text('Recovery trend'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(find.text('LOW DATA'), findsOneWidget);
-    expect(find.textContaining('LIMITED DATA'), findsOneWidget);
-    expect(
-      find.textContaining('Experimental personal trend only'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('1 asleep-stage samples'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    for (final tab in ['Activity', 'Sleep', 'History', 'Settings']) {
+      await _openTab(tester, tab);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '$tab fits at 360 px with 1.3x text.',
+      );
+    }
   });
 }
 
@@ -387,7 +405,7 @@ Map<String, Object?> _heartFixture({Map<String, Object?>? activityEstimate}) {
   }
 
   addSession(currentStart, currentEnd);
-  for (var offset = 1; offset <= 10; offset++) {
+  for (var offset = 1; offset <= 24; offset++) {
     final end = DateTime(
       currentEnd.year,
       currentEnd.month,
@@ -397,8 +415,6 @@ Map<String, Object?> _heartFixture({Map<String, Object?>? activityEstimate}) {
     addSession(end.subtract(const Duration(hours: 8)), end);
   }
 
-  // One current HRV sample is enough to show an estimate, but keeps its
-  // confidence label limited. Daily RHR correctly needs only one value.
   return {
     'status': 'ready',
     'granted': [
@@ -418,7 +434,7 @@ Map<String, Object?> _sleepFixture() {
   final sessions = <Map<String, Object?>>[
     _sleepSession(currentEnd.subtract(const Duration(hours: 8)), currentEnd),
   ];
-  for (var offset = 1; offset <= 10; offset++) {
+  for (var offset = 1; offset <= 24; offset++) {
     final end = DateTime(
       currentEnd.year,
       currentEnd.month,
@@ -473,6 +489,8 @@ ValueNotifier<double> _installReadyDataFixture() {
           'granted': ['android.permission.health.READ_EXERCISE'],
           'workouts': const <Object?>[],
         };
+      case 'readBodyDetail':
+        return {'status': 'ready', 'granted': const <String>[]};
       case 'readFitnessAge':
         return 40;
       case 'readTrends7d':
@@ -490,29 +508,63 @@ ValueNotifier<double> _installReadyDataFixture() {
   });
   addTearDown(() {
     messenger.setMockMethodCallHandler(_healthConnectChannel, null);
-    HealthConnectService.instance.notifyDataChanged();
     activityMinutes.dispose();
   });
-  HealthConnectService.instance.notifyDataChanged();
   return activityMinutes;
 }
 
-List<String> _semanticsLabels(WidgetTester tester) => tester
-    .widgetList<Semantics>(find.byType(Semantics))
-    .map((semantics) => semantics.properties.label)
-    .whereType<String>()
-    .toList();
-
-Future<void> _changeActivityMinutes(
-  WidgetTester tester,
-  ValueNotifier<double> activityMinutes,
-  double value,
-) async {
-  activityMinutes.value = value;
-  HealthConnectService.instance.notifyDataChanged();
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 500));
-  await tester.pump(const Duration(milliseconds: 500));
+void _installEmptyDataFixture() {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
+    switch (call.method) {
+      case 'inspect':
+        return _inspectionFixture();
+      case 'readSummary':
+        return {
+          'status': 'ready',
+          'granted': _inspectionFixture()['granted'],
+          'fitbitAirMetadataMatched': true,
+        };
+      case 'readHeartDetail':
+        return {
+          'status': 'ready',
+          'granted': _inspectionFixture()['granted'],
+          'hrvSamples': const <Object?>[],
+          'restingHrSamples': const <Object?>[],
+        };
+      case 'readSleepDetail':
+        return {
+          'status': 'ready',
+          'granted': ['android.permission.health.READ_SLEEP'],
+          'sessions': const <Object?>[],
+        };
+      case 'readActivityDetail':
+        return {
+          'status': 'ready',
+          'granted': ['android.permission.health.READ_EXERCISE'],
+          'workouts': const <Object?>[],
+        };
+      case 'readBodyDetail':
+        return {'status': 'ready', 'granted': const <String>[]};
+      case 'readTrends7d':
+        return {
+          'status': 'ready',
+          'granted': const <String>[],
+          'dates': const <String>[],
+          'steps': const <Object?>[],
+          'hrAvg': const <Object?>[],
+          'sleepMinutes': const <Object?>[],
+        };
+      case 'readFitnessAge':
+        return null;
+      default:
+        return <String, Object?>{};
+    }
+  });
+  addTearDown(
+    () => messenger.setMockMethodCallHandler(_healthConnectChannel, null),
+  );
 }
 
 Map<String, Object?> _activityEstimateFixture(double equivalentMinutes) {

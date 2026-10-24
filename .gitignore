@@ -46,3 +46,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Tooling and generated deliverables
+/.opencode/
+/.review_shots/
+/brag-output/
+/skills/
+/opencode/

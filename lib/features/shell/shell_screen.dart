@@ -29,14 +29,14 @@ class ShellScreen extends StatelessWidget {
               label: 'Today',
             ),
             NavigationDestination(
-              icon: Icon(Icons.monitor_heart_outlined),
-              selectedIcon: Icon(Icons.monitor_heart_rounded),
-              label: 'Vitals',
-            ),
-            NavigationDestination(
               icon: Icon(Icons.bolt_outlined),
               selectedIcon: Icon(Icons.bolt_rounded),
               label: 'Activity',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bedtime_outlined),
+              selectedIcon: Icon(Icons.bedtime_rounded),
+              label: 'Sleep',
             ),
             NavigationDestination(
               icon: Icon(Icons.calendar_month_outlined),
@@ -44,9 +44,9 @@ class ShellScreen extends StatelessWidget {
               label: 'History',
             ),
             NavigationDestination(
-              icon: Icon(Icons.sensors_outlined),
-              selectedIcon: Icon(Icons.sensors_rounded),
-              label: 'Sources',
+              icon: Icon(Icons.tune_outlined),
+              selectedIcon: Icon(Icons.tune_rounded),
+              label: 'Settings',
             ),
           ],
         ),
@@ -55,4 +55,4 @@ class ShellScreen extends StatelessWidget {
   }
 }
 
-void openSettings(BuildContext context) => context.push('/settings');
+void openSettings(BuildContext context) => context.go('/settings');
