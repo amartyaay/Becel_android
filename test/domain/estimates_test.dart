@@ -61,16 +61,19 @@ void main() {
       expect(result.limitedSamples, isTrue);
     });
 
-    test('accepts one daily resting-HR reading as complete current coverage', () {
-      final result = _estimate(
-        historicalNights: 14,
-        currentRestingHrSamples: 1,
-      );
+    test(
+      'accepts one daily resting-HR reading as complete current coverage',
+      () {
+        final result = _estimate(
+          historicalNights: 14,
+          currentRestingHrSamples: 1,
+        );
 
-      expect(result.restingHrCurrentSampleCount, 1);
-      expect(result.estimate, isNotNull);
-      expect(result.limitedSamples, isFalse);
-    });
+        expect(result.restingHrCurrentSampleCount, 1);
+        expect(result.estimate, isNotNull);
+        expect(result.limitedSamples, isFalse);
+      },
+    );
 
     test('requires a current daily resting-HR reading', () {
       final result = _estimate(currentRestingHrSamples: 0);
@@ -108,6 +111,51 @@ void main() {
 
     expect(detail.selectedRecentSession, same(longerSession));
   });
+
+  test(
+    'recovery history keeps missing sessions as gaps and scores by date',
+    () {
+      final now = DateTime(2026, 10, 24, 18);
+      final windows = <SleepWindow>[];
+      final hrvSamples = <TimedValue>[];
+      final restingHrSamples = <TimedValue>[];
+      for (var offset = 0; offset <= 27; offset++) {
+        if (offset == 6) continue;
+        final end = DateTime(2026, 10, 24 - offset, 7);
+        final start = end.subtract(const Duration(hours: 8));
+        final interval = AsleepInterval(start: start, end: end);
+        windows.add(
+          SleepWindow(
+            start: start,
+            end: end,
+            sleepMinutes: 420,
+            asleepIntervals: [interval],
+          ),
+        );
+        hrvSamples.add(
+          TimedValue(at: start.add(const Duration(hours: 4)), value: 50),
+        );
+        restingHrSamples.add(
+          TimedValue(at: DateTime(end.year, end.month, end.day, 12), value: 60),
+        );
+      }
+
+      final history = recoveryHistory(
+        hrvSamples: hrvSamples,
+        restingHrSamples: restingHrSamples,
+        sleepWindows: windows,
+        now: now,
+      );
+
+      expect(history, hasLength(14));
+      expect(history[7].date, DateTime(2026, 10, 18));
+      expect(history[7].readiness, isNull);
+      expect(history.last.date, DateTime(2026, 10, 24));
+      expect(history.last.sleepMinutes, 420);
+      expect(history.last.readiness?.estimate?.score, 70);
+      expect(history.last.readiness?.hrvBaselineNights, 13);
+    },
+  );
 }
 
 RecoveryReadiness _estimate({

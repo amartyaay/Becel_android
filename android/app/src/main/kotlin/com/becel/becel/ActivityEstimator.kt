@@ -16,6 +16,9 @@ internal data class ActivityEstimate(
     val moderateMinutes: Double,
     val vigorousMinutes: Double,
     val usableDays: Int,
+    val dailyDates: List<String>,
+    val dailyEquivalentMinutes: List<Double?>,
+    val dailyCoverageMinutes: List<Double>,
     val zoneMinutes: List<Double>,
     val zoneRanges: List<String>,
 ) {
@@ -31,6 +34,9 @@ internal data class ActivityEstimate(
         "moderateMinutes" to moderateMinutes,
         "vigorousMinutes" to vigorousMinutes,
         "usableDays" to usableDays,
+        "dailyDates" to dailyDates,
+        "dailyEquivalentMinutes" to dailyEquivalentMinutes,
+        "dailyCoverageMinutes" to dailyCoverageMinutes,
         "zoneMinutes" to zoneMinutes,
         "zoneRanges" to zoneRanges,
     )
@@ -83,7 +89,11 @@ internal object ActivityEstimator {
         if (ordered.size < 2) return null
 
         val zones = DoubleArray(5)
-        val usableDays = mutableSetOf<LocalDate>()
+        val dayDates = (WINDOW_DAYS - 1 downTo 0).map { offset ->
+            today.minusDays(offset)
+        }
+        val dailyZones = dayDates.associateWith { DoubleArray(5) }
+        val dailyCoverage = dayDates.associateWith { 0.0 }.toMutableMap()
         var validIntervals = 0
         for (index in 0 until ordered.lastIndex) {
             val first = ordered[index]
@@ -114,8 +124,11 @@ internal object ActivityEstimator {
                 val segmentEnd = minOf(intervalEnd, nextLocalDay)
                 val segmentDuration = Duration.between(cursor, segmentEnd)
                 if (segmentDuration.isZero || segmentDuration.isNegative) break
-                zones[zoneIndex] += segmentDuration.toMillis() / 60_000.0
-                usableDays.add(localDate)
+                val segmentMinutes = segmentDuration.toMillis() / 60_000.0
+                zones[zoneIndex] += segmentMinutes
+                dailyZones[localDate]?.let { it[zoneIndex] += segmentMinutes }
+                dailyCoverage[localDate] =
+                    (dailyCoverage[localDate] ?: 0.0) + segmentMinutes
                 cursor = segmentEnd
             }
         }
@@ -134,7 +147,14 @@ internal object ActivityEstimator {
             progressPercent = (equivalent / 150.0 * 100).roundToInt().coerceIn(0, 100),
             moderateMinutes = moderate,
             vigorousMinutes = vigorous,
-            usableDays = usableDays.size,
+            usableDays = dailyCoverage.values.count { it > 0.0 },
+            dailyDates = dayDates.map(LocalDate::toString),
+            dailyEquivalentMinutes = dayDates.map { date ->
+                dailyZones[date]?.let { dayZones ->
+                    dayZones[2] + 2 * (dayZones[3] + dayZones[4])
+                }
+            },
+            dailyCoverageMinutes = dayDates.map { dailyCoverage[it] ?: 0.0 },
             zoneMinutes = zones.toList(),
             zoneRanges = listOf(
                 "<${bpmAt(0.30)}",

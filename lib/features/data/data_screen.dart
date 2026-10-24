@@ -128,6 +128,15 @@ class _DataScreenState extends State<DataScreen> {
                 error: summary?.error ?? inspection?.error,
                 onTap: _connect,
               ),
+              if (!airSeen) ...[
+                const SizedBox(height: 14),
+                _FitbitSyncGuide(
+                  accessGranted: inspection?.hasAnyPermission == true,
+                  allPermissionsGranted:
+                      inspection?.allPermissionsGranted == true,
+                  onRefresh: _refresh,
+                ),
+              ],
               if (summary?.fitbitAirMetadataMatched == true) ...[
                 const SizedBox(height: 14),
                 _HealthSummaryCard(summary: summary!),
@@ -141,7 +150,11 @@ class _DataScreenState extends State<DataScreen> {
                 title: 'Fitbit Air',
                 subtitle: airSeen
                     ? 'Showing Fitbit Air records from the Fitbit app and Google Health; other apps are hidden'
-                    : 'No Fitbit Air records yet; records from other apps are hidden',
+                    : inspection?.allPermissionsGranted == true
+                    ? 'All requested access is allowed; no Fitbit Air-matched records were found'
+                    : inspection?.hasAnyPermission == true
+                    ? 'Some access is allowed, but Fitbit Air-matched records were not found'
+                    : 'No Fitbit Air records detected yet; check Health Connect access and Fitbit sync',
                 status: airSeen ? 'Air records' : 'No match',
                 statusColor: airSeen
                     ? AppColors.green
@@ -184,6 +197,102 @@ class _DataScreenState extends State<DataScreen> {
       ),
     );
   }
+}
+
+class _FitbitSyncGuide extends StatelessWidget {
+  const _FitbitSyncGuide({
+    required this.accessGranted,
+    required this.allPermissionsGranted,
+    required this.onRefresh,
+  });
+
+  final bool accessGranted;
+  final bool allPermissionsGranted;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) => SurfaceCard(
+    padding: const EdgeInsets.all(17),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const IconChip(
+              icon: Icons.sync_rounded,
+              color: AppColors.yellow,
+              size: 38,
+              iconSize: 19,
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Text(
+                !accessGranted
+                    ? 'Finish setup to bring Fitbit data in'
+                    : allPermissionsGranted
+                    ? 'All access is allowed; Fitbit data has not arrived'
+                    : 'Some health permissions are still off',
+                style: AppType.rowTitle,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        Text(
+          !accessGranted
+              ? 'Becel shows only records matched to Fitbit Air. Allow the requested Health Connect read access above, then check the Fitbit sync.'
+              : allPermissionsGranted
+              ? 'Permission lets Becel read Health Connect. It does not confirm that Fitbit Air records have synced.'
+              : 'Becel shows only records matched to Fitbit Air. Allow the requested Health Connect read access above, then check the Fitbit sync.',
+          style: AppType.note,
+        ),
+        const SizedBox(height: 14),
+        _SyncStep(
+          number: '1',
+          text:
+              'Open Google Health with Fitbit Air nearby and pull down to sync. Check Connections > Fitbit Air for the last-synced time.',
+        ),
+        const SizedBox(height: 10),
+        const _SyncStep(
+          number: '2',
+          text:
+              'In Google Health, open Connections > Partner apps > Settings > Manage Health Connect. Check setup and allow Google Health to write the fitness, sleep and vital data you want to share.',
+        ),
+        const SizedBox(height: 10),
+        const _SyncStep(
+          number: '3',
+          text:
+              'Return here and refresh. Fitbit Air records will appear only after the source writes matching data.',
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Check again'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SyncStep extends StatelessWidget {
+  const _SyncStep({required this.number, required this.text});
+
+  final String number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      StatusPill(label: number, color: AppColors.teal),
+      const SizedBox(width: 9),
+      Expanded(child: Text(text, style: AppType.caption)),
+    ],
+  );
 }
 
 class _ConnectionHero extends StatelessWidget {

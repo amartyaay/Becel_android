@@ -123,6 +123,71 @@ class RecoveryReadiness {
   final RecoveryEstimate? estimate;
 }
 
+class RecoveryHistoryPoint {
+  const RecoveryHistoryPoint({
+    required this.date,
+    this.readiness,
+    this.sleepMinutes,
+  });
+
+  final DateTime date;
+  final RecoveryReadiness? readiness;
+  final int? sleepMinutes;
+}
+
+/// Recalculates the same experimental estimate for each selected sleep date.
+/// Missing sessions or insufficient baseline signals remain gaps in history.
+List<RecoveryHistoryPoint> recoveryHistory({
+  required List<TimedValue> hrvSamples,
+  required List<TimedValue> restingHrSamples,
+  required List<SleepWindow> sleepWindows,
+  required DateTime now,
+  int days = 14,
+}) {
+  if (days <= 0) return const [];
+  final today = _localDay(now);
+  final points = <RecoveryHistoryPoint>[];
+  for (var offset = days - 1; offset >= 0; offset--) {
+    final date = today.subtract(Duration(days: offset));
+    final sessions =
+        sleepWindows
+            .where(
+              (window) =>
+                  window.sleepMinutes >= 180 && _localDay(window.end) == date,
+            )
+            .toList()
+          ..sort((a, b) => b.sleepMinutes.compareTo(a.sleepMinutes));
+    if (sessions.isEmpty) {
+      points.add(RecoveryHistoryPoint(date: date));
+      continue;
+    }
+    final session = sessions.first;
+    final endOfDate = DateTime(
+      date.year,
+      date.month,
+      date.day + 1,
+    ).subtract(const Duration(microseconds: 1));
+    final readiness = recoveryReadiness(
+      hrvSamples: hrvSamples,
+      restingHrSamples: restingHrSamples,
+      sleepMinutes: session.sleepMinutes,
+      sleepStart: session.start,
+      sleepEnd: session.end,
+      asleepIntervals: session.asleepIntervals,
+      sleepWindows: sleepWindows,
+      now: offset == 0 && now.isBefore(endOfDate) ? now : endOfDate,
+    );
+    points.add(
+      RecoveryHistoryPoint(
+        date: date,
+        readiness: readiness,
+        sleepMinutes: session.sleepMinutes,
+      ),
+    );
+  }
+  return points;
+}
+
 /// Estimates recovery from sleep-stage HRV and sleep-date resting-HR readings.
 RecoveryReadiness recoveryReadiness({
   required List<TimedValue> hrvSamples,
@@ -427,6 +492,9 @@ class ActivityEstimate {
     required this.moderateMinutes,
     required this.vigorousMinutes,
     required this.usableDays,
+    this.dailyDates = const [],
+    this.dailyEquivalentMinutes = const [],
+    this.dailyCoverageMinutes = const [],
     required this.zoneMinutes,
     required this.zoneRanges,
   });
@@ -439,6 +507,9 @@ class ActivityEstimate {
   final double moderateMinutes;
   final double vigorousMinutes;
   final int usableDays;
+  final List<String> dailyDates;
+  final List<double?> dailyEquivalentMinutes;
+  final List<double> dailyCoverageMinutes;
   final List<double> zoneMinutes;
   final List<String> zoneRanges;
 

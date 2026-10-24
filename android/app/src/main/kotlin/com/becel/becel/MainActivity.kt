@@ -413,7 +413,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(RestingHeartRateRecord::class) in granted) {
             val records = readAirRecords<RestingHeartRateRecord>(
                 client,
-                now.minus(Duration.ofDays(17)),
+                now.minus(Duration.ofDays(30)),
                 now,
             )
             if (records.isNotEmpty()) {
@@ -431,7 +431,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class) in granted) {
             val records = readAirRecords<HeartRateVariabilityRmssdRecord>(
                 client,
-                now.minus(Duration.ofDays(17)),
+                now.minus(Duration.ofDays(30)),
                 now,
             )
             if (records.isNotEmpty()) {
@@ -490,7 +490,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(SleepSessionRecord::class) in granted) {
             val records = readAirRecords<SleepSessionRecord>(
                 client,
-                now.minus(Duration.ofDays(17)),
+                now.minus(Duration.ofDays(30)),
                 now,
             )
             records.sortedByDescending { it.endTime }.forEach { record ->

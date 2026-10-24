@@ -369,6 +369,11 @@ List<int?> _intListFrom(Object? value) {
   return value.map(_intFrom).toList();
 }
 
+List<double?> _doubleListFrom(Object? value) {
+  if (value is! List) return const [];
+  return value.map(_doubleFrom).toList();
+}
+
 class HeartSample {
   const HeartSample({required this.at, required this.bpm});
 
@@ -504,6 +509,12 @@ ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
   final estimatedMaxHrBpm = _intFrom(map['estimatedMaxHrBpm']);
   final restingHrBpm = _doubleFrom(map['restingHrBpm']);
   final restingHrAt = _intFrom(map['restingHrAt']);
+  final rawDailyDates = map['dailyDates'];
+  final dailyDates = rawDailyDates is List
+      ? rawDailyDates.whereType<String>().toList()
+      : const <String>[];
+  final dailyEquivalentMinutes = _doubleListFrom(map['dailyEquivalentMinutes']);
+  final dailyCoverageMinutes = _doubleListFrom(map['dailyCoverageMinutes']);
   if (moderate == null ||
       vigorous == null ||
       progress == null ||
@@ -523,6 +534,9 @@ ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
     moderateMinutes: moderate,
     vigorousMinutes: vigorous,
     usableDays: usableDays,
+    dailyDates: dailyDates,
+    dailyEquivalentMinutes: dailyEquivalentMinutes,
+    dailyCoverageMinutes: dailyCoverageMinutes.whereType<double>().toList(),
     zoneMinutes: zones.cast<double>(),
     zoneRanges: ranges,
   );

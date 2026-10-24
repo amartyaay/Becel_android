@@ -110,12 +110,21 @@ class _SleepScreenState extends State<SleepScreen> {
                   ],
                 )
               else if (sleep != null && !sleep.canReadSleep)
-                const InfoNote(
-                  text:
-                      'Sleep access is not allowed. Enable it in Data '
-                      'sources to see sessions and stages.',
-                  icon: Icons.lock_outline_rounded,
-                  color: AppColors.yellow,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const InfoNote(
+                      text:
+                          'Sleep access is off. Enable it in Data sources to see sessions and stages.',
+                      icon: Icons.lock_outline_rounded,
+                      color: AppColors.yellow,
+                    ),
+                    TextButton.icon(
+                      onPressed: () => context.go('/data'),
+                      icon: const Icon(Icons.sensors_rounded),
+                      label: const Text('Open data sources'),
+                    ),
+                  ],
                 )
               else if (selectedSession == null)
                 SurfaceCard(
@@ -241,7 +250,7 @@ class _SleepScreenState extends State<SleepScreen> {
                 const SizedBox(height: 18),
                 if (recent.length >= 2) ...[
                   SectionHeader(
-                    title: 'Recent nights',
+                    title: 'Recent sessions',
                     caption: 'SESSION LENGTH',
                   ),
                   const SizedBox(height: 12),

@@ -122,6 +122,12 @@ class ActivityEstimatorTest {
         assertNotNull(estimate)
         assertEquals(2.0, estimate!!.moderateMinutes, 0.0001)
         assertEquals(2, estimate.usableDays)
+        assertEquals("2026-04-10", estimate.dailyDates[5])
+        assertEquals("2026-04-11", estimate.dailyDates[6])
+        assertEquals(1.0, estimate.dailyEquivalentMinutes[5]!!, 0.0001)
+        assertEquals(1.0, estimate.dailyEquivalentMinutes[6]!!, 0.0001)
+        assertEquals(1.0, estimate.dailyCoverageMinutes[5], 0.0001)
+        assertEquals(1.0, estimate.dailyCoverageMinutes[6], 0.0001)
     }
 
     @Test
@@ -149,6 +155,9 @@ class ActivityEstimatorTest {
         assertNotNull(estimate)
         assertEquals(7, estimate!!.usableDays)
         assertEquals(7.0, estimate.moderateMinutes, 0.0001)
+        assertEquals(7, estimate.dailyDates.size)
+        assertEquals(List(7) { 1.0 }, estimate.dailyEquivalentMinutes)
+        assertEquals(List(7) { 1.0 }, estimate.dailyCoverageMinutes)
         assertEquals(LocalDate.of(2026, 3, 8), localNow.atZone(eastern).toLocalDate())
     }
 

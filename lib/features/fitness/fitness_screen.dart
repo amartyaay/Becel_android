@@ -255,7 +255,7 @@ class _ActivityCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '${estimate.equivalentMinutes.round()}',
+              '${estimate.equivalentMinutes.floor()}',
               style: AppType.numXl.copyWith(fontSize: 54),
             ),
             const Padding(
@@ -271,17 +271,29 @@ class _ActivityCard extends StatelessWidget {
         ),
         const SizedBox(height: 3),
         const Text(
-          'HR-estimated moderate-equivalent minutes',
+          'ESTIMATED MODERATE-EQUIVALENT MINUTES',
           style: AppType.caption,
         ),
+        const SizedBox(height: 5),
+        Text(
+          estimate.equivalentMinutes < 150
+              ? '${(150 - estimate.equivalentMinutes).ceil()} min to the 150-min weekly minimum'
+              : '150-min weekly minimum reached; '
+                    '${(estimate.equivalentMinutes - 150).round()} min above',
+          style: AppType.rowTitle.copyWith(color: AppColors.orange),
+        ),
         const SizedBox(height: 13),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(99),
-          child: LinearProgressIndicator(
-            value: estimate.progressPercent / 100,
-            minHeight: 7,
-            backgroundColor: AppColors.surfaceHigher,
-            valueColor: const AlwaysStoppedAnimation(AppColors.orange),
+        Semantics(
+          label:
+              '${estimate.progressPercent} percent of the 150 minute weekly minimum',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: estimate.progressPercent / 100,
+              minHeight: 7,
+              backgroundColor: AppColors.surfaceHigher,
+              valueColor: const AlwaysStoppedAnimation(AppColors.orange),
+            ),
           ),
         ),
         const SizedBox(height: 11),
@@ -290,6 +302,15 @@ class _ActivityCard extends StatelessWidget {
           style: AppType.caption,
         ),
         const SizedBox(height: 5),
+        if (estimate.dailyDates.length == 7 &&
+            estimate.dailyEquivalentMinutes.length == 7 &&
+            estimate.dailyCoverageMinutes.length == 7) ...[
+          const SizedBox(height: 12),
+          const Text('DAILY ESTIMATE / HR COVERAGE', style: AppType.eyebrow),
+          const SizedBox(height: 8),
+          _ActivityWeek(estimate: estimate),
+          const SizedBox(height: 8),
+        ],
         Text(
           'At least one usable HR interval on ${estimate.usableDays}/7 local days · gaps and missing wear time can undercount',
           style: AppType.caption.copyWith(fontSize: 11),
@@ -302,6 +323,91 @@ class _ActivityCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _ActivityWeek extends StatelessWidget {
+  const _ActivityWeek({required this.estimate});
+
+  final ActivityEstimate estimate;
+
+  @override
+  Widget build(BuildContext context) {
+    final daily = estimate.dailyEquivalentMinutes;
+    final maximum = daily.whereType<double>().fold<double>(
+      0,
+      (largest, value) => value > largest ? value : largest,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var index = 0; index < 7; index++)
+          Expanded(
+            child: Semantics(
+              label: daily[index] == null
+                  ? '${formatDayLabel(estimate.dailyDates[index])}, no usable heart-rate coverage'
+                  : '${formatDayLabel(estimate.dailyDates[index])}, '
+                        '${daily[index]!.round()} estimated moderate-equivalent minutes, '
+                        '${formatDurationMinutes(estimate.dailyCoverageMinutes[index].round())} heart-rate coverage',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Column(
+                  children: [
+                    Text(
+                      daily[index]?.round().toString() ?? '—',
+                      maxLines: 1,
+                      style: AppType.caption.copyWith(
+                        color: daily[index] == null
+                            ? AppColors.textTertiary
+                            : AppColors.textPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Container(
+                      height: daily[index] == null || maximum <= 0
+                          ? 4
+                          : 4 + 38 * daily[index]! / maximum,
+                      decoration: BoxDecoration(
+                        color: daily[index] == null
+                            ? AppColors.border
+                            : AppColors.orange.withValues(
+                                alpha: index == 6 ? 1 : 0.42,
+                              ),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      formatDayLabel(estimate.dailyDates[index]),
+                      style: AppType.caption.copyWith(
+                        fontSize: 9,
+                        color: index == 6
+                            ? AppColors.textSecondary
+                            : AppColors.textTertiary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      estimate.dailyCoverageMinutes[index] <= 0
+                          ? 'no HR'
+                          : estimate.dailyCoverageMinutes[index] < 60
+                          ? '${estimate.dailyCoverageMinutes[index].round()}m'
+                          : '${(estimate.dailyCoverageMinutes[index] / 60).toStringAsFixed(1)}h',
+                      maxLines: 1,
+                      style: AppType.caption.copyWith(
+                        fontSize: 8,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _SetupCard extends StatelessWidget {

@@ -642,6 +642,7 @@ class _TodayFocus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasSourceAccess = summary?.hasAccess == true;
+    final hasFitbitRecords = summary?.fitbitAirMetadataMatched == true;
     final needsAccess =
         heart != null && (!heart!.canReadHrv || !heart!.canReadRestingHr) ||
         summary?.canReadSleep == false;
@@ -649,6 +650,8 @@ class _TodayFocus extends StatelessWidget {
         ? 'Health data could not load'
         : !hasSourceAccess
         ? 'Connect your health data'
+        : summary != null && !hasFitbitRecords && recovery == null
+        ? 'Fitbit Air data has not arrived'
         : recovery == null
         ? needsAccess
               ? 'Finish your data setup'
@@ -660,6 +663,8 @@ class _TodayFocus extends StatelessWidget {
         ? 'Pull to refresh or tap to review your connected data source.'
         : !hasSourceAccess
         ? 'Connect Health Connect and allow Fitbit Air records to see your fitness estimates.'
+        : summary != null && !hasFitbitRecords && recovery == null
+        ? 'Becel can read Health Connect, but has not found Fitbit Air records yet. Check device sync and the sharing setup in Data sources.'
         : recovery == null
         ? needsAccess
               ? 'Allow sleep, HRV, and resting heart-rate access to calculate recovery.'
