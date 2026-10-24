@@ -2,11 +2,11 @@
 
 Becel shows three measures with separate inputs and time windows:
 
-1. **Recovery index**: a 0-100 product estimate using sleep-duration progress, RMSSD HRV, and resting heart rate against personal history.
+1. **Experimental recovery trend**: a 0-100 product heuristic using sleep-duration progress, RMSSD HRV, and resting heart rate against personal history.
 2. **Sleep duration**: recorded asleep time and progress toward a seven-hour adult reference. It is not a sleep-quality score.
 3. **Weekly activity**: heart-rate-estimated moderate-equivalent minutes over the current day and previous six local calendar dates, compared with 150 minutes.
 
-The measures are not combined into one health grade. Missing required inputs produce an unavailable state rather than zero. These are transparent wellness estimates, not clinical measures or validated predictions of recovery or performance.
+The measures are not combined into one health grade. Missing required inputs produce an unavailable state rather than zero. The Recovery number is explicitly an **experimental within-person trend**. It is not a validated measure of readiness, recovery, or performance and should not determine whether someone trains.
 
 ## Sleep duration
 
@@ -16,7 +16,7 @@ sleep_progress = min(minutes_asleep / 420, 1) * 100
 
 The seven-hour reference reflects the consensus recommendation that healthy adults aged 18-60 regularly sleep at least seven hours; it is not an individualized prescription ([AASM/Sleep Research Society consensus](https://jcsm.aasm.org/doi/10.5664/jcsm.4758)). More than seven hours is not penalized. Becel sums Health Connect light, deep, and REM stage intervals when available. Awake, out-of-bed, and unknown intervals are not counted as asleep. Stages are shown as source data and are not graded because consumer wrist devices can disagree with polysomnography, especially on stage classification ([sleep tracker meta-analysis](https://pubmed.ncbi.nlm.nih.gov/39484805/)).
 
-## Recovery index
+## Experimental recovery trend
 
 The selected session is the **longest synced session with at least 180 asleep minutes that ended in the previous 24 hours**. It may be a long nap; Becel does not infer whether a session is a nap or overnight sleep. Sessions shorter than three hours do not produce a Recovery estimate. HRV readings count only when their timestamps fall inside a recorded light, deep, or REM interval for that session. Resting HR is a daily instantaneous Health Connect value, so Becel aligns its valid reading by the local date when the selected sleep session ended; it does not claim that RHR was measured during sleep. Android documents the record as instantaneous ([Health Connect data types](https://developer.android.com/health-and-fitness/health-connect/data-types)); its write guidance recommends a morning daily value ([Health Connect write guidance](https://developer.android.com/health-and-fitness/health-connect/write-data)).
 
@@ -31,12 +31,14 @@ RHR z = clamp((current RHR - median(nightly RHR)) /
 HRV component = clamp(round(50 + 25 * HRV z), 0, 100)
 RHR component = clamp(round(50 - 25 * RHR z), 0, 100)
 Sleep component = min(minutes_asleep / 420, 1) * 100
-Recovery index = round(0.40 * Sleep + 0.35 * HRV + 0.25 * RHR)
+Experimental recovery trend = round(0.40 * Sleep + 0.35 * HRV + 0.25 * RHR)
 ```
 
-The `1.4826` factor expresses median absolute deviation (MAD) on a standard-deviation-like scale for normally distributed noise. The 0.10 log-unit HRV floor and 2 bpm resting-HR floor keep repeated, rounded wearable values from creating a zero denominator. HRV is compared in log space because it is a positive, right-skewed measure. A score can span 0-100; the component values and their weights are displayed so the total can be checked.
+The `1.4826` factor expresses median absolute deviation (MAD) on a standard-deviation-like scale for normally distributed noise. The 0.10 log-unit HRV floor and 2 bpm resting-HR floor keep repeated, rounded wearable values from creating a zero denominator. HRV is compared in log space because it is a positive, right-skewed measure. A score can span 0-100; the component values and their weights are displayed so the arithmetic can be checked.
 
-When current sleep-stage HRV has fewer than two valid readings, the current daily RHR is missing, or either baseline has fewer than all 14 possible dates, Becel marks the result **Limited data**. One daily RHR record is sufficient current coverage because Health Connect defines RHR as a daily instantaneous value. The estimate remains available with one current HRV reading and with 10-13 baseline dates, but the badge and component detail make the thinner coverage visible. Historical baseline still requires at least 10 valid dates per signal. The date association for daily RHR is an explicit product rule and has not been checked against real Fitbit Air Health Connect records. These thresholds, weights, noise floors, and score mapping are Becel product choices; they have not been validated against clinical or athletic outcomes. HRV is most useful for longitudinal, individual interpretation ([applied sport review](https://pubmed.ncbi.nlm.nih.gov/42647345/)).
+The app labels this an **experimental personal trend**, not readiness or performance. Its weights, seven-hour composite target, z-score mapping, and coverage thresholds are product hypotheses. Evidence supporting individual inputs or the adult sleep reference does not validate this composite. A systematic review of consumer wearable composite scores found that their combined scoring methods generally lack published validation; wearable interpretations are best used as exploratory within-person trends while outcome validation is absent ([Doherty et al., 2025](https://doi.org/10.1515/teb-2025-0001), [consumer smartwatch review](https://pmc.ncbi.nlm.nih.gov/articles/PMC13417214/)). Do not use this number as a training-clearance decision.
+
+When current sleep-stage HRV has fewer than two valid readings, the current daily RHR is missing, or either baseline has fewer than all 14 possible dates, Becel marks the result **Limited data**. One daily RHR record is sufficient current coverage because Health Connect defines RHR as a daily instantaneous value. The estimate remains available with one current HRV reading and with 10-13 baseline dates, but the badge and component detail make the thinner coverage visible. Historical baseline still requires at least 10 valid dates per signal. The local-date association for daily RHR is a product rule and has not been checked against real Fitbit Air Health Connect records. HRV is most useful for longitudinal, individual interpretation ([applied sport review](https://pubmed.ncbi.nlm.nih.gov/42647345/)).
 
 WHOOP and Bevel are design references for presenting recovery alongside sleep and physiological signals and for using personal baselines. Becel does not reproduce their proprietary formulas ([WHOOP Basics](https://support.whoop.com/s/article/WHOOP-Basics), [Bevel Recovery](https://help.bevel.health/en/articles/11258177), [Bevel baseline requirements](https://help.bevel.health/en/articles/11257601)).
 
@@ -74,3 +76,5 @@ Coverage means **at least one usable interval on that date**, not full-day wear 
 - [Android Health Connect write guidance](https://developer.android.com/health-and-fitness/health-connect/write-data) and [data type reference](https://developer.android.com/health-and-fitness/health-connect/data-types)
 - [WHOOP Basics](https://support.whoop.com/s/article/WHOOP-Basics)
 - [Bevel Recovery](https://help.bevel.health/en/articles/11258177) and [baseline requirements](https://help.bevel.health/en/articles/11257601)
+- [Doherty et al. (2025), evaluation of composite health scores in consumer wearables](https://doi.org/10.1515/teb-2025-0001)
+- [Consumer smartwatch validity, limitations, and real-world applications review](https://pmc.ncbi.nlm.nih.gov/articles/PMC13417214/)

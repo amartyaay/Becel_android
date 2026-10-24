@@ -181,8 +181,8 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 note: recovery == null
                     ? _recoveryNote(heart, summary, recoveryStatus)
                     : recoveryStatus?.limitedSamples == true
-                    ? 'Limited signal or personal-history coverage · see component counts'
-                    : 'Sleep stages + date-aligned HRV/RHR · personal baseline',
+                    ? 'Experimental trend · limited signal or personal-history coverage'
+                    : 'Experimental personal trend · sleep stages + date-aligned HRV/RHR',
                 onTap: () => context.push('/health/recovery'),
               ),
               const SizedBox(height: 9),

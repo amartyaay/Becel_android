@@ -165,7 +165,7 @@ void main() {
     await _boot(tester);
 
     expect(
-      find.text('Recovery index'),
+      find.text('Recovery trend'),
       findsOneWidget,
       reason: tester
           .widgetList<Text>(find.byType(Text))
@@ -173,12 +173,16 @@ void main() {
           .whereType<String>()
           .join(' | '),
     );
-    await tester.tap(find.text('Recovery index'));
+    await tester.tap(find.text('Recovery trend'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('LOW DATA'), findsOneWidget);
-    expect(find.text('LIMITED DATA'), findsOneWidget);
+    expect(find.textContaining('LIMITED DATA'), findsOneWidget);
+    expect(
+      find.textContaining('Experimental personal trend only'),
+      findsOneWidget,
+    );
     expect(find.textContaining('1 asleep-stage samples'), findsOneWidget);
   });
 }

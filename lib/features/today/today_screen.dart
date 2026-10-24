@@ -478,7 +478,7 @@ class _RecoveryHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  score == null ? 'Recovery unavailable' : 'Recovery index',
+                  score == null ? 'Recovery unavailable' : 'Recovery trend',
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 19,
@@ -494,8 +494,8 @@ class _RecoveryHero extends StatelessWidget {
                             ? 'Checking sleep and personal signals…'
                             : subtitle
                       : limitedSamples
-                      ? 'Limited signal or baseline coverage - tap for details'
-                      : 'Becel index - tap for signals',
+                      ? 'Limited data · experimental trend · tap for signals'
+                      : 'Experimental personal trend · tap for signals',
                   style: AppType.caption.copyWith(height: 1.35),
                 ),
               ],

@@ -104,7 +104,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                             ? 'CALIBRATING'
                             : readiness?.limitedSamples == true
                             ? 'LOW DATA'
-                            : 'ESTIMATE',
+                            : 'EXPERIMENTAL',
                         color: estimate == null
                             ? AppColors.yellow
                             : readiness?.limitedSamples == true
@@ -119,6 +119,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 limitedSamples:
                     estimate != null && (readiness?.limitedSamples ?? false),
               ),
+              if (estimate != null) ...[
+                const SizedBox(height: 10),
+                const InfoNote(
+                  text:
+                      'Experimental personal trend only. This formula is not validated as training readiness or a predictor of performance; use your own symptoms and training context.',
+                  icon: Icons.science_outlined,
+                  color: AppColors.yellow,
+                ),
+              ],
               if (night != null) ...[
                 const SizedBox(height: 10),
                 InfoNote(
@@ -274,12 +283,14 @@ class _RecoveryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  limitedSamples ? 'LIMITED DATA' : 'RECOVERY INDEX',
+                  limitedSamples
+                      ? 'LIMITED DATA · EXPERIMENTAL'
+                      : 'EXPERIMENTAL TREND',
                   style: AppType.eyebrow.copyWith(color: color),
                 ),
                 const SizedBox(height: 11),
                 Text(
-                  score == null ? 'Recovery unavailable' : 'Recovery index',
+                  score == null ? 'Recovery unavailable' : 'Recovery trend',
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 21,

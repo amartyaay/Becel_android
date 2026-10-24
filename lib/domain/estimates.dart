@@ -14,15 +14,16 @@ const sleepDurationMethod =
     'not precise enough to grade a night.';
 
 const recoveryMethod =
-    'Becel Recovery index: 40% sleep-duration progress, 35% RMSSD HRV, and '
+    'Experimental personal trend: 40% sleep-duration progress, 35% RMSSD HRV, and '
     '25% resting heart rate. HRV readings must fall inside recorded asleep '
     'stages. Daily resting-HR readings are aligned by local date with the '
     'selected sleep session. Both signals are compared with their own matched '
     'values from the previous 14 local dates; each needs 10 baseline dates. '
     'A yellow label means fewer than 2 current HRV readings, no current daily '
     'RHR reading, or an incomplete 14-date baseline for '
-    'at least one signal. The 0-100 mapping '
-    'is a product heuristic, not clinically validated.';
+    'at least one signal. Its 0-100 mapping and 40/35/25 weights are '
+    'experimental product heuristics, not validated measures of readiness or '
+    'performance. Use this only as a within-person trend.';
 
 const activityMethod =
     'Becel HR estimate: moderate-equivalent minutes from Fitbit Air heart-rate '
