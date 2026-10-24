@@ -156,7 +156,38 @@ void main() {
       expect(history.last.readiness?.hrvBaselineNights, 13);
     },
   );
+
+  test('activity total, progress, and remaining minutes share one rule', () {
+    final below = _activityEstimate(149.5);
+    expect(below.displayedEquivalentMinutes, 149);
+    expect(below.progressPercent, 99);
+    expect(below.minutesRemaining, 1);
+    expect(below.minutesAboveMinimum, 0);
+
+    final justOver = _activityEstimate(150.5);
+    expect(justOver.displayedEquivalentMinutes, 150);
+    expect(justOver.progressPercent, 100);
+    expect(justOver.minutesRemaining, 0);
+    expect(justOver.minutesAboveMinimum, 0);
+
+    final clearlyOver = _activityEstimate(151.5);
+    expect(clearlyOver.displayedEquivalentMinutes, 151);
+    expect(clearlyOver.minutesAboveMinimum, 1);
+  });
 }
+
+ActivityEstimate _activityEstimate(double equivalentMinutes) =>
+    ActivityEstimate(
+      age: 40,
+      estimatedMaxHrBpm: 180,
+      restingHrBpm: 60,
+      restingHrAt: DateTime(2026, 10, 24),
+      moderateMinutes: equivalentMinutes,
+      vigorousMinutes: 0,
+      usableDays: 7,
+      zoneMinutes: List.filled(5, 0),
+      zoneRanges: List.filled(5, 'n/a'),
+    );
 
 RecoveryReadiness _estimate({
   int historicalNights = 10,

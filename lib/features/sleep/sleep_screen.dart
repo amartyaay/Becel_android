@@ -52,7 +52,11 @@ class _SleepScreenState extends State<SleepScreen> {
     final durationProgress = currentSession == null
         ? null
         : sleepDurationProgressPercent(minutes: currentSession.minutes);
-    final recent = sleep?.sessions.take(7).toList() ?? const <SleepNight>[];
+    final now = DateTime.now();
+    final sessionsInLast14Days =
+        sleep?.sessionsEndingWithin(const Duration(days: 14), endingAt: now) ??
+        const <SleepNight>[];
+    final recent = sessionsInLast14Days.take(7).toList();
     final chronological = recent.reversed.toList();
 
     return Scaffold(
@@ -271,7 +275,7 @@ class _SleepScreenState extends State<SleepScreen> {
                 ],
                 SectionHeader(title: 'Sessions', caption: 'LAST 14 DAYS'),
                 const SizedBox(height: 10),
-                for (final night in recent)
+                for (final night in sessionsInLast14Days)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: SurfaceCard(

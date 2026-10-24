@@ -255,7 +255,7 @@ class _ActivityCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '${estimate.equivalentMinutes.floor()}',
+              '${estimate.displayedEquivalentMinutes}',
               style: AppType.numXl.copyWith(fontSize: 54),
             ),
             const Padding(
@@ -264,7 +264,7 @@ class _ActivityCard extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              '150 min',
+              '$activityWeeklyMinimumMinutes min',
               style: AppType.numM.copyWith(color: AppColors.orange),
             ),
           ],
@@ -276,16 +276,16 @@ class _ActivityCard extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Text(
-          estimate.equivalentMinutes < 150
-              ? '${(150 - estimate.equivalentMinutes).ceil()} min to the 150-min weekly minimum'
-              : '150-min weekly minimum reached; '
-                    '${(estimate.equivalentMinutes - 150).round()} min above',
+          estimate.minutesRemaining > 0
+              ? '${estimate.minutesRemaining} min to the $activityWeeklyMinimumMinutes-min weekly minimum'
+              : '$activityWeeklyMinimumMinutes-min weekly minimum reached; '
+                    '${estimate.minutesAboveMinimum} min above',
           style: AppType.rowTitle.copyWith(color: AppColors.orange),
         ),
         const SizedBox(height: 13),
         Semantics(
           label:
-              '${estimate.progressPercent} percent of the 150 minute weekly minimum',
+              '${estimate.progressPercent} percent of the $activityWeeklyMinimumMinutes minute weekly minimum',
           child: ClipRRect(
             borderRadius: BorderRadius.circular(99),
             child: LinearProgressIndicator(
@@ -298,7 +298,9 @@ class _ActivityCard extends StatelessWidget {
         ),
         const SizedBox(height: 11),
         Text(
-          '${estimate.moderateMinutes.round()} moderate min · ${estimate.vigorousMinutes.round()} vigorous min × 2',
+          '${_formatActivityMinutes(estimate.moderateMinutes)} moderate + '
+          '${_formatActivityMinutes(estimate.vigorousMinutes)} vigorous x 2 = '
+          '${_formatActivityMinutes(estimate.equivalentMinutes)} equivalent min',
           style: AppType.caption,
         ),
         const SizedBox(height: 5),
@@ -323,6 +325,11 @@ class _ActivityCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+String _formatActivityMinutes(double minutes) {
+  final value = minutes.toStringAsFixed(1);
+  return value.endsWith('.0') ? value.substring(0, value.length - 2) : value;
 }
 
 class _ActivityWeek extends StatelessWidget {

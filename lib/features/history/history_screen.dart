@@ -211,20 +211,47 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-class _RecoveryTrend extends StatelessWidget {
+class _RecoveryTrend extends StatefulWidget {
   const _RecoveryTrend({required this.points});
 
   final List<RecoveryHistoryPoint> points;
 
   @override
+  State<_RecoveryTrend> createState() => _RecoveryTrendState();
+}
+
+class _RecoveryTrendState extends State<_RecoveryTrend> {
+  int? _selectedIndex;
+
+  @override
+  void didUpdateWidget(covariant _RecoveryTrend oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.points != widget.points) _selectedIndex = null;
+  }
+
+  int _defaultSelection(List<RecoveryHistoryPoint> points) {
+    for (var index = points.length - 1; index >= 0; index--) {
+      if (points[index].readiness?.estimate != null) return index;
+    }
+    for (var index = points.length - 1; index >= 0; index--) {
+      if (points[index].session != null) return index;
+    }
+    return points.length - 1;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final points = widget.points;
+    if (points.isEmpty) return const SizedBox.shrink();
+    final selectedIndex = _selectedIndex ?? _defaultSelection(points);
+    final selected = points[selectedIndex];
     final scored = points
         .where((point) => point.readiness?.estimate != null)
         .toList();
     final limited = scored
         .where((point) => point.readiness?.limitedSamples == true)
         .length;
-    final latest = scored.isEmpty ? null : scored.last;
+
     return SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,42 +266,59 @@ class _RecoveryTrend extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               const Expanded(child: Text('Recovery', style: AppType.cardTitle)),
-              StatusPill(label: '14 DAYS', color: AppColors.teal),
+              StatusPill(label: 'EXPERIMENTAL', color: AppColors.teal),
             ],
           ),
-          const SizedBox(height: 14),
-          TrendBars(
-            values: points
-                .map((point) => point.readiness?.estimate?.score.toDouble())
-                .toList(),
-            labels: points.map((point) => '${point.date.day}').toList(),
-            color: AppColors.teal,
-            barAreaHeight: 74,
-            highlightLast: true,
-            valueLabelBuilder: (score) => '${score.round()}',
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             '${scored.length}/${points.length} dates scored'
-            '${limited == 0 ? '' : ' · $limited with limited current samples'}',
+            '${limited == 0 ? '' : ' | $limited with limited data'}',
             style: AppType.rowTitle.copyWith(color: AppColors.teal),
           ),
-          const SizedBox(height: 5),
-          if (latest == null)
-            const Text(
-              'No date has enough data yet. Scoring needs a qualifying sleep session, current HRV and resting HR, plus at least 10 earlier nights for each personal baseline.',
-              style: AppType.caption,
-            )
-          else
-            Text(
-              'Latest scored session: ${formatShortDate(latest.date)} · '
-              '${formatDurationMinutes(latest.sleepMinutes ?? 0)} · '
-              'Each bar uses the longest qualifying session ending on that date.',
-              style: AppType.caption,
+          const SizedBox(height: 3),
+          Text(
+            'Fixed 0-100 scale | tap a date to inspect its session and signals',
+            style: AppType.caption,
+          ),
+          const SizedBox(height: 12),
+          _RecoveryBars(points: points, selectedIndex: selectedIndex),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _RecoveryLegend(color: AppColors.teal, label: 'Full inputs'),
+              const SizedBox(width: 12),
+              _RecoveryLegend(color: AppColors.yellow, label: 'Limited score'),
+              const SizedBox(width: 12),
+              _RecoveryLegend(color: AppColors.border, label: 'No score'),
+            ],
+          ),
+          const SizedBox(height: 9),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var index = 0; index < points.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 6),
+                  ChoiceChip(
+                    label: Text(
+                      '${points[index].date.month}/${points[index].date.day} '
+                      '${points[index].readiness?.estimate?.score ?? "—"}',
+                    ),
+                    selected: index == selectedIndex,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    selectedColor: AppColors.teal.withValues(alpha: 0.24),
+                    onSelected: (_) => setState(() => _selectedIndex = index),
+                  ),
+                ],
+              ],
             ),
-          const SizedBox(height: 5),
+          ),
+          const SizedBox(height: 7),
+          _SelectedRecoveryPoint(point: selected),
+          const SizedBox(height: 7),
           const Text(
-            'Blank days mean no qualifying session or missing inputs/baseline. A score is an experimental personal trend, not a medical measure.',
+            'Blank bars mean no qualifying session or missing inputs/baseline. This experimental personal trend is not a medical or training-clearance measure.',
             style: AppType.caption,
           ),
         ],
@@ -282,6 +326,238 @@ class _RecoveryTrend extends StatelessWidget {
     );
   }
 }
+
+class _RecoveryBars extends StatelessWidget {
+  const _RecoveryBars({required this.points, required this.selectedIndex});
+
+  final List<RecoveryHistoryPoint> points;
+  final int selectedIndex;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 98,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var index = 0; index < points.length; index++)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    points[index].readiness?.estimate?.score.toString() ?? '—',
+                    style: AppType.caption.copyWith(
+                      fontSize: 8,
+                      color: index == selectedIndex
+                          ? AppColors.textPrimary
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  SizedBox(
+                    height: 68,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        width: double.infinity,
+                        height: _barHeight(points[index]),
+                        decoration: BoxDecoration(
+                          color: _barColor(
+                            points[index],
+                            index == selectedIndex,
+                          ),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${points[index].date.day}',
+                    style: AppType.caption.copyWith(
+                      fontSize: 8,
+                      color: index == selectedIndex
+                          ? AppColors.teal
+                          : AppColors.textTertiary,
+                      fontWeight: index == selectedIndex
+                          ? FontWeight.w800
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  double _barHeight(RecoveryHistoryPoint point) {
+    final score = point.readiness?.estimate?.score;
+    if (score != null) return (68 * score / 100).clamp(2, 68).toDouble();
+    return point.session == null ? 2 : 4;
+  }
+
+  Color _barColor(RecoveryHistoryPoint point, bool selected) {
+    final estimate = point.readiness?.estimate;
+    if (estimate == null) {
+      return point.session == null
+          ? AppColors.border
+          : AppColors.orange.withValues(alpha: selected ? 1 : 0.55);
+    }
+    if (point.readiness?.limitedSamples == true) {
+      return AppColors.yellow.withValues(alpha: selected ? 1 : 0.62);
+    }
+    return AppColors.teal.withValues(alpha: selected ? 1 : 0.55);
+  }
+}
+
+class _RecoveryLegend extends StatelessWidget {
+  const _RecoveryLegend({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Row(
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.caption.copyWith(fontSize: 9),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SelectedRecoveryPoint extends StatelessWidget {
+  const _SelectedRecoveryPoint({required this.point});
+
+  final RecoveryHistoryPoint point;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = point.session;
+    if (session == null) {
+      return Text(
+        'Selected date: ${_formatRecoveryDate(point.date)} | no qualifying session ended on this date.',
+        style: AppType.caption,
+      );
+    }
+
+    final readiness = point.readiness;
+    if (readiness == null) {
+      return Text(
+        'Session on ${_formatRecoveryDate(point.date)} | Recovery inputs unavailable.',
+        style: AppType.caption,
+      );
+    }
+    final estimate = readiness.estimate;
+    return SurfaceCard(
+      color: AppColors.surfaceHigh,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SESSION | ${_formatRecoveryDate(point.date)} | ${formatDurationMinutes(session.sleepMinutes)}',
+            style: AppType.eyebrow.copyWith(color: AppColors.blue),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${formatClock(session.start)} - ${formatClock(session.end)}',
+            style: AppType.caption,
+          ),
+          const SizedBox(height: 8),
+          if (estimate == null) ...[
+            const Text(
+              'No Recovery score for this date',
+              style: AppType.rowTitle,
+            ),
+            const SizedBox(height: 4),
+            Text(_missingRecoveryInputs(readiness), style: AppType.caption),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Recovery ${estimate.score}/100',
+                    style: AppType.rowTitle.copyWith(color: AppColors.teal),
+                  ),
+                ),
+                StatusPill(
+                  label: readiness.limitedSamples
+                      ? 'LIMITED DATA'
+                      : 'FULL INPUTS',
+                  color: readiness.limitedSamples
+                      ? AppColors.yellow
+                      : AppColors.teal,
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'Sleep ${estimate.sleepComponent} | HRV ${estimate.hrvComponent} | resting HR ${estimate.restingHrComponent}',
+              style: AppType.caption,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${readiness.hrvCurrentSampleCount} HRV samples | '
+              '${readiness.restingHrCurrentSampleCount} RHR readings | '
+              'baselines ${estimate.hrvBaselineDays}/14 HRV nights and '
+              '${estimate.restingHrBaselineDays}/14 RHR dates',
+              style: AppType.caption,
+            ),
+            if (readiness.limitedSamples) ...[
+              const SizedBox(height: 4),
+              const Text(
+                'Limited data reflects sparse current readings or incomplete personal baselines.',
+                style: AppType.caption,
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _missingRecoveryInputs(RecoveryReadiness readiness) {
+    final reasons = <String>[];
+    if (readiness.hrvCurrentSampleCount == 0) {
+      reasons.add('No HRV inside asleep stages');
+    }
+    if (readiness.restingHrCurrentSampleCount == 0) {
+      reasons.add('No resting HR on this session date');
+    }
+    if (readiness.hrvBaselineNights < recoveryMinimumBaselineNights) {
+      reasons.add('HRV baseline ${readiness.hrvBaselineNights}/10 nights');
+    }
+    if (readiness.restingHrBaselineNights < recoveryMinimumBaselineNights) {
+      reasons.add('RHR baseline ${readiness.restingHrBaselineNights}/10 dates');
+    }
+    return reasons.isEmpty
+        ? 'Required inputs are incomplete.'
+        : 'Missing: ${reasons.join(' | ')}.';
+  }
+}
+
+String _formatRecoveryDate(DateTime date) =>
+    '${formatShortDate(date)}, ${date.year}';
 
 class _TrendCard extends StatelessWidget {
   const _TrendCard({

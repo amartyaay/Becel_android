@@ -33,6 +33,7 @@ const activityMethod =
     'minutes count twice. This estimates intensity from pulse; it does not '
     'confirm exercise. Missing wear time can lower the total.';
 
+const activityWeeklyMinimumMinutes = 150;
 const recoveryBaselineWindowDays = 14;
 const recoveryMinimumBaselineNights = 10;
 
@@ -127,12 +128,14 @@ class RecoveryHistoryPoint {
   const RecoveryHistoryPoint({
     required this.date,
     this.readiness,
-    this.sleepMinutes,
+    this.session,
   });
 
   final DateTime date;
   final RecoveryReadiness? readiness;
-  final int? sleepMinutes;
+  final SleepWindow? session;
+
+  int? get sleepMinutes => session?.sleepMinutes;
 }
 
 /// Recalculates the same experimental estimate for each selected sleep date.
@@ -178,11 +181,7 @@ List<RecoveryHistoryPoint> recoveryHistory({
       now: offset == 0 && now.isBefore(endOfDate) ? now : endOfDate,
     );
     points.add(
-      RecoveryHistoryPoint(
-        date: date,
-        readiness: readiness,
-        sleepMinutes: session.sleepMinutes,
-      ),
+      RecoveryHistoryPoint(date: date, readiness: readiness, session: session),
     );
   }
   return points;
@@ -488,7 +487,6 @@ class ActivityEstimate {
     required this.estimatedMaxHrBpm,
     required this.restingHrBpm,
     required this.restingHrAt,
-    required this.progressPercent,
     required this.moderateMinutes,
     required this.vigorousMinutes,
     required this.usableDays,
@@ -503,7 +501,6 @@ class ActivityEstimate {
   final int estimatedMaxHrBpm;
   final double restingHrBpm;
   final DateTime restingHrAt;
-  final int progressPercent;
   final double moderateMinutes;
   final double vigorousMinutes;
   final int usableDays;
@@ -514,4 +511,21 @@ class ActivityEstimate {
   final List<String> zoneRanges;
 
   double get equivalentMinutes => moderateMinutes + 2 * vigorousMinutes;
+
+  int get displayedEquivalentMinutes => equivalentMinutes.floor();
+
+  int get progressPercent =>
+      (displayedEquivalentMinutes * 100 ~/ activityWeeklyMinimumMinutes)
+          .clamp(0, 100)
+          .toInt();
+
+  int get minutesRemaining =>
+      displayedEquivalentMinutes < activityWeeklyMinimumMinutes
+      ? activityWeeklyMinimumMinutes - displayedEquivalentMinutes
+      : 0;
+
+  int get minutesAboveMinimum =>
+      displayedEquivalentMinutes > activityWeeklyMinimumMinutes
+      ? displayedEquivalentMinutes - activityWeeklyMinimumMinutes
+      : 0;
 }

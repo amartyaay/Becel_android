@@ -210,13 +210,13 @@ class _TodayScreenState extends State<TodayScreen> {
                       title: 'WEEKLY ACTIVITY',
                       value: activity == null
                           ? '—'
-                          : '${activity.equivalentMinutes.round()} min',
+                          : '${activity.displayedEquivalentMinutes} min',
                       progress: activity == null
                           ? null
                           : activity.progressPercent / 100,
                       footnote: activity == null
                           ? _activityRequirement(heart, _age)
-                          : 'of 150 moderate-equiv min · ≥1 interval on ${activity.usableDays}/7 days',
+                          : 'of $activityWeeklyMinimumMinutes moderate-equiv min · ≥1 interval on ${activity.usableDays}/7 days',
                       color: AppColors.orange,
                       onTap: () => context.go('/fitness'),
                     ),

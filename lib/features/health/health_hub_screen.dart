@@ -207,11 +207,11 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 title: 'Activity · last 7 days',
                 value: activity == null
                     ? '—'
-                    : '${activity.equivalentMinutes.round()}',
+                    : '${activity.displayedEquivalentMinutes}',
                 unit: activity == null ? '' : ' min',
                 note: activity == null
                     ? _activityNote(heart, _age)
-                    : 'of 150 moderate-equivalent min · ≥1 interval on ${activity.usableDays}/7 days',
+                    : 'of $activityWeeklyMinimumMinutes moderate-equivalent min · ≥1 interval on ${activity.usableDays}/7 days',
                 onTap: () => context.go('/fitness'),
               ),
               const SizedBox(height: 20),

@@ -12,7 +12,6 @@ internal data class ActivityEstimate(
     val estimatedMaxHrBpm: Int,
     val restingHrBpm: Double,
     val restingHrAt: Instant,
-    val progressPercent: Int,
     val moderateMinutes: Double,
     val vigorousMinutes: Double,
     val usableDays: Int,
@@ -30,7 +29,6 @@ internal data class ActivityEstimate(
         "estimatedMaxHrBpm" to estimatedMaxHrBpm,
         "restingHrBpm" to restingHrBpm,
         "restingHrAt" to restingHrAt.toEpochMilli(),
-        "progressPercent" to progressPercent,
         "moderateMinutes" to moderateMinutes,
         "vigorousMinutes" to vigorousMinutes,
         "usableDays" to usableDays,
@@ -136,7 +134,6 @@ internal object ActivityEstimator {
 
         val moderate = zones[2]
         val vigorous = zones[3] + zones[4]
-        val equivalent = moderate + 2 * vigorous
         fun bpmAt(fraction: Double) = "${(resting + reserve * fraction).roundToLong()} bpm"
 
         return ActivityEstimate(
@@ -144,14 +141,17 @@ internal object ActivityEstimator {
             estimatedMaxHrBpm = maximum.roundToInt(),
             restingHrBpm = resting,
             restingHrAt = restingRecord.first,
-            progressPercent = (equivalent / 150.0 * 100).roundToInt().coerceIn(0, 100),
             moderateMinutes = moderate,
             vigorousMinutes = vigorous,
             usableDays = dailyCoverage.values.count { it > 0.0 },
             dailyDates = dayDates.map(LocalDate::toString),
             dailyEquivalentMinutes = dayDates.map { date ->
-                dailyZones[date]?.let { dayZones ->
-                    dayZones[2] + 2 * (dayZones[3] + dayZones[4])
+                if ((dailyCoverage[date] ?: 0.0) <= 0.0) {
+                    null
+                } else {
+                    dailyZones[date]?.let { dayZones ->
+                        dayZones[2] + 2 * (dayZones[3] + dayZones[4])
+                    }
                 }
             },
             dailyCoverageMinutes = dayDates.map { dailyCoverage[it] ?: 0.0 },

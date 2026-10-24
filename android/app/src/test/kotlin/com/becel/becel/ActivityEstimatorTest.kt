@@ -6,6 +6,7 @@ import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ActivityEstimatorTest {
@@ -128,6 +129,21 @@ class ActivityEstimatorTest {
         assertEquals(1.0, estimate.dailyEquivalentMinutes[6]!!, 0.0001)
         assertEquals(1.0, estimate.dailyCoverageMinutes[5], 0.0001)
         assertEquals(1.0, estimate.dailyCoverageMinutes[6], 0.0001)
+        assertTrue(estimate.dailyEquivalentMinutes.take(5).all { it == null })
+        assertEquals(List(5) { 0.0 }, estimate.dailyCoverageMinutes.take(5))
+    }
+
+    @Test
+    fun keepsUncoveredDaysDistinctFromCoveredZeroActivity() {
+        val estimate = estimate(
+            heartRates = listOf(now.minusSeconds(60) to 80L, now to 80L),
+        )
+
+        assertNotNull(estimate)
+        assertNull(estimate!!.dailyEquivalentMinutes.first())
+        assertEquals(0.0, estimate.dailyCoverageMinutes.first(), 0.0001)
+        assertEquals(0.0, estimate.dailyEquivalentMinutes.last()!!, 0.0001)
+        assertEquals(1.0, estimate.dailyCoverageMinutes.last(), 0.0001)
     }
 
     @Test

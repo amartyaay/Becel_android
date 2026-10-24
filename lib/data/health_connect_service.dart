@@ -503,7 +503,6 @@ ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
   }
   final moderate = _doubleFrom(map['moderateMinutes']);
   final vigorous = _doubleFrom(map['vigorousMinutes']);
-  final progress = _intFrom(map['progressPercent']);
   final usableDays = _intFrom(map['usableDays']);
   final age = _intFrom(map['age']);
   final estimatedMaxHrBpm = _intFrom(map['estimatedMaxHrBpm']);
@@ -517,7 +516,6 @@ ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
   final dailyCoverageMinutes = _doubleListFrom(map['dailyCoverageMinutes']);
   if (moderate == null ||
       vigorous == null ||
-      progress == null ||
       usableDays == null ||
       age == null ||
       estimatedMaxHrBpm == null ||
@@ -530,7 +528,6 @@ ActivityEstimate? _activityEstimateFrom(Map<String, dynamic> map) {
     estimatedMaxHrBpm: estimatedMaxHrBpm,
     restingHrBpm: restingHrBpm,
     restingHrAt: DateTime.fromMillisecondsSinceEpoch(restingHrAt),
-    progressPercent: progress.clamp(0, 100),
     moderateMinutes: moderate,
     vigorousMinutes: vigorous,
     usableDays: usableDays,
@@ -640,6 +637,15 @@ class SleepDetail {
   bool get hasAccess => granted.isNotEmpty;
   bool get canReadSleep =>
       granted.contains('android.permission.health.READ_SLEEP');
+
+  List<SleepNight> sessionsEndingWithin(Duration window, {DateTime? endingAt}) {
+    final reference = (endingAt ?? DateTime.now()).toLocal();
+    final cutoff = reference.subtract(window);
+    return sessions.where((session) {
+      final end = session.end.toLocal();
+      return !end.isBefore(cutoff) && !end.isAfter(reference);
+    }).toList()..sort((a, b) => b.end.compareTo(a.end));
+  }
 
   List<SleepWindow> get sleepWindows => sessions
       .map(
