@@ -111,6 +111,12 @@ void main() {
       expect(find.textContaining('no usable HR interval'), findsOneWidget);
       expect(find.text('of 150 min aerobic reference'), findsOneWidget);
       expect(find.textContaining('strength days'), findsOneWidget);
+      expect(
+        find.text(
+          'One recent resting-HR reading is applied to all seven dates.',
+        ),
+        findsOneWidget,
+      );
       final labels = _semanticsLabels(tester);
       expect(
         labels.any((label) => label.contains('no usable heart-rate coverage')),

@@ -344,6 +344,11 @@ class _ActivityCard extends StatelessWidget {
           'Age ${estimate.age} · predicted max ${estimate.estimatedMaxHrBpm} bpm · resting HR ${estimate.restingHrBpm.round()} bpm at ${formatClock(estimate.restingHrAt)}',
           style: AppType.caption.copyWith(fontSize: 11),
         ),
+        const SizedBox(height: 4),
+        const Text(
+          'One recent resting-HR reading is applied to all seven dates.',
+          style: AppType.caption,
+        ),
       ],
     ),
   );
