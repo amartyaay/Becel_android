@@ -46,6 +46,132 @@ void main() {
     expect(find.text('HR zones'), findsOneWidget);
   });
 
+  testWidgets(
+    'fitness summaries share threshold numbers and disclose HR estimates',
+    (tester) async {
+      final activityMinutes = _installReadyDataFixture();
+      await _boot(tester);
+
+      for (final (raw, displayed) in [
+        (149.5, 149),
+        (150.5, 150),
+        (151.5, 151),
+      ]) {
+        if (raw != 149.5) {
+          await _changeActivityMinutes(tester, activityMinutes, raw);
+        }
+        expect(find.text('$displayed min'), findsOneWidget);
+      }
+      expect(find.textContaining('not confirmed exercise'), findsOneWidget);
+
+      await _openTab(tester, 'Vitals');
+      await _changeActivityMinutes(tester, activityMinutes, 149.5);
+      for (final (raw, displayed) in [
+        (149.5, 149),
+        (150.5, 150),
+        (151.5, 151),
+      ]) {
+        if (raw != 149.5) {
+          await _changeActivityMinutes(tester, activityMinutes, raw);
+        }
+        expect(find.text('$displayed'), findsOneWidget);
+      }
+      expect(find.textContaining('not confirmed exercise'), findsOneWidget);
+
+      await _openTab(tester, 'Activity');
+      await _changeActivityMinutes(tester, activityMinutes, 149.5);
+      for (final (raw, displayed, progress) in [
+        (149.5, 149, 99),
+        (150.5, 150, 100),
+        (151.5, 151, 100),
+      ]) {
+        if (raw != 149.5) {
+          await _changeActivityMinutes(tester, activityMinutes, raw);
+        }
+        expect(find.text('$displayed'), findsOneWidget);
+        expect(
+          _semanticsLabels(tester),
+          contains('$progress percent of the 150 minute weekly minimum'),
+        );
+      }
+      expect(find.text('no usable HR'), findsOneWidget);
+      final labels = _semanticsLabels(tester);
+      expect(
+        labels.any((label) => label.contains('no usable heart-rate coverage')),
+        isTrue,
+      );
+      expect(
+        labels.any(
+          (label) => label.contains('0 estimated moderate-equivalent minutes'),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('Recovery history date chips show selected session details', (
+    tester,
+  ) async {
+    _installReadyDataFixture();
+    await _boot(tester);
+    await _openTab(tester, 'History');
+
+    final chips = find.byType(ChoiceChip);
+    expect(chips, findsNWidgets(14));
+    await tester.ensureVisible(chips.last);
+    await tester.tap(chips.last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final session = find.textContaining('SESSION |');
+    await tester.ensureVisible(session);
+    await tester.pump();
+    expect(session, findsOneWidget);
+    expect(find.textContaining('LIMITED DATA'), findsOneWidget);
+    expect(find.textContaining('HRV samples |'), findsOneWidget);
+    expect(find.textContaining(DateTime.now().year.toString()), findsOneWidget);
+  });
+
+  testWidgets('Sleep lists every session in its 14-day window', (tester) async {
+    _installReadyDataFixture();
+    await _boot(tester);
+    final sleepTile = find.text('SLEEP DURATION');
+    await tester.ensureVisible(sleepTile);
+    await tester.tap(sleepTile);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      find.text('REST & REPAIR'),
+      findsOneWidget,
+      reason: tester
+          .widgetList<Text>(find.byType(Text))
+          .map((text) => text.data)
+          .whereType<String>()
+          .join(' | '),
+    );
+    expect(find.text('Recent sessions'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    await tester.pump();
+
+    expect(find.text('LAST 14 DAYS'), findsOneWidget);
+    final currentEnd = DateTime.now().subtract(const Duration(hours: 2));
+    final oldestSessionEnd = DateTime(
+      currentEnd.year,
+      currentEnd.month,
+      currentEnd.day - 10,
+      7,
+    );
+    final oldestSession = find.byKey(
+      ValueKey('sleep-session-${oldestSessionEnd.toIso8601String()}'),
+    );
+    await tester.dragUntilVisible(
+      oldestSession,
+      find.byType(ListView).first,
+      const Offset(0, -320),
+    );
+    expect(oldestSession, findsOneWidget);
+  });
+
   testWidgets('Vitals tab lists measured signals and fitness snapshot', (
     tester,
   ) async {
@@ -198,7 +324,7 @@ Map<String, Object?> _inspectionFixture() => {
   'requested': const <String>[],
 };
 
-Map<String, Object?> _heartFixture() {
+Map<String, Object?> _heartFixture({Map<String, Object?>? activityEstimate}) {
   final now = DateTime.now();
   final currentEnd = now.subtract(const Duration(hours: 2));
   final currentStart = currentEnd.subtract(const Duration(hours: 8));
@@ -236,6 +362,7 @@ Map<String, Object?> _heartFixture() {
       'android.permission.health.READ_RESTING_HEART_RATE',
       'android.permission.health.READ_HEART_RATE_VARIABILITY',
     ],
+    'activityEstimate': activityEstimate,
     'hrvSamples': hrv,
     'restingHrSamples': restingHr,
   };
@@ -275,3 +402,104 @@ Map<String, Object?> _sleepSession(DateTime start, DateTime end) => {
     [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
   ],
 };
+
+ValueNotifier<double> _installReadyDataFixture() {
+  final activityMinutes = ValueNotifier<double>(149.5);
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(_healthConnectChannel, (call) async {
+    switch (call.method) {
+      case 'inspect':
+        return _inspectionFixture();
+      case 'readSummary':
+        return {
+          'status': 'ready',
+          'granted': _inspectionFixture()['granted'],
+          'fitbitAirMetadataMatched': true,
+        };
+      case 'readHeartDetail':
+        return _heartFixture(
+          activityEstimate: _activityEstimateFixture(activityMinutes.value),
+        );
+      case 'readSleepDetail':
+        return _sleepFixture();
+      case 'readActivityDetail':
+        return {
+          'status': 'ready',
+          'granted': ['android.permission.health.READ_EXERCISE'],
+          'workouts': const <Object?>[],
+        };
+      case 'readFitnessAge':
+        return 40;
+      case 'readTrends7d':
+        return {
+          'status': 'ready',
+          'granted': const <String>[],
+          'dates': const <String>[],
+          'steps': const <Object?>[],
+          'hrAvg': const <Object?>[],
+          'sleepMinutes': const <Object?>[],
+        };
+      default:
+        return <String, Object?>{};
+    }
+  });
+  addTearDown(() {
+    messenger.setMockMethodCallHandler(_healthConnectChannel, null);
+    HealthConnectService.instance.notifyDataChanged();
+    activityMinutes.dispose();
+  });
+  HealthConnectService.instance.notifyDataChanged();
+  return activityMinutes;
+}
+
+List<String> _semanticsLabels(WidgetTester tester) => tester
+    .widgetList<Semantics>(find.byType(Semantics))
+    .map((semantics) => semantics.properties.label)
+    .whereType<String>()
+    .toList();
+
+Future<void> _changeActivityMinutes(
+  WidgetTester tester,
+  ValueNotifier<double> activityMinutes,
+  double value,
+) async {
+  activityMinutes.value = value;
+  HealthConnectService.instance.notifyDataChanged();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+Map<String, Object?> _activityEstimateFixture(double equivalentMinutes) {
+  final now = DateTime.now();
+  final dailyDates = List.generate(
+    7,
+    (index) => now
+        .subtract(Duration(days: 6 - index))
+        .toIso8601String()
+        .substring(0, 10),
+  );
+  return {
+    'age': 40,
+    'estimatedMaxHrBpm': 180,
+    'restingHrBpm': 60.0,
+    'restingHrAt': now.millisecondsSinceEpoch,
+    'moderateMinutes': equivalentMinutes,
+    'vigorousMinutes': 0.0,
+    'usableDays': 6,
+    'dailyDates': dailyDates,
+    'dailyEquivalentMinutes': [
+      null,
+      0.0,
+      10.0,
+      20.0,
+      30.0,
+      40.0,
+      equivalentMinutes - 100,
+    ],
+    'dailyCoverageMinutes': [0.0, 90.0, 60.0, 120.0, 120.0, 90.0, 60.0],
+    'zoneMinutes': [0.0, 0.0, equivalentMinutes, 0.0, 0.0],
+    'zoneRanges': const ['<95', '96-107', '108-131', '132-167', '168+'],
+  };
+}

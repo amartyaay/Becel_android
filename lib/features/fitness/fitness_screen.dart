@@ -278,6 +278,8 @@ class _ActivityCard extends StatelessWidget {
         Text(
           estimate.minutesRemaining > 0
               ? '${estimate.minutesRemaining} min to the $activityWeeklyMinimumMinutes-min weekly minimum'
+              : estimate.minutesAboveMinimum == 0
+              ? '$activityWeeklyMinimumMinutes-min weekly minimum reached'
               : '$activityWeeklyMinimumMinutes-min weekly minimum reached; '
                     '${estimate.minutesAboveMinimum} min above',
           style: AppType.rowTitle.copyWith(color: AppColors.orange),
@@ -299,7 +301,7 @@ class _ActivityCard extends StatelessWidget {
         const SizedBox(height: 11),
         Text(
           '${_formatActivityMinutes(estimate.moderateMinutes)} moderate + '
-          '${_formatActivityMinutes(estimate.vigorousMinutes)} vigorous x 2 = '
+          '${_formatActivityMinutes(estimate.vigorousMinutes)} vigorous × 2 ≈ '
           '${_formatActivityMinutes(estimate.equivalentMinutes)} equivalent min',
           style: AppType.caption,
         ),
@@ -397,7 +399,7 @@ class _ActivityWeek extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       estimate.dailyCoverageMinutes[index] <= 0
-                          ? 'no HR'
+                          ? 'no usable HR'
                           : estimate.dailyCoverageMinutes[index] < 60
                           ? '${estimate.dailyCoverageMinutes[index].round()}m'
                           : '${(estimate.dailyCoverageMinutes[index] / 60).toStringAsFixed(1)}h',

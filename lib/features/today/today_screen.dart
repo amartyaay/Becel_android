@@ -216,7 +216,7 @@ class _TodayScreenState extends State<TodayScreen> {
                           : activity.progressPercent / 100,
                       footnote: activity == null
                           ? _activityRequirement(heart, _age)
-                          : 'of $activityWeeklyMinimumMinutes moderate-equiv min · ≥1 interval on ${activity.usableDays}/7 days',
+                          : 'Pulse estimate; not confirmed exercise · of $activityWeeklyMinimumMinutes moderate-equiv min',
                       color: AppColors.orange,
                       onTap: () => context.go('/fitness'),
                     ),
@@ -607,7 +607,7 @@ class _MetricTile extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           footnote,
-          maxLines: 2,
+          maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: AppType.caption.copyWith(fontSize: 11, height: 1.3),
         ),

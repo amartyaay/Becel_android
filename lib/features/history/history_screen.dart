@@ -405,9 +405,7 @@ class _RecoveryBars extends StatelessWidget {
   Color _barColor(RecoveryHistoryPoint point, bool selected) {
     final estimate = point.readiness?.estimate;
     if (estimate == null) {
-      return point.session == null
-          ? AppColors.border
-          : AppColors.orange.withValues(alpha: selected ? 1 : 0.55);
+      return AppColors.border.withValues(alpha: selected ? 1 : 0.55);
     }
     if (point.readiness?.limitedSamples == true) {
       return AppColors.yellow.withValues(alpha: selected ? 1 : 0.62);

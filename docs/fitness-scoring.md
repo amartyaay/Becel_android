@@ -48,8 +48,15 @@ The adult aerobic guideline is at least 150 minutes of moderate activity, 75 min
 
 ```text
 moderate_equivalent_minutes = moderate_minutes + 2 * vigorous_minutes
-progress = min(moderate_equivalent_minutes / 150, 1) * 100
+displayed_minutes = floor(moderate_equivalent_minutes)
+progress_percent = floor(min(displayed_minutes / 150, 1) * 100)
+minutes_remaining = max(150 - displayed_minutes, 0)
 ```
+
+The Today, Vitals, and Activity screens all use this same whole-minute display
+rule. The minimum is reached at 150 displayed minutes; before that, progress
+cannot show 100%. The daily chart leaves dates with no usable heart-rate
+interval blank and labels the missing coverage separately from a measured zero.
 
 For adjacent Fitbit Air heart-rate samples no more than 120 seconds apart, Becel classifies the interval using midpoint heart rate and heart-rate reserve (HRR). Multiple valid values with the same timestamp are coalesced to their median BPM before intervals are built:
 
@@ -62,7 +69,7 @@ The bands are below 30% HRR, 30-39%, 40-59% (moderate), 60-89% (vigorous), and 9
 
 This estimate requires age 18-100 and a valid resting-HR record from the previous 36 hours. The latest such resting-HR value is applied to all seven dates. Becel shows its value and timestamp alongside the estimate because it can be stale for much of the week. Heart-rate samples outside 30-240 bpm are ignored. Weekly sample processing and zone calculation happen on Android; Flutter receives the resulting zone totals, ranges, progress, input values, and number of local dates with usable intervals, not the raw weekly heart-rate series.
 
-Coverage means **at least one usable interval on that date**, not full-day wear time. Missing wear time and gaps over two minutes are not counted and can lower the total. A raised pulse does not confirm exercise. Heart-rate estimates can miss resistance training and activity with atypical heart responses, including effects from medication, illness, or heat. The estimate does not account for strength-training days, perceived exertion, training phase, or workout intent. Becel calls this **Weekly activity**, not strain or training readiness.
+Coverage means **at least one usable interval on that date**, not full-day wear time. Missing wear time and gaps over two minutes are not counted and can lower the total. A raised pulse does not confirm exercise. Heart-rate estimates can miss resistance training and activity with atypical heart responses, including effects from medication, illness, or heat. The estimate does not account for strength-training days, perceived exertion, training phase, or workout intent. Values in the component breakdown are rounded for display; the displayed equation is therefore approximate. Becel calls this **Weekly activity**, not strain or training readiness.
 
 ## References
 

@@ -279,6 +279,9 @@ class _SleepScreenState extends State<SleepScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: SurfaceCard(
+                      key: ValueKey(
+                        'sleep-session-${night.end.toIso8601String()}',
+                      ),
                       padding: const EdgeInsets.all(14),
                       child: Row(
                         children: [

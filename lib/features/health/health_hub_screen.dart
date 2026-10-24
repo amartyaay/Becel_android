@@ -211,7 +211,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 unit: activity == null ? '' : ' min',
                 note: activity == null
                     ? _activityNote(heart, _age)
-                    : 'of $activityWeeklyMinimumMinutes moderate-equivalent min · ≥1 interval on ${activity.usableDays}/7 days',
+                    : 'Pulse estimate; not confirmed exercise · of $activityWeeklyMinimumMinutes moderate-equiv min',
                 onTap: () => context.go('/fitness'),
               ),
               const SizedBox(height: 20),
@@ -369,7 +369,7 @@ class _PerformanceCard extends StatelessWidget {
             children: [
               Text(title, style: AppType.rowTitle),
               const SizedBox(height: 3),
-              Text(note, maxLines: 2, style: AppType.caption),
+              Text(note, maxLines: 3, style: AppType.caption),
             ],
           ),
         ),
