@@ -161,18 +161,18 @@ void main() {
     final below = _activityEstimate(149.5);
     expect(below.displayedEquivalentMinutes, 149);
     expect(below.progressPercent, 99);
-    expect(below.minutesRemaining, 1);
-    expect(below.minutesAboveMinimum, 0);
+    expect(below.minutesToAerobicReference, 1);
+    expect(below.minutesAboveAerobicReference, 0);
 
     final justOver = _activityEstimate(150.5);
     expect(justOver.displayedEquivalentMinutes, 150);
     expect(justOver.progressPercent, 100);
-    expect(justOver.minutesRemaining, 0);
-    expect(justOver.minutesAboveMinimum, 0);
+    expect(justOver.minutesToAerobicReference, 0);
+    expect(justOver.minutesAboveAerobicReference, 0);
 
     final clearlyOver = _activityEstimate(151.5);
     expect(clearlyOver.displayedEquivalentMinutes, 151);
-    expect(clearlyOver.minutesAboveMinimum, 1);
+    expect(clearlyOver.minutesAboveAerobicReference, 1);
   });
 }
 

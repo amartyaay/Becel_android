@@ -204,6 +204,11 @@ class _HeartScreenState extends State<HeartScreen> {
                   caption: '7-DAY HR RESERVE',
                 ),
                 const SizedBox(height: 10),
+                const Text(
+                  'Bands are inclusive at the lower bound and exclusive at the upper bound.',
+                  style: AppType.caption,
+                ),
+                const SizedBox(height: 7),
                 SurfaceCard(
                   child: activity == null
                       ? Text(
@@ -223,7 +228,7 @@ class _HeartScreenState extends State<HeartScreen> {
                                   'Vigorous',
                                   'Near max',
                                 ][index],
-                                bpmRange: activity.zoneRanges[index],
+                                rangeLabel: activity.zoneRanges[index],
                                 minutes: zoneMinutes[index].round(),
                                 fraction: zoneTotal == 0
                                     ? 0

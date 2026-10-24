@@ -5,7 +5,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
 internal data class ActivityEstimate(
     val age: Int,
@@ -134,8 +133,6 @@ internal object ActivityEstimator {
 
         val moderate = zones[2]
         val vigorous = zones[3] + zones[4]
-        fun bpmAt(fraction: Double) = "${(resting + reserve * fraction).roundToLong()} bpm"
-
         return ActivityEstimate(
             age = age,
             estimatedMaxHrBpm = maximum.roundToInt(),
@@ -157,11 +154,11 @@ internal object ActivityEstimator {
             dailyCoverageMinutes = dayDates.map { dailyCoverage[it] ?: 0.0 },
             zoneMinutes = zones.toList(),
             zoneRanges = listOf(
-                "<${bpmAt(0.30)}",
-                "${bpmAt(0.30)}-${bpmAt(0.40)}",
-                "${bpmAt(0.40)}-${bpmAt(0.60)}",
-                "${bpmAt(0.60)}-${bpmAt(0.90)}",
-                ">${bpmAt(0.90)}",
+                "<30%",
+                "30–<40%",
+                "40–<60%",
+                "60–<90%",
+                "≥90%",
             ),
         )
     }

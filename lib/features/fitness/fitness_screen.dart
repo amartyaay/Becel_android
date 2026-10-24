@@ -242,12 +242,19 @@ class _ActivityCard extends StatelessWidget {
           children: [
             const Icon(Icons.bolt_rounded, color: AppColors.orange, size: 17),
             const SizedBox(width: 7),
-            Text(
-              '7-DAY ACTIVITY',
-              style: AppType.eyebrow.copyWith(color: AppColors.orange),
+            Expanded(
+              child: Text(
+                '7-DAY ACTIVITY',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.eyebrow.copyWith(
+                  color: AppColors.orange,
+                  letterSpacing: 0.8,
+                ),
+              ),
             ),
-            const Spacer(),
-            Text('HR ESTIMATE', style: AppType.eyebrow),
+            const SizedBox(width: 8),
+            const Text('ESTIMATE', style: AppType.eyebrow),
           ],
         ),
         const SizedBox(height: 17),
@@ -262,32 +269,36 @@ class _ActivityCard extends StatelessWidget {
               padding: EdgeInsets.only(left: 5, bottom: 7),
               child: Text('MIN', style: AppType.unit),
             ),
-            const Spacer(),
-            Text(
-              '$activityWeeklyMinimumMinutes min',
-              style: AppType.numM.copyWith(color: AppColors.orange),
-            ),
           ],
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 2),
+        Text(
+          'of $activityAerobicReferenceMinutes min aerobic reference',
+          style: AppType.caption.copyWith(
+            color: AppColors.orange,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 5),
         const Text(
           'ESTIMATED MODERATE-EQUIVALENT MINUTES',
           style: AppType.caption,
         ),
         const SizedBox(height: 5),
         Text(
-          estimate.minutesRemaining > 0
-              ? '${estimate.minutesRemaining} min to the $activityWeeklyMinimumMinutes-min weekly minimum'
-              : estimate.minutesAboveMinimum == 0
-              ? '$activityWeeklyMinimumMinutes-min weekly minimum reached'
-              : '$activityWeeklyMinimumMinutes-min weekly minimum reached; '
-                    '${estimate.minutesAboveMinimum} min above',
+          estimate.minutesToAerobicReference > 0
+              ? '${estimate.minutesToAerobicReference} min to the aerobic reference'
+              : estimate.minutesAboveAerobicReference == 0
+              ? '150-min aerobic reference reached'
+              : '150-min aerobic reference reached; '
+                    '${estimate.minutesAboveAerobicReference} min above',
           style: AppType.rowTitle.copyWith(color: AppColors.orange),
         ),
         const SizedBox(height: 13),
         Semantics(
           label:
-              '${estimate.progressPercent} percent of the $activityWeeklyMinimumMinutes minute weekly minimum',
+              '${estimate.progressPercent} percent of the $activityAerobicReferenceMinutes minute aerobic reference',
           child: ClipRRect(
             borderRadius: BorderRadius.circular(99),
             child: LinearProgressIndicator(
@@ -306,6 +317,11 @@ class _ActivityCard extends StatelessWidget {
           style: AppType.caption,
         ),
         const SizedBox(height: 5),
+        const Text(
+          'This 150-min aerobic reference excludes the separate 2 strength days in adult guidance. Heart-rate estimates do not confirm exercise.',
+          style: AppType.caption,
+        ),
+        const SizedBox(height: 5),
         if (estimate.dailyDates.length == 7 &&
             estimate.dailyEquivalentMinutes.length == 7 &&
             estimate.dailyCoverageMinutes.length == 7) ...[
@@ -314,6 +330,10 @@ class _ActivityCard extends StatelessWidget {
           const SizedBox(height: 8),
           _ActivityWeek(estimate: estimate),
           const SizedBox(height: 8),
+          const Text(
+            '— = no usable HR interval · coverage is valid HR time',
+            style: AppType.caption,
+          ),
         ],
         Text(
           'At least one usable HR interval on ${estimate.usableDays}/7 local days · gaps and missing wear time can undercount',
@@ -368,7 +388,7 @@ class _ActivityWeek extends StatelessWidget {
                         color: daily[index] == null
                             ? AppColors.textTertiary
                             : AppColors.textPrimary,
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -390,7 +410,7 @@ class _ActivityWeek extends StatelessWidget {
                     Text(
                       formatDayLabel(estimate.dailyDates[index]),
                       style: AppType.caption.copyWith(
-                        fontSize: 9,
+                        fontSize: 11,
                         color: index == 6
                             ? AppColors.textSecondary
                             : AppColors.textTertiary,
@@ -399,13 +419,13 @@ class _ActivityWeek extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       estimate.dailyCoverageMinutes[index] <= 0
-                          ? 'no usable HR'
+                          ? '—'
                           : estimate.dailyCoverageMinutes[index] < 60
                           ? '${estimate.dailyCoverageMinutes[index].round()}m'
                           : '${(estimate.dailyCoverageMinutes[index] / 60).toStringAsFixed(1)}h',
                       maxLines: 1,
                       style: AppType.caption.copyWith(
-                        fontSize: 8,
+                        fontSize: 11,
                         color: AppColors.textTertiary,
                       ),
                     ),

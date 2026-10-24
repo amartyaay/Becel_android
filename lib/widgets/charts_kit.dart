@@ -313,14 +313,14 @@ class ZoneBarRow extends StatelessWidget {
   const ZoneBarRow({
     super.key,
     required this.label,
-    required this.bpmRange,
+    required this.rangeLabel,
     required this.minutes,
     required this.fraction,
     required this.color,
   });
 
   final String label;
-  final String bpmRange;
+  final String rangeLabel;
   final int minutes;
   final double fraction;
   final Color color;
@@ -328,34 +328,36 @@ class ZoneBarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
         children: [
-          SizedBox(
-            width: 34,
-            child: Text(label, style: AppType.caption.copyWith(color: color)),
-          ),
-          SizedBox(width: 74, child: Text(bpmRange, style: AppType.caption)),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Stack(
-                children: [
-                  Container(height: 8, color: AppColors.border),
-                  FractionallySizedBox(
-                    widthFactor: fraction.clamp(0.0, 1.0),
-                    child: Container(height: 8, color: color),
-                  ),
-                ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppType.rowTitle.copyWith(color: color, fontSize: 12),
+                ),
               ),
-            ),
+              Text(rangeLabel, style: AppType.caption),
+              const SizedBox(width: 9),
+              Text(
+                '$minutes min',
+                style: AppType.caption.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
           ),
-          SizedBox(
-            width: 52,
-            child: Text(
-              '${minutes}m',
-              textAlign: TextAlign.right,
-              style: AppType.caption.copyWith(color: AppColors.textSecondary),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Stack(
+              children: [
+                Container(height: 7, color: AppColors.border),
+                FractionallySizedBox(
+                  widthFactor: fraction.clamp(0.0, 1.0),
+                  child: Container(height: 7, color: color),
+                ),
+              ],
             ),
           ),
         ],

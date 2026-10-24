@@ -211,7 +211,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 unit: activity == null ? '' : ' min',
                 note: activity == null
                     ? _activityNote(heart, _age)
-                    : 'Pulse estimate; not confirmed exercise · of $activityWeeklyMinimumMinutes moderate-equiv min',
+                    : 'HR aerobic estimate · strength not counted',
                 onTap: () => context.go('/fitness'),
               ),
               const SizedBox(height: 20),

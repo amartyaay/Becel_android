@@ -277,18 +277,18 @@ class _RecoveryTrendState extends State<_RecoveryTrend> {
           ),
           const SizedBox(height: 3),
           Text(
-            'Fixed 0-100 scale | tap a date to inspect its session and signals',
+            'Fixed 0-100 scale | bars follow dates left to right; select a date below for its signals',
             style: AppType.caption,
           ),
           const SizedBox(height: 12),
           _RecoveryBars(points: points, selectedIndex: selectedIndex),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
             children: [
               _RecoveryLegend(color: AppColors.teal, label: 'Full inputs'),
-              const SizedBox(width: 12),
               _RecoveryLegend(color: AppColors.yellow, label: 'Limited score'),
-              const SizedBox(width: 12),
               _RecoveryLegend(color: AppColors.border, label: 'No score'),
             ],
           ),
@@ -335,60 +335,38 @@ class _RecoveryBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 98,
+    height: 72,
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         for (var index = 0; index < points.length; index++)
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    points[index].readiness?.estimate?.score.toString() ?? '—',
-                    style: AppType.caption.copyWith(
-                      fontSize: 8,
-                      color: index == selectedIndex
-                          ? AppColors.textPrimary
-                          : AppColors.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  SizedBox(
-                    height: 68,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        width: double.infinity,
-                        height: _barHeight(points[index]),
-                        decoration: BoxDecoration(
-                          color: _barColor(
-                            points[index],
-                            index == selectedIndex,
-                          ),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4),
-                          ),
+            child: Semantics(
+              label:
+                  '${points[index].date.month}/${points[index].date.day}/${points[index].date.year}, '
+                  '${points[index].readiness?.estimate?.score ?? 'no recovery score'}',
+              child: ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      key: ValueKey(
+                        index == selectedIndex
+                            ? 'recovery-selected-bar'
+                            : 'recovery-bar-$index',
+                      ),
+                      width: double.infinity,
+                      height: _barHeight(points[index]),
+                      decoration: BoxDecoration(
+                        color: _barColor(points[index], index == selectedIndex),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${points[index].date.day}',
-                    style: AppType.caption.copyWith(
-                      fontSize: 8,
-                      color: index == selectedIndex
-                          ? AppColors.teal
-                          : AppColors.textTertiary,
-                      fontWeight: index == selectedIndex
-                          ? FontWeight.w800
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -398,7 +376,7 @@ class _RecoveryBars extends StatelessWidget {
 
   double _barHeight(RecoveryHistoryPoint point) {
     final score = point.readiness?.estimate?.score;
-    if (score != null) return (68 * score / 100).clamp(2, 68).toDouble();
+    if (score != null) return (60 * score / 100).clamp(2, 60).toDouble();
     return point.session == null ? 2 : 4;
   }
 
@@ -421,25 +399,23 @@ class _RecoveryLegend extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Row(
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 4),
+      Flexible(
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption.copyWith(fontSize: 11),
         ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.caption.copyWith(fontSize: 9),
-          ),
-        ),
-      ],
-    ),
+      ),
+    ],
   );
 }
 

@@ -49,6 +49,10 @@ void main() {
   testWidgets(
     'fitness summaries share threshold numbers and disclose HR estimates',
     (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final activityMinutes = _installReadyDataFixture();
       await _boot(tester);
 
@@ -62,7 +66,12 @@ void main() {
         }
         expect(find.text('$displayed min'), findsOneWidget);
       }
-      expect(find.textContaining('not confirmed exercise'), findsOneWidget);
+      expect(find.textContaining('strength not counted'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Today fits without layout overflow at 360 px.',
+      );
 
       await _openTab(tester, 'Vitals');
       await _changeActivityMinutes(tester, activityMinutes, 149.5);
@@ -76,7 +85,12 @@ void main() {
         }
         expect(find.text('$displayed'), findsOneWidget);
       }
-      expect(find.textContaining('not confirmed exercise'), findsOneWidget);
+      expect(find.textContaining('strength not counted'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Vitals fits without layout overflow at 360 px.',
+      );
 
       await _openTab(tester, 'Activity');
       await _changeActivityMinutes(tester, activityMinutes, 149.5);
@@ -91,10 +105,12 @@ void main() {
         expect(find.text('$displayed'), findsOneWidget);
         expect(
           _semanticsLabels(tester),
-          contains('$progress percent of the 150 minute weekly minimum'),
+          contains('$progress percent of the 150 minute aerobic reference'),
         );
       }
-      expect(find.text('no usable HR'), findsOneWidget);
+      expect(find.textContaining('no usable HR interval'), findsOneWidget);
+      expect(find.text('of 150 min aerobic reference'), findsOneWidget);
+      expect(find.textContaining('strength days'), findsOneWidget);
       final labels = _semanticsLabels(tester);
       expect(
         labels.any((label) => label.contains('no usable heart-rate coverage')),
@@ -106,12 +122,21 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Activity fits without layout overflow at 360 px.',
+      );
     },
   );
 
   testWidgets('Recovery history date chips show selected session details', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     _installReadyDataFixture();
     await _boot(tester);
     await _openTab(tester, 'History');
@@ -122,6 +147,19 @@ void main() {
     await tester.tap(chips.last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+
+    final selectedBar = find.byKey(const ValueKey('recovery-selected-bar'));
+    await tester.ensureVisible(selectedBar);
+    expect(selectedBar, findsOneWidget);
+    final chartBounds = tester.getRect(selectedBar);
+    expect(chartBounds.left, greaterThanOrEqualTo(0));
+    expect(chartBounds.right, lessThanOrEqualTo(360));
+    expect(
+      tester.takeException(),
+      isNull,
+      reason:
+          'Recovery history fits and keeps the selected bar visible at 360 px.',
+    );
 
     final session = find.textContaining('SESSION |');
     await tester.ensureVisible(session);
@@ -500,6 +538,6 @@ Map<String, Object?> _activityEstimateFixture(double equivalentMinutes) {
     ],
     'dailyCoverageMinutes': [0.0, 90.0, 60.0, 120.0, 120.0, 90.0, 60.0],
     'zoneMinutes': [0.0, 0.0, equivalentMinutes, 0.0, 0.0],
-    'zoneRanges': const ['<95', '96-107', '108-131', '132-167', '168+'],
+    'zoneRanges': const ['<30%', '30–<40%', '40–<60%', '60–<90%', '≥90%'],
   };
 }

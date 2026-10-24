@@ -104,6 +104,11 @@ class _StrainScreenState extends State<StrainScreen> {
                 'Recorded heart-rate intervals classified into estimated intensity bands; they do not confirm exercise.',
                 style: AppType.note,
               ),
+              const SizedBox(height: 6),
+              const Text(
+                'HRR bands use (interval midpoint − resting HR) ÷ (predicted max HR − resting HR).',
+                style: AppType.caption,
+              ),
               const SizedBox(height: 16),
               if (_readError != null)
                 Column(
@@ -146,7 +151,7 @@ class _StrainScreenState extends State<StrainScreen> {
                             'Vigorous',
                             'Near max',
                           ][index],
-                          bpmRange: estimate.zoneRanges[index],
+                          rangeLabel: estimate.zoneRanges[index],
                           minutes: zones[index].round(),
                           fraction: zoneTotal == 0
                               ? 0

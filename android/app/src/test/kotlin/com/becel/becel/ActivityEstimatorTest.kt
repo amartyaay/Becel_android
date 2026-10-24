@@ -36,6 +36,14 @@ class ActivityEstimatorTest {
             assertEquals("Zone for $bpm bpm", 1.0, estimate!!.zoneMinutes[expectedZone], 0.0001)
             assertEquals(1.0, estimate.zoneMinutes.sum(), 0.0001)
         }
+
+        val ranges = estimate(
+            heartRates = listOf(now.minusSeconds(60) to 120L, now to 120L),
+        )!!.zoneRanges
+        assertEquals(
+            listOf("<30%", "30–<40%", "40–<60%", "60–<90%", "≥90%"),
+            ranges,
+        )
     }
 
     @Test

@@ -216,7 +216,7 @@ class _TodayScreenState extends State<TodayScreen> {
                           : activity.progressPercent / 100,
                       footnote: activity == null
                           ? _activityRequirement(heart, _age)
-                          : 'Pulse estimate; not confirmed exercise · of $activityWeeklyMinimumMinutes moderate-equiv min',
+                          : 'HR aerobic estimate · strength not counted',
                       color: AppColors.orange,
                       onTap: () => context.go('/fitness'),
                     ),
@@ -340,23 +340,30 @@ class _TopBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'BECEL',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'BECEL',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                ),
               ),
-            ),
-            SizedBox(height: 2),
-            Text('FITNESS COMPANION', style: AppType.eyebrow),
-          ],
+              SizedBox(height: 2),
+              Text(
+                'FITNESS COMPANION',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.eyebrow,
+              ),
+            ],
+          ),
         ),
-        const Spacer(),
+        const SizedBox(width: 8),
         Tooltip(
           message: connected ? 'Fitbit Air data' : 'Connect Fitbit Air data',
           child: InkWell(
@@ -592,7 +599,15 @@ class _MetricTile extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Row(
-          children: [Text(value, style: AppType.numM.copyWith(fontSize: 25))],
+          children: [
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value, style: AppType.numM.copyWith(fontSize: 25)),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 7),
         ClipRRect(

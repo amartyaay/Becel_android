@@ -27,13 +27,15 @@ const recoveryMethod =
 
 const activityMethod =
     'Becel HR estimate: moderate-equivalent minutes from Fitbit Air heart-rate '
-    'samples over the last 7 local days, compared with 150 minutes. Intensity '
+    'samples over the last 7 local days, compared with a 150-minute adult aerobic '
+    'reference. Adult recommendations also include 2 days of muscle strengthening; '
+    'Becel does not track those sessions. Intensity '
     'uses age-predicted maximum heart rate and your latest resting reading '
     '(up to 36 hours old) for all 7 dates. Moderate minutes count once; vigorous '
     'minutes count twice. This estimates intensity from pulse; it does not '
     'confirm exercise. Missing wear time can lower the total.';
 
-const activityWeeklyMinimumMinutes = 150;
+const activityAerobicReferenceMinutes = 150;
 const recoveryBaselineWindowDays = 14;
 const recoveryMinimumBaselineNights = 10;
 
@@ -515,17 +517,17 @@ class ActivityEstimate {
   int get displayedEquivalentMinutes => equivalentMinutes.floor();
 
   int get progressPercent =>
-      (displayedEquivalentMinutes * 100 ~/ activityWeeklyMinimumMinutes)
+      (displayedEquivalentMinutes * 100 ~/ activityAerobicReferenceMinutes)
           .clamp(0, 100)
           .toInt();
 
-  int get minutesRemaining =>
-      displayedEquivalentMinutes < activityWeeklyMinimumMinutes
-      ? activityWeeklyMinimumMinutes - displayedEquivalentMinutes
+  int get minutesToAerobicReference =>
+      displayedEquivalentMinutes < activityAerobicReferenceMinutes
+      ? activityAerobicReferenceMinutes - displayedEquivalentMinutes
       : 0;
 
-  int get minutesAboveMinimum =>
-      displayedEquivalentMinutes > activityWeeklyMinimumMinutes
-      ? displayedEquivalentMinutes - activityWeeklyMinimumMinutes
+  int get minutesAboveAerobicReference =>
+      displayedEquivalentMinutes > activityAerobicReferenceMinutes
+      ? displayedEquivalentMinutes - activityAerobicReferenceMinutes
       : 0;
 }

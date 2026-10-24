@@ -4,7 +4,7 @@ Becel shows three measures with separate inputs and time windows:
 
 1. **Experimental recovery trend**: a 0-100 product heuristic using sleep-duration progress, RMSSD HRV, and resting heart rate against personal history.
 2. **Sleep duration**: recorded asleep time and progress toward a seven-hour adult reference. It is not a sleep-quality score.
-3. **Weekly activity**: heart-rate-estimated moderate-equivalent minutes over the current day and previous six local calendar dates, compared with 150 minutes.
+3. **Weekly aerobic activity estimate**: heart-rate-estimated moderate-equivalent minutes over the current day and previous six local calendar dates, compared with the 150-minute aerobic reference.
 
 The measures are not combined into one health grade. Missing required inputs produce an unavailable state rather than zero. The Recovery number is explicitly an **experimental within-person trend**. It is not a validated measure of readiness, recovery, or performance and should not determine whether someone trains.
 
@@ -44,7 +44,7 @@ WHOOP and Bevel are design references for presenting recovery alongside sleep an
 
 ## Weekly activity estimate
 
-The adult aerobic guideline is at least 150 minutes of moderate activity, 75 minutes of vigorous activity, or an equivalent combination per week ([CDC](https://www.cdc.gov/physical-activity-basics/guidelines/adults.html)). Becel reports moderate-equivalent minutes over the current local date and previous six local dates:
+The adult aerobic guideline is at least 150 minutes of moderate activity, 75 minutes of vigorous activity, or an equivalent combination per week. Adult recommendations also include muscle-strengthening activity on at least two days each week ([CDC](https://www.cdc.gov/physical-activity-basics/guidelines/adults.html)). Becel reports estimated moderate-equivalent aerobic minutes over the current local date and previous six local dates; it does not track strength-training sessions:
 
 ```text
 moderate_equivalent_minutes = moderate_minutes + 2 * vigorous_minutes
@@ -54,8 +54,9 @@ minutes_remaining = max(150 - displayed_minutes, 0)
 ```
 
 The Today, Vitals, and Activity screens all use this same whole-minute display
-rule. The minimum is reached at 150 displayed minutes; before that, progress
-cannot show 100%. The daily chart leaves dates with no usable heart-rate
+rule. The aerobic reference is reached at 150 displayed minutes; before that, progress
+cannot show 100%. This is not a complete weekly activity target because strength
+days are outside this estimate. The daily chart leaves dates with no usable heart-rate
 interval blank and labels the missing coverage separately from a measured zero.
 
 For adjacent Fitbit Air heart-rate samples no more than 120 seconds apart, Becel classifies the interval using midpoint heart rate and heart-rate reserve (HRR). Multiple valid values with the same timestamp are coalesced to their median BPM before intervals are built:
@@ -65,7 +66,7 @@ estimated_max_HR = 208 - 0.7 * age
 HRR = (midpoint_HR - resting_HR) / (estimated_max_HR - resting_HR)
 ```
 
-The bands are below 30% HRR, 30-39%, 40-59% (moderate), 60-89% (vigorous), and 90% or higher. Vigorous and near-maximal time both count as vigorous for the equivalent-minute total. These are commonly used heart-rate-reserve bands ([INTERLIVE review](https://pmc.ncbi.nlm.nih.gov/articles/PMC11946962/)). The maximum-heart-rate equation is a population estimate, not a measured maximum; Tanaka et al. report a population regression and a validation study found approximately 10 bpm standard error in its participants ([Tanaka et al.](https://pubmed.ncbi.nlm.nih.gov/11153730/), [HERITAGE comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC3935487/)).
+The half-open bands are `<30%`, `30–<40%`, `40–<60%` (moderate), `60–<90%` (vigorous), and `≥90%` HRR. Every boundary belongs to the band that starts at that boundary. The app displays these reserve percentages directly rather than rounded BPM cutoffs, which could overlap or misstate a boundary. Vigorous and near-maximal time both count as vigorous for the equivalent-minute total. These are commonly used heart-rate-reserve bands ([INTERLIVE review](https://pmc.ncbi.nlm.nih.gov/articles/PMC11946962/)). The maximum-heart-rate equation is a population estimate, not a measured maximum; Tanaka et al. report a population regression and a validation study found approximately 10 bpm standard error in its participants ([Tanaka et al.](https://pubmed.ncbi.nlm.nih.gov/11153730/), [HERITAGE comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC3935487/)).
 
 This estimate requires age 18-100 and a valid resting-HR record from the previous 36 hours. The latest such resting-HR value is applied to all seven dates. Becel shows its value and timestamp alongside the estimate because it can be stale for much of the week. Heart-rate samples outside 30-240 bpm are ignored. Weekly sample processing and zone calculation happen on Android; Flutter receives the resulting zone totals, ranges, progress, input values, and number of local dates with usable intervals, not the raw weekly heart-rate series.
 
