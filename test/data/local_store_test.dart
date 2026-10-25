@@ -1,6 +1,5 @@
 import 'package:becel/data/local_store.dart';
 import 'package:becel/domain/profile.dart';
-import 'package:becel/domain/strength.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,11 +28,8 @@ void main() {
           stored = null;
           cleared = true;
           return true;
-        case 'shareText':
-        case 'exportCsv':
-          return true;
         default:
-          return null;
+          return true;
       }
     });
   });
@@ -45,110 +41,45 @@ void main() {
     LocalStore.instance.resetForTest();
   });
 
-  test('saves one check-in per local date and reloads it', () async {
-    final store = LocalStore.instance;
-    final day = DateTime(2026, 3, 10, 8);
-
-    expect(
-      await store.saveCheckIn(day: day, tags: {'sore'}, note: '  heavy legs  '),
-      isTrue,
-    );
-    expect(store.log.checkInFor(day)?.tags, {'sore'});
-    expect(store.log.checkInFor(day)?.note, 'heavy legs');
-    expect(stored, contains('"date":"2026-03-10"'));
-    expect(stored, contains('"tags":["sore"]'));
-
-    store.resetForTest();
-    await store.ensureLoaded();
-
-    expect(store.log.checkInFor(day)?.tags, {'sore'});
-    expect(store.log.checkInFor(day)?.note, 'heavy legs');
-  });
-
-  test('replaces an existing check-in for the same day', () async {
-    final store = LocalStore.instance;
-    final day = DateTime(2026, 3, 10);
-
-    await store.saveCheckIn(day: day, tags: {'fresh'});
-    await store.saveCheckIn(day: day, tags: {'stressed'}, note: 'deadline');
-
-    expect(store.log.checkIns.length, 1);
-    expect(store.log.checkInFor(day)?.tags, {'stressed'});
-    expect(store.log.checkInFor(day)?.note, 'deadline');
-  });
-
-  test('manual strength days are distinct, sorted, and clearable', () async {
-    final store = LocalStore.instance;
-
-    await store.addStrengthDay(DateTime(2026, 3, 10, 18));
-    await store.addStrengthDay(DateTime(2026, 3, 10, 7));
-    await store.addStrengthDay(DateTime(2026, 3, 8));
-
-    expect(store.log.strengthDates, hasLength(2));
-    expect(store.log.strengthDates.map(localDateKey).toSet(), {
-      '2026-03-08',
-      '2026-03-10',
-    });
-
-    await store.clearLocalData();
-
-    expect(store.log.checkIns, isEmpty);
-    expect(store.log.strengthDays, isEmpty);
-    expect(cleared, isTrue);
-  });
-
-  test('saves and reloads the body profile with local context', () async {
+  test('stores only the profile and reloads it', () async {
     final store = LocalStore.instance;
     const profile = BodyProfile(
       age: 35,
       sex: BiologicalSex.female,
-      heightCm: 168,
-      weightKg: 64,
+      maxHrOverride: 188,
+      sleepNeedMinutes: 510,
     );
 
     expect(await store.saveProfile(profile), isTrue);
-    expect(store.log.profile?.age, 35);
-    expect(store.log.profile?.sex, BiologicalSex.female);
     expect(stored, contains('"profile"'));
+    expect(stored, isNot(contains('checkIns')));
+    expect(stored, isNot(contains('strength')));
 
     store.resetForTest();
     await store.ensureLoaded();
 
-    expect(store.log.profile?.heightCm, 168);
-    expect(store.log.profile?.weightKg, 64);
-    expect(store.log.profile?.hasEnergyInputs, isTrue);
+    expect(store.profile?.age, 35);
+    expect(store.profile?.sex, BiologicalSex.female);
+    expect(store.profile?.maxHrOverride, 188);
+    expect(store.profile?.sleepNeedMinutes, 510);
   });
-  test('strength sessions and onset corrections round-trip', () async {
+
+  test('ignores legacy logs left by older versions', () async {
+    stored =
+        '{"version":2,"checkIns":[{"date":"2026-03-10","tags":["sore"]}],'
+        '"strengthSessions":[],"profile":{"age":40,"sex":"male"}}';
+    await LocalStore.instance.ensureLoaded();
+    expect(LocalStore.instance.profile?.age, 40);
+  });
+
+  test('reset clears the profile', () async {
     final store = LocalStore.instance;
-    final session = StrengthSession(
-      id: 's1',
-      start: DateTime(2026, 3, 10, 7, 30),
-      durationMinutes: 55,
-      sessionRpe: 8,
-      exercises: const [
-        ExerciseEntry(
-          exerciseId: 'back_squat',
-          sets: [StrengthSet(reps: 5, loadKg: 140, rpe: 8)],
-        ),
-      ],
+    await store.saveProfile(
+      const BodyProfile(age: 30, sex: BiologicalSex.male),
     );
-    await store.saveStrengthSession(session);
-    await store.setOnsetOverride('2026-03-10', DateTime(2026, 3, 10, 0, 40));
-
-    store.resetForTest();
-    await store.ensureLoaded();
-
-    final loaded = store.log.strengthSessions.single;
-    expect(loaded.srpeLoad, 440);
-    expect(loaded.exercises.single.sets.single.loadKg, 140);
-    expect(
-      store.log.onsetOverrides['2026-03-10'],
-      DateTime(2026, 3, 10, 0, 40),
-    );
-    expect(store.log.strengthDates, hasLength(1));
-
-    await store.deleteStrengthSession('s1');
-    expect(store.log.strengthSessions, isEmpty);
+    await store.clearLocalData();
+    expect(store.profile, isNull);
+    expect(cleared, isTrue);
   });
 
   test('falls back to session-only data when the channel is missing', () async {
@@ -158,12 +89,11 @@ void main() {
     final store = LocalStore.instance;
 
     await store.ensureLoaded();
-    final saved = await store.saveCheckIn(
-      day: DateTime(2026, 3, 10),
-      tags: {'normal'},
+    final saved = await store.saveProfile(
+      const BodyProfile(age: 30, sex: BiologicalSex.male),
     );
 
     expect(saved, isTrue);
-    expect(store.log.checkInFor(DateTime(2026, 3, 10))?.tags, {'normal'});
+    expect(store.profile?.age, 30);
   });
 }

@@ -58,6 +58,10 @@ class EnergyScreen extends StatelessWidget {
                   else ...[
                     _TodayCard(energy: energy),
                     const SizedBox(height: 12),
+                    _IntakeCard(snapshot: snapshot),
+                    const SizedBox(height: 12),
+                    _BalanceWeekCard(snapshot: snapshot),
+                    const SizedBox(height: 12),
                     _DeviceCard(energy: energy),
                     const SizedBox(height: 12),
                     _StepsCard(today: energy.today),
@@ -168,6 +172,274 @@ class _TodayCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Food logged in Google Health or any nutrition app (read-only).
+class _IntakeCard extends StatelessWidget {
+  const _IntakeCard({required this.snapshot});
+
+  final HealthSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = snapshot.activity;
+    final kcal = a?.intakeKcalToday;
+    final weight = snapshot.profile?.weightKg;
+    final macros = [
+      ('Protein', a?.proteinGToday, 4.0, AppColors.intake),
+      ('Carbs', a?.carbsGToday, 4.0, AppColors.steps),
+      ('Fat', a?.fatGToday, 9.0, AppColors.burned),
+    ];
+    final macroKcal = macros.fold<double>(0, (s, m) => s + (m.$2 ?? 0) * m.$3);
+    return PanelCard(
+      title: 'Eaten today',
+      icon: Icons.restaurant_rounded,
+      accent: AppColors.intake,
+      child: kcal == null
+          ? Text(
+              a?.canReadNutrition == true
+                  ? 'Nothing logged yet today. Food you log in Google Health, '
+                        'Fitbit, or a nutrition app that shares with Health '
+                        'Connect shows up here.'
+                  : 'Allow nutrition access in Data sources to see calories '
+                        'eaten and macros.',
+              style: AppType.note,
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(formatNumber(kcal.round()), style: AppType.numXl),
+                    const SizedBox(width: 6),
+                    const Text('kcal', style: AppType.unit),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${a!.mealsToday} entr${a.mealsToday == 1 ? 'y' : 'ies'}'
+                        '${a.intakeSources.isEmpty ? '' : ' · ${a.intakeSources.join(', ')}'}',
+                        textAlign: TextAlign.right,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.caption,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (macroKcal > 0) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      height: 10,
+                      child: Row(
+                        children: [
+                          for (final m in macros)
+                            if ((m.$2 ?? 0) > 0)
+                              Expanded(
+                                flex: ((m.$2! * m.$3) / macroKcal * 1000)
+                                    .round()
+                                    .clamp(1, 1000),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 2),
+                                  child: Container(color: m.$4),
+                                ),
+                              ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Row(
+                  children: [
+                    for (final m in macros)
+                      Expanded(
+                        child: StatBlock(
+                          label: m.$1,
+                          value: m.$2 == null ? '—' : m.$2!.round().toString(),
+                          unit: 'g',
+                          delta:
+                              m.$1 == 'Protein' &&
+                                  weight != null &&
+                                  m.$2 != null
+                              ? '${(m.$2! / weight).toStringAsFixed(1)} g/kg'
+                              : macroKcal > 0 && m.$2 != null
+                              ? '${((m.$2! * m.$3) / macroKcal * 100).round()}% kcal'
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+                if (weight != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Protein target for training: ${(weight * 1.6).round()}–'
+                    '${(weight * 2.2).round()} g (1.6–2.2 g/kg).',
+                    style: AppType.caption.copyWith(fontSize: 11.5),
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+/// Seven days of calories eaten against Becel's calories burned.
+class _BalanceWeekCard extends StatelessWidget {
+  const _BalanceWeekCard({required this.snapshot});
+
+  final HealthSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = snapshot.activity;
+    final days = snapshot.performance.energyDays;
+    if (days.isEmpty) return const SizedBox.shrink();
+    final intakeByDate = <String, double?>{
+      for (var i = 0; i < (a?.intakeDates.length ?? 0); i++)
+        a!.intakeDates[i]: i < a.intakeKcalByDay.length
+            ? a.intakeKcalByDay[i]
+            : null,
+    };
+    String key(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final rows = [
+      for (final d in days)
+        (
+          date: d.date,
+          burned: d.complete
+              ? d.totalKcal
+              : d.projectedTotalKcal(snapshot.performance.energy?.rmr ?? 0),
+          eaten: intakeByDate[key(d.date)],
+        ),
+    ];
+    final max = rows.fold<double>(
+      1,
+      (m, r) => [m, r.burned, r.eaten ?? 0].reduce((x, y) => x > y ? x : y),
+    );
+    final logged = rows.where((r) => r.eaten != null && r.eaten! > 0).toList();
+    final avgBalance = logged.isEmpty
+        ? null
+        : logged.fold<double>(0, (s, r) => s + (r.eaten! - r.burned)) /
+              logged.length;
+    return PanelCard(
+      title: 'Eaten vs burned · 7 days',
+      icon: Icons.balance_rounded,
+      accent: AppColors.intake,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _Legend(color: AppColors.burned, label: 'Burned'),
+              const SizedBox(width: 14),
+              _Legend(color: AppColors.intake, label: 'Eaten'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 96,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final r in rows)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              height: 96 * (r.burned / max).clamp(0.02, 1.0),
+                              decoration: const BoxDecoration(
+                                color: AppColors.burned,
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Container(
+                              height: r.eaten == null
+                                  ? 3
+                                  : 96 * (r.eaten! / max).clamp(0.02, 1.0),
+                              decoration: BoxDecoration(
+                                color: r.eaten == null
+                                    ? AppColors.border
+                                    : AppColors.intake,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final r in rows)
+                Expanded(
+                  child: Text(
+                    formatDayShort(r.date)[0],
+                    textAlign: TextAlign.center,
+                    style: AppType.caption.copyWith(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            avgBalance == null
+                ? 'Log meals in Google Health to see your average balance.'
+                : 'Average ${avgBalance < 0 ? 'deficit' : 'surplus'} '
+                      '${formatNumber(avgBalance.abs().round())} kcal/day on '
+                      '${logged.length} logged day${logged.length == 1 ? '' : 's'}. '
+                      '~7,700 kcal ≈ 1 kg of body mass.',
+            style: AppType.caption,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: AppType.caption.copyWith(color: AppColors.textSecondary),
+      ),
+    ],
+  );
 }
 
 class _DeviceCard extends StatelessWidget {

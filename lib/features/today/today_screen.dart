@@ -1,19 +1,25 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_store.dart';
-import '../../data/local_store.dart';
 import '../../domain/coaching.dart';
-import '../../domain/estimates.dart';
 import '../../domain/performance.dart';
 import '../../domain/strain.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
-import '../activity/strength_log_sheet.dart';
 import '../shell/shell_screen.dart';
-import 'check_in_sheet.dart';
+
+/// Daily step reference. 8–10k/day is where mortality benefit plateaus for
+/// adults under 60 (Paluch et al., Lancet Public Health 2022).
+const stepGoal = 10000;
+
+/// Protein reference for people who train: 1.6 g/kg/day captures most of
+/// the hypertrophy benefit (Morton et al., BJSM 2018).
+const proteinPerKg = 1.6;
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
@@ -24,106 +30,96 @@ class TodayScreen extends StatefulWidget {
 
 class _TodayScreenState extends State<TodayScreen> {
   final _health = HealthStore.instance;
-  final _local = LocalStore.instance;
-  late final Listenable _listenable = Listenable.merge([_health, _local]);
 
   @override
   void initState() {
     super.initState();
     _health.ensureLoaded();
-    _local.ensureLoaded();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: ListenableBuilder(
-          listenable: _listenable,
-          builder: (context, _) {
-            final snapshot = _health.snapshot;
-            final now = DateTime.now();
-            final checkIn = _local.log.checkInFor(now);
-            return RefreshIndicator(
-              onRefresh: () => _health.refresh(force: true),
-              color: AppColors.green,
-              backgroundColor: AppColors.surfaceHigh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
-                children: [
-                  _TopBar(
+      body: ListenableBuilder(
+        listenable: _health,
+        builder: (context, _) {
+          final snapshot = _health.snapshot;
+          final now = DateTime.now();
+          return RefreshIndicator(
+            onRefresh: () => _health.refresh(force: true),
+            color: AppColors.accent,
+            backgroundColor: AppColors.surfaceHigh,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _Header(
                     now: now,
                     loading: _health.loading,
                     connected: snapshot?.airMatched ?? false,
+                    refreshedAt: snapshot?.loadedAt,
                     onData: () => context.push('/data'),
-                    onSettings: () => openSettings(context),
                   ),
-                  const SizedBox(height: 16),
-                  if (snapshot == null)
-                    _InitialState(
-                      loading: _health.loading,
-                      error: _health.error,
-                      onRetry: () => _health.refresh(force: true),
-                      onData: () => context.push('/data'),
-                    )
-                  else if (!snapshot.hasAccess)
-                    StateCard(
-                      icon: Icons.link_rounded,
-                      color: AppColors.yellow,
-                      title: snapshot.isAvailable
-                          ? 'Connect your health data'
-                          : 'Health Connect is not available',
-                      body: snapshot.isAvailable
-                          ? 'Allow Fitbit Air records in Health Connect so '
-                                'Becel can calculate recovery, strain, and sleep.'
-                          : 'This phone does not expose Health Connect. '
-                                'Becel needs it to read Fitbit Air records.',
-                      actionLabel: 'Open data sources',
-                      onAction: () => context.push('/data'),
-                    )
-                  else if (snapshot.error != null && !snapshot.hasAnyRecord)
-                    StateCard(
-                      icon: Icons.error_outline_rounded,
-                      color: AppColors.red,
-                      title: 'Health data could not load',
-                      body: snapshot.error!,
-                      actionLabel: 'Retry',
-                      onAction: () => _health.refresh(force: true),
-                    )
-                  else if (!snapshot.hasAnyRecord)
-                    StateCard(
-                      icon: Icons.sensors_off_rounded,
-                      color: AppColors.yellow,
-                      title: 'No Fitbit Air records yet',
-                      body:
-                          'Health Connect is connected, but no records have '
-                          'arrived. Check that the Fitbit app is syncing and '
-                          'sharing with Health Connect.',
-                      actionLabel: 'Open data sources',
-                      onAction: () => context.push('/data'),
-                    )
-                  else
-                    ..._dashboard(context, snapshot, checkIn),
-                ],
-              ),
-            );
-          },
-        ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, navClearance),
+                  sliver: SliverList.list(
+                    children: snapshot == null
+                        ? [
+                            _InitialState(
+                              loading: _health.loading,
+                              error: _health.error,
+                              onRetry: () => _health.refresh(force: true),
+                              onData: () => context.push('/data'),
+                            ),
+                          ]
+                        : _content(context, snapshot),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  List<Widget> _dashboard(
-    BuildContext context,
-    HealthSnapshot snapshot,
-    CheckIn? checkIn,
-  ) {
+  List<Widget> _content(BuildContext context, HealthSnapshot snapshot) {
+    if (!snapshot.hasAccess) {
+      return [
+        StateCard(
+          icon: Icons.link_rounded,
+          color: AppColors.accent,
+          title: snapshot.isAvailable
+              ? 'Connect your health data'
+              : 'Health Connect is not available',
+          body: snapshot.isAvailable
+              ? 'Allow Fitbit Air and Google Health records in Health Connect. '
+                    'Becel only reads; it never writes.'
+              : 'This phone does not expose Health Connect.',
+          actionLabel: 'Open data sources',
+          onAction: () => context.push('/data'),
+        ),
+      ];
+    }
+    if (!snapshot.hasAnyRecord) {
+      return [
+        StateCard(
+          icon: Icons.sensors_off_rounded,
+          color: AppColors.yellow,
+          title: 'No Fitbit Air records yet',
+          body:
+              snapshot.error ??
+              'Health Connect is connected, but nothing has synced. Open the '
+                  'Fitbit / Google Health app to sync.',
+          actionLabel: 'Open data sources',
+          onAction: () => context.push('/data'),
+        ),
+      ];
+    }
     final p = snapshot.performance;
-    final needsProfile = snapshot.profile?.hasEnergyInputs != true;
     return [
-      _RingsHero(
+      _RecoveryHero(
         performance: p,
         onRecovery: () => context.push('/recovery'),
         onStrain: () => context.go('/training'),
@@ -134,146 +130,157 @@ class _TodayScreenState extends State<TodayScreen> {
         _AlertCard(alert: p.alert!),
       ],
       const SizedBox(height: 12),
-      _PlanCard(
-        plan: p.plan,
-        strainNow: p.today?.strain,
-        onLog: () => showStrengthLogSheet(context),
+      _FuelCard(snapshot: snapshot, onTap: () => context.push('/energy')),
+      const SizedBox(height: 12),
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _StepsTile(snapshot: snapshot)),
+            const SizedBox(width: 12),
+            Expanded(child: _ProteinTile(snapshot: snapshot)),
+          ],
+        ),
       ),
       const SizedBox(height: 12),
-      _CheckInCard(checkIn: checkIn, onTap: () => showCheckInSheet(context)),
-      if (needsProfile) ...[
+      _PlanCard(plan: p.plan, strainNow: p.today?.strain),
+      const SizedBox(height: 12),
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _LoadTile(
+                performance: p,
+                onTap: () => context.go('/training'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _VitalsTile(
+                snapshot: snapshot,
+                onTap: () => context.push('/vitals'),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (snapshot.profile?.hasEnergyInputs != true) ...[
         const SizedBox(height: 12),
         StateCard(
           icon: Icons.person_outline_rounded,
-          color: AppColors.teal,
-          title: 'Finish your profile',
+          color: AppColors.accent,
+          title: 'Add age and sex',
           body:
-              'Age, sex, height, and weight unlock calories, strain, and '
-              'personal heart-rate zones. Body fat % makes calories more '
-              'accurate for muscular builds.',
-          actionLabel: 'Add profile',
+              'Health Connect has no age or sex. Add them once in Settings to '
+              'unlock calories burned and personal zones. Weight and height '
+              'are read from Google Health when recorded there.',
+          actionLabel: 'Open settings',
           onAction: () => openSettings(context),
         ),
       ],
-      const SizedBox(height: 12),
-      _EnergyCard(performance: p, onTap: () => context.push('/energy')),
-      const SizedBox(height: 12),
-      _LoadCard(performance: p, onTap: () => context.go('/training')),
-      const SizedBox(height: 12),
-      _VitalsCard(snapshot: snapshot, onTap: () => context.push('/vitals')),
       if (snapshot.error != null) ...[
         const SizedBox(height: 12),
         InfoNote(
-          text: 'Some data could not refresh: ${snapshot.error}',
-          textColor: AppColors.yellow,
+          text: 'Some data could not refresh. Pull down to retry.',
+          color: AppColors.yellow,
+          icon: Icons.sync_problem_rounded,
         ),
       ],
-      const SizedBox(height: 16),
-      SourceLine(
-        text:
-            'Fitbit Air via Health Connect · calculated on this phone · '
-            'refreshed ${formatAgo(snapshot.loadedAt)}',
-        icon: Icons.sync_rounded,
-      ),
     ];
   }
 }
 
-class _TopBar extends StatelessWidget {
-  const _TopBar({
+class _Header extends StatelessWidget {
+  const _Header({
     required this.now,
     required this.loading,
     required this.connected,
+    required this.refreshedAt,
     required this.onData,
-    required this.onSettings,
   });
 
   final DateTime now;
   final bool loading;
   final bool connected;
+  final DateTime? refreshedAt;
   final VoidCallback onData;
-  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
-    final greeting = now.hour < 12
-        ? 'Good morning'
-        : now.hour < 18
-        ? 'Good afternoon'
-        : 'Good evening';
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                formatShortDate(now).toUpperCase(),
-                style: AppType.eyebrow.copyWith(color: AppColors.teal),
-              ),
-              const SizedBox(height: 4),
-              Text(greeting, style: AppType.screenTitle),
-            ],
+    final top = MediaQuery.paddingOf(context).top;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, top + 12, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(formatShortDate(now), style: AppType.eyebrow),
+                const SizedBox(height: 4),
+                const Text('Today', style: AppType.screenTitle),
+              ],
+            ),
           ),
-        ),
-        _RoundButton(
-          icon: loading
-              ? Icons.sync_rounded
-              : connected
-              ? Icons.sensors_rounded
-              : Icons.sensors_off_rounded,
-          color: connected ? AppColors.green : AppColors.yellow,
-          tooltip: connected ? 'Data sources connected' : 'Set up data sources',
-          onTap: onData,
-        ),
-        const SizedBox(width: 8),
-        _RoundButton(
-          icon: Icons.tune_rounded,
-          tooltip: 'Settings',
-          onTap: onSettings,
-        ),
-      ],
+          Material(
+            color: AppColors.surfaceHigh,
+            shape: const StadiumBorder(
+              side: BorderSide(color: AppColors.hairline),
+            ),
+            child: InkWell(
+              onTap: onData,
+              customBorder: const StadiumBorder(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (loading)
+                      const SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 1.6),
+                      )
+                    else
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: connected
+                              ? AppColors.bandGreen
+                              : AppColors.bandYellow,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      loading
+                          ? 'Syncing'
+                          : refreshedAt == null
+                          ? 'Not synced'
+                          : formatAgo(refreshedAt!),
+                      style: AppType.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color = AppColors.textSecondary,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: Material(
-      color: AppColors.surfaceHigh,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Icon(icon, size: 20, color: color),
-        ),
-      ),
-    ),
-  );
-}
-
-class _RingsHero extends StatelessWidget {
-  const _RingsHero({
+class _RecoveryHero extends StatelessWidget {
+  const _RecoveryHero({
     required this.performance,
     required this.onRecovery,
     required this.onStrain,
@@ -290,175 +297,179 @@ class _RingsHero extends StatelessWidget {
     final p = performance;
     final recovery = p.recoveryEstimate;
     final score = recovery?.score;
+    final color = recoveryColor(score);
     final strain = p.today?.strain;
     final target = p.plan.target;
     final sleepPct = p.sleep.performancePercent;
     final waiting = p.recovery.nightsUntilScore;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.border),
-        gradient: RadialGradient(
-          center: const Alignment(0, -1.2),
-          radius: 1.4,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.hairline),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: [
-            recoveryColor(score).withValues(alpha: 0.13),
+            Color.alphaBlend(
+              color.withValues(alpha: 0.10),
+              AppColors.surfaceHigh,
+            ),
             AppColors.surface,
           ],
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final ring = ((constraints.maxWidth - 12) / 3 - 8).clamp(80.0, 108.0);
-          return _rings(
-            ring,
-            score,
-            strain,
-            target,
-            sleepPct,
-            waiting,
-            recovery,
-          );
-        },
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onRecovery,
+            customBorder: const CircleBorder(),
+            child: Glow(
+              color: color,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: MetricRing(
+                  fraction: score == null ? null : score / 100,
+                  color: color,
+                  value: score == null ? '—' : '$score',
+                  unit: score == null ? null : '%',
+                  label: 'Recovery',
+                  size: 176,
+                  stroke: 14,
+                  semanticsLabel: score == null
+                      ? 'Recovery calibrating'
+                      : 'Recovery $score percent, ${recoveryWord(score)}',
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Tag(
+            score == null
+                ? waiting > 0
+                      ? 'Calibrating · $waiting more night${waiting == 1 ? '' : 's'}'
+                      : 'Needs last night’s sleep'
+                : recovery!.provisional
+                ? '${recoveryWord(score)} · provisional'
+                : recoveryWord(score),
+            color: color,
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniMetric(
+                  color: AppColors.strain,
+                  label: 'Strain',
+                  value: strain == null ? '—' : strain.toStringAsFixed(1),
+                  suffix: '/21',
+                  fraction: strain == null ? null : strain / strainMax,
+                  detail: 'target ${target.low.round()}–${target.high.round()}',
+                  onTap: onStrain,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MiniMetric(
+                  color: AppColors.sleep,
+                  label: 'Sleep',
+                  value: sleepPct == null ? '—' : '$sleepPct',
+                  suffix: '%',
+                  fraction: sleepPct == null ? null : sleepPct / 100,
+                  detail: p.sleep.lastNight == null
+                      ? 'no main sleep'
+                      : '${formatDurationMinutes(p.sleep.lastNight!.asleepMinutes)} of '
+                            '${formatDurationMinutes(p.sleep.baselineNeed + p.sleep.debtNeed)}',
+                  onTap: onSleep,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
-
-  Widget _rings(
-    double ring,
-    int? score,
-    double? strain,
-    StrainTarget target,
-    int? sleepPct,
-    int waiting,
-    RecoveryEstimate? recovery,
-  ) {
-    final p = performance;
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _RingButton(
-              onTap: onRecovery,
-              child: MetricRing(
-                size: ring,
-                fraction: score == null ? null : score / 100,
-                color: recoveryColor(score),
-                value: score == null ? '—' : '$score',
-                unit: score == null ? null : '%',
-                label: 'RECOVERY',
-                semanticsLabel: score == null
-                    ? 'Recovery calibrating'
-                    : 'Recovery $score percent, ${recoveryWord(score)}',
-              ),
-            ),
-            _RingButton(
-              onTap: onStrain,
-              child: MetricRing(
-                size: ring,
-                fraction: strain == null ? null : strain / strainMax,
-                color: AppColors.strain,
-                value: strain == null ? '—' : strain.toStringAsFixed(1),
-                label: 'STRAIN',
-                bandFrom: target.low / strainMax,
-                bandTo: target.high / strainMax,
-                semanticsLabel: strain == null
-                    ? 'Strain unavailable'
-                    : 'Strain ${strain.toStringAsFixed(1)} of 21, target '
-                          '${target.low.round()} to ${target.high.round()}',
-              ),
-            ),
-            _RingButton(
-              onTap: onSleep,
-              child: MetricRing(
-                size: ring,
-                fraction: sleepPct == null ? null : sleepPct / 100,
-                color: AppColors.sleep,
-                value: sleepPct == null ? '—' : '$sleepPct',
-                unit: sleepPct == null ? null : '%',
-                label: 'SLEEP',
-                semanticsLabel: sleepPct == null
-                    ? 'Sleep performance unavailable'
-                    : 'Sleep performance $sleepPct percent of need',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Expanded(
-              child: _RingCaption(
-                text: score == null
-                    ? waiting > 0
-                          ? '$waiting more night${waiting == 1 ? '' : 's'}'
-                          : 'Needs last night'
-                    : recoveryWord(score),
-                color: recoveryColor(score),
-              ),
-            ),
-            Expanded(
-              child: _RingCaption(
-                text: strain == null
-                    ? 'Needs HR + age'
-                    : 'Target ${target.low.round()}–${target.high.round()}',
-                color: AppColors.strain,
-              ),
-            ),
-            Expanded(
-              child: _RingCaption(
-                text: p.sleep.lastNight == null
-                    ? 'No main sleep'
-                    : formatDurationMinutes(p.sleep.lastNight!.asleepMinutes),
-                color: AppColors.sleep,
-              ),
-            ),
-          ],
-        ),
-        if (recovery != null && recovery.provisional) ...[
-          const SizedBox(height: 10),
-          Text(
-            'Provisional · ${recovery.hrvBaselineDays} of 10 baseline nights',
-            style: AppType.caption.copyWith(fontSize: 11),
-          ),
-        ],
-      ],
-    );
-  }
 }
 
-class _RingButton extends StatelessWidget {
-  const _RingButton({required this.onTap, required this.child});
+class _MiniMetric extends StatelessWidget {
+  const _MiniMetric({
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.suffix,
+    required this.fraction,
+    required this.detail,
+    required this.onTap,
+  });
 
-  final VoidCallback onTap;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    customBorder: const CircleBorder(),
-    child: Padding(padding: const EdgeInsets.all(4), child: child),
-  );
-}
-
-class _RingCaption extends StatelessWidget {
-  const _RingCaption({required this.text, required this.color});
-
-  final String text;
   final Color color;
+  final String label;
+  final String value;
+  final String suffix;
+  final double? fraction;
+  final String detail;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    textAlign: TextAlign.center,
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: AppType.caption.copyWith(
-      color: AppColors.textSecondary,
-      fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) => Material(
+    color: AppColors.bg.withValues(alpha: 0.45),
+    borderRadius: BorderRadius.circular(20),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                value: (fraction ?? 0).clamp(0.0, 1.0),
+                strokeWidth: 5,
+                strokeCap: StrokeCap.round,
+                color: color,
+                backgroundColor: AppColors.surfaceHigher,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppType.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(value, style: AppType.numS.copyWith(fontSize: 20)),
+                        Text(
+                          suffix,
+                          style: AppType.unit.copyWith(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption.copyWith(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }
@@ -470,11 +481,11 @@ class _AlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.bandRed.withValues(alpha: 0.09),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.bandRed.withValues(alpha: 0.4)),
+      color: AppColors.bandRed.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.bandRed.withValues(alpha: 0.35)),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,9 +493,9 @@ class _AlertCard extends StatelessWidget {
         const Icon(
           Icons.warning_amber_rounded,
           color: AppColors.bandRed,
-          size: 20,
+          size: 22,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,56 +511,389 @@ class _AlertCard extends StatelessWidget {
   );
 }
 
-class _PlanCard extends StatelessWidget {
-  const _PlanCard({
-    required this.plan,
-    required this.strainNow,
-    required this.onLog,
+/// Calories eaten (Health Connect) against calories burned (Becel).
+class _FuelCard extends StatelessWidget {
+  const _FuelCard({required this.snapshot, required this.onTap});
+
+  final HealthSnapshot snapshot;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final energy = snapshot.performance.energy;
+    final activity = snapshot.activity;
+    final eaten = activity?.intakeKcalToday;
+    final burned = energy?.today.totalKcal;
+    final projected = energy?.projectedToday;
+    final balance = eaten == null || projected == null
+        ? null
+        : eaten - projected;
+    final scale = math.max(1.0, [eaten ?? 0, projected ?? 0].reduce(math.max));
+    return PanelCard(
+      title: 'Calories',
+      icon: Icons.local_fire_department_rounded,
+      accent: AppColors.burned,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _FuelNumber(
+                  label: 'Burned',
+                  value: burned,
+                  sub: projected == null
+                      ? 'needs profile'
+                      : '~${formatNumber(projected.round())} by midnight',
+                  color: AppColors.burned,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _FuelNumber(
+                  label: 'Eaten',
+                  value: eaten,
+                  sub: eaten == null
+                      ? activity?.canReadNutrition == true
+                            ? 'nothing logged yet'
+                            : 'allow nutrition access'
+                      : '${activity!.mealsToday} entr${activity.mealsToday == 1 ? 'y' : 'ies'}'
+                            '${activity.intakeSources.isEmpty ? '' : ' · ${activity.intakeSources.first}'}',
+                  color: AppColors.intake,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _FuelBar(
+            label: 'Burn',
+            value: projected ?? 0,
+            done: burned ?? 0,
+            max: scale,
+            color: AppColors.burned,
+          ),
+          const SizedBox(height: 8),
+          _FuelBar(
+            label: 'Food',
+            value: eaten ?? 0,
+            done: eaten ?? 0,
+            max: scale,
+            color: AppColors.intake,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  balance == null
+                      ? 'Balance shows once food is logged in Google Health.'
+                      : balance < 0
+                      ? '${formatNumber(balance.abs().round())} kcal deficit if you eat nothing more'
+                      : '${formatNumber(balance.round())} kcal surplus vs projected burn',
+                  style: AppType.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              if (energy?.deviceDelta != null &&
+                  energy!.deviceDelta!.abs() >= 50)
+                Tag(
+                  'Fitbit ${energy.deviceDelta! > 0 ? '+' : '−'}${formatNumber(energy.deviceDelta!.abs().round())}',
+                  color: AppColors.textTertiary,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FuelNumber extends StatelessWidget {
+  const _FuelNumber({
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.color,
   });
+
+  final String label;
+  final double? value;
+  final String sub;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: AppType.caption.copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value == null ? '—' : formatNumber(value!.round()),
+              style: AppType.numM.copyWith(fontSize: 32),
+            ),
+            const SizedBox(width: 4),
+            const Text('kcal', style: AppType.unit),
+          ],
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        sub,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.caption.copyWith(fontSize: 11.5),
+      ),
+    ],
+  );
+}
+
+class _FuelBar extends StatelessWidget {
+  const _FuelBar({
+    required this.label,
+    required this.value,
+    required this.done,
+    required this.max,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final double done;
+  final double max;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 36,
+        child: Text(label, style: AppType.caption.copyWith(fontSize: 11)),
+      ),
+      Expanded(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            return Stack(
+              children: [
+                Container(
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceHigher,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                // Projected remainder, faint.
+                Container(
+                  width: width * (value / max).clamp(0.0, 1.0),
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.28),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                Container(
+                  width: width * (done / max).clamp(0.0, 1.0),
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    ],
+  );
+}
+
+class _StepsTile extends StatelessWidget {
+  const _StepsTile({required this.snapshot});
+
+  final HealthSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = snapshot.summary?.stepCount;
+    final today = snapshot.performance.energy?.today;
+    final walking = today?.countedSteps;
+    final shown = raw;
+    return PanelCard(
+      title: 'Steps',
+      icon: Icons.directions_walk_rounded,
+      accent: AppColors.steps,
+      onTap: () => context.push('/energy'),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: CircularProgressIndicator(
+              value: ((shown ?? 0) / stepGoal).clamp(0.0, 1.0),
+              strokeWidth: 6,
+              strokeCap: StrokeCap.round,
+              color: AppColors.steps,
+              backgroundColor: AppColors.surfaceHigher,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    shown == null ? '—' : formatNumber(shown),
+                    style: AppType.numM.copyWith(fontSize: 24),
+                  ),
+                ),
+                Text(
+                  walking == null || raw == null || raw - walking < 100
+                      ? 'of ${formatNumber(stepGoal)}'
+                      : '${formatNumber(walking)} real walking',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption.copyWith(fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProteinTile extends StatelessWidget {
+  const _ProteinTile({required this.snapshot});
+
+  final HealthSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final protein = snapshot.activity?.proteinGToday;
+    final weight = snapshot.profile?.weightKg;
+    final target = weight == null ? null : (weight * proteinPerKg).round();
+    return PanelCard(
+      title: 'Protein',
+      icon: Icons.egg_alt_rounded,
+      accent: AppColors.intake,
+      onTap: () => context.push('/energy'),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: CircularProgressIndicator(
+              value: protein == null || target == null
+                  ? 0
+                  : (protein / target).clamp(0.0, 1.0),
+              strokeWidth: 6,
+              strokeCap: StrokeCap.round,
+              color: AppColors.intake,
+              backgroundColor: AppColors.surfaceHigher,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        protein == null ? '—' : protein.round().toString(),
+                        style: AppType.numM.copyWith(fontSize: 24),
+                      ),
+                      const SizedBox(width: 2),
+                      const Text('g', style: AppType.unit),
+                    ],
+                  ),
+                ),
+                Text(
+                  target == null ? 'needs weight' : 'of ${target}g (1.6 g/kg)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption.copyWith(fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({required this.plan, required this.strainNow});
 
   final DailyPlan plan;
   final double? strainNow;
-  final VoidCallback onLog;
 
   @override
   Widget build(BuildContext context) {
     final color = switch (plan.tone) {
       PlanTone.push => AppColors.bandGreen,
       PlanTone.train => AppColors.bandYellow,
-      PlanTone.recover => AppColors.bandRed,
-      PlanTone.rest => AppColors.bandRed,
+      PlanTone.recover || PlanTone.rest => AppColors.bandRed,
     };
     final target = plan.target;
     final now = strainNow ?? 0;
     final remaining = (target.low - now).clamp(0, strainMax);
     return PanelCard(
-      title: 'TODAY’S PLAN',
+      title: 'Today’s plan',
       icon: Icons.flag_rounded,
-      accent: color,
+      accent: AppColors.accent,
       trailing: Tag(target.label, color: color),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             plan.headline,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 21,
-              height: 1.15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
+            style: AppType.sectionTitle.copyWith(fontSize: 20),
           ),
           const SizedBox(height: 6),
           Text(plan.session, style: AppType.body),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               Flexible(
                 child: Text(
-                  'STRAIN ${now.toStringAsFixed(1)}',
+                  'Strain ${now.toStringAsFixed(1)}',
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(color: AppColors.strain),
+                  style: AppType.rowTitle.copyWith(fontSize: 13),
                 ),
               ),
               const SizedBox(width: 8),
@@ -562,12 +906,12 @@ class _PlanCard extends StatelessWidget {
                       : 'In target',
                   textAlign: TextAlign.right,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.caption.copyWith(fontWeight: FontWeight.w700),
+                  style: AppType.caption,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           LinearMeter(
             value: now,
             max: strainMax,
@@ -575,223 +919,36 @@ class _PlanCard extends StatelessWidget {
             bandFrom: target.low,
             bandTo: target.high,
           ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              Text('0', style: AppType.caption.copyWith(fontSize: 10)),
-              const Spacer(),
-              Text(
-                'target ${target.low.round()}–${target.high.round()}',
-                style: AppType.caption.copyWith(fontSize: 10),
-              ),
-              const Spacer(),
-              Text('21', style: AppType.caption.copyWith(fontSize: 10)),
-            ],
-          ),
           if (plan.notes.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             for (final note in plan.notes)
               Padding(
-                padding: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        width: 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 14,
+                        color: AppColors.textTertiary,
                       ),
                     ),
-                    const SizedBox(width: 9),
+                    const SizedBox(width: 8),
                     Expanded(child: Text(note, style: AppType.note)),
                   ],
                 ),
               ),
           ],
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 44,
-            child: OutlinedButton.icon(
-              onPressed: onLog,
-              icon: const Icon(Icons.fitness_center_rounded, size: 17),
-              label: const Text('Log a lift'),
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _CheckInCard extends StatelessWidget {
-  const _CheckInCard({required this.checkIn, required this.onTap});
-
-  final CheckIn? checkIn;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final existing = checkIn;
-    return SurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      color: AppColors.surface,
-      child: Row(
-        children: [
-          Icon(
-            existing == null
-                ? Icons.wb_sunny_outlined
-                : Icons.check_circle_rounded,
-            color: existing == null ? AppColors.yellow : AppColors.green,
-            size: 20,
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Text(
-              existing == null
-                  ? 'How do you feel this morning?'
-                  : 'Checked in: ${existing.label}',
-              style: AppType.rowTitle,
-            ),
-          ),
-          Icon(
-            existing == null ? Icons.add_rounded : Icons.edit_outlined,
-            color: AppColors.teal,
-            size: 19,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EnergyCard extends StatelessWidget {
-  const _EnergyCard({required this.performance, required this.onTap});
-
-  final Performance performance;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final energy = performance.energy;
-    if (energy == null) {
-      return PanelCard(
-        title: 'CALORIES',
-        icon: Icons.local_fire_department_rounded,
-        accent: AppColors.energy,
-        onTap: onTap,
-        child: const Text(
-          'Needs your body profile and today’s heart rate.',
-          style: AppType.note,
-        ),
-      );
-    }
-    final today = energy.today;
-    final delta = energy.deviceDelta;
-    return PanelCard(
-      title: 'CALORIES · SO FAR',
-      icon: Icons.local_fire_department_rounded,
-      accent: AppColors.energy,
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.bottomLeft,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        formatNumber(today.totalKcal.round()),
-                        style: AppType.numXl.copyWith(fontSize: 40),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.only(left: 5, bottom: 6),
-                        child: Text('kcal', style: AppType.unit),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: StatBlock(
-                    label: 'BY MIDNIGHT',
-                    value: '~${formatNumber(energy.projectedToday.round())}',
-                    align: CrossAxisAlignment.end,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: StatBlock(
-                  label: 'ACTIVE',
-                  value: formatNumber(today.activeKcal.round()),
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: 'RESTING',
-                  value: formatNumber(today.restingKcal.round()),
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: 'MAINTENANCE',
-                  value: energy.maintenanceKcal == null
-                      ? '—'
-                      : formatNumber(energy.maintenanceKcal!.round()),
-                  delta: energy.maintenanceKcal == null
-                      ? 'needs 3 full days'
-                      : 'avg of ${energy.history.length} days',
-                ),
-              ),
-            ],
-          ),
-          if (delta != null && delta.abs() >= 50) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceHigher.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                delta > 0
-                    ? 'Fitbit says ${formatNumber(energy.deviceTotalToday!)} '
-                          '(+${formatNumber(delta.round())}). Becel ignores HR '
-                          'below ${today.flexBpm} bpm and '
-                          '${formatNumber(today.filteredSteps)} incidental steps.'
-                    : 'Fitbit says ${formatNumber(energy.deviceTotalToday!)} '
-                          '(${formatNumber(delta.round())}).',
-                style: AppType.caption.copyWith(color: AppColors.textSecondary),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _LoadCard extends StatelessWidget {
-  const _LoadCard({required this.performance, required this.onTap});
+class _LoadTile extends StatelessWidget {
+  const _LoadTile({required this.performance, required this.onTap});
 
   final Performance performance;
   final VoidCallback onTap;
@@ -799,168 +956,128 @@ class _LoadCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final load = performance.load;
+    final status = load?.status ?? LoadStatus.calibrating;
     final days = performance.strainDays;
     final week = days.length <= 7 ? days : days.sublist(days.length - 7);
-    final status = load?.status ?? LoadStatus.calibrating;
-    final color = switch (status) {
-      LoadStatus.productive => AppColors.bandGreen,
-      LoadStatus.maintaining => AppColors.teal,
-      LoadStatus.detraining => AppColors.blue,
-      LoadStatus.overreaching => AppColors.bandYellow,
-      LoadStatus.spike => AppColors.bandRed,
-      LoadStatus.calibrating => AppColors.textTertiary,
-    };
     return PanelCard(
-      title: 'TRAINING LOAD',
+      title: 'Load',
       icon: Icons.stacked_line_chart_rounded,
       accent: AppColors.strain,
       onTap: onTap,
-      trailing: Tag(status.label, color: color),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: StatBlock(
-                  label: '7-DAY (FATIGUE)',
-                  value: load == null
-                      ? '—'
-                      : load.acuteStrain.toStringAsFixed(1),
-                  delta: 'avg daily strain',
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: '28-DAY (FITNESS)',
-                  value: load == null
-                      ? '—'
-                      : load.chronicStrain.toStringAsFixed(1),
-                  delta: 'avg daily strain',
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: 'RATIO',
-                  value: load?.acwr == null
-                      ? '—'
-                      : load!.acwr!.toStringAsFixed(2),
-                  delta: 'sweet spot 0.8–1.3',
-                ),
-              ),
-            ],
+          Text(status.label, style: AppType.numS),
+          Text(
+            load?.acwr == null
+                ? 'needs 14 days'
+                : 'ratio ${load!.acwr!.toStringAsFixed(2)}',
+            style: AppType.caption.copyWith(fontSize: 11.5),
           ),
-          if (week.isNotEmpty) ...[
-            const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          if (week.isNotEmpty)
             DayBars(
               values: [for (final d in week) d.hasData ? d.strain : null],
               labels: [for (final d in week) formatDayShort(d.date)[0]],
               maxValue: strainMax,
-              height: 54,
-              valueLabel: (v) => v.toStringAsFixed(0),
+              height: 36,
               colorFor: (i, v) => AppColors.strain.withValues(
-                alpha: i == week.length - 1 ? 1 : 0.45,
+                alpha: i == week.length - 1 ? 1 : 0.5,
               ),
               semanticsLabel: 'Daily strain, last 7 days',
             ),
-          ],
-          const SizedBox(height: 8),
-          Text(status.advice, style: AppType.caption),
         ],
       ),
     );
   }
 }
 
-class _VitalsCard extends StatelessWidget {
-  const _VitalsCard({required this.snapshot, required this.onTap});
+class _VitalsTile extends StatelessWidget {
+  const _VitalsTile({required this.snapshot, required this.onTap});
 
   final HealthSnapshot snapshot;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final p = snapshot.performance;
-    final r = p.recoveryEstimate;
-    String signed(double v, {int digits = 0}) =>
-        '${v >= 0 ? '+' : '−'}${v.abs().toStringAsFixed(digits)}';
-    Color tone(double v, {bool higherIsBetter = true, double tolerance = 0}) {
-      if (v.abs() <= tolerance) return AppColors.textTertiary;
-      final good = higherIsBetter ? v > 0 : v < 0;
-      return good ? AppColors.bandGreen : AppColors.bandYellow;
-    }
-
+    final r = snapshot.recovery;
     final rhr = r?.restingHrCurrent ?? snapshot.heart?.restingHrBpm?.toDouble();
     final hrv = r?.hrvCurrent;
-    final resp = snapshot.body?.respiratoryRate;
-    final skin = p.skinTempDelta;
+    String delta(double v, String unit) =>
+        '${v >= 0 ? '+' : '−'}${v.abs().round()}$unit';
     return PanelCard(
-      title: 'OVERNIGHT VITALS',
-      icon: Icons.monitor_heart_rounded,
-      accent: AppColors.teal,
+      title: 'Vitals',
+      icon: Icons.favorite_rounded,
+      accent: AppColors.bandRed,
       onTap: onTap,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: StatBlock(
-              label: 'RHR',
-              value: rhr == null ? '—' : rhr.round().toString(),
-              unit: 'bpm',
-              delta: r == null ? null : '${signed(r.restingHrChange)} vs base',
-              deltaColor: r == null
-                  ? null
-                  : tone(
-                      r.restingHrChange,
-                      higherIsBetter: false,
-                      tolerance: 1,
-                    ),
-            ),
+          _VitalRow(
+            label: 'Resting HR',
+            value: rhr == null ? '—' : '${rhr.round()}',
+            delta: r == null ? null : delta(r.restingHrChange, ''),
+            good: r == null ? null : r.restingHrChange <= 0,
           ),
-          Expanded(
-            child: StatBlock(
-              label: 'HRV',
-              value: hrv == null ? '—' : hrv.round().toString(),
-              unit: 'ms',
-              delta: r == null
-                  ? 'night median'
-                  : '${signed(r.hrvChangePercent)}% vs base',
-              deltaColor: r == null
-                  ? null
-                  : tone(r.hrvChangePercent, tolerance: 4),
-            ),
+          const SizedBox(height: 10),
+          _VitalRow(
+            label: 'HRV',
+            value: hrv == null ? '—' : '${hrv.round()} ms',
+            delta: r == null ? null : delta(r.hrvChangePercent, '%'),
+            good: r == null ? null : r.hrvChangePercent >= 0,
           ),
-          Expanded(
-            child: StatBlock(
-              label: 'RESP',
-              value: resp == null ? '—' : resp.toStringAsFixed(1),
-              unit: '/min',
-              delta: p.respiratoryDelta == null
-                  ? null
-                  : '${signed(p.respiratoryDelta!, digits: 1)} vs base',
-              deltaColor: p.respiratoryDelta == null
-                  ? null
-                  : tone(
-                      p.respiratoryDelta!,
-                      higherIsBetter: false,
-                      tolerance: 0.5,
-                    ),
-            ),
-          ),
-          Expanded(
-            child: StatBlock(
-              label: 'SKIN',
-              value: skin == null ? '—' : signed(skin, digits: 1),
-              unit: '°C',
-              delta: skin == null ? null : 'vs baseline',
-              deltaColor: skin == null
-                  ? null
-                  : tone(skin, higherIsBetter: false, tolerance: 0.3),
-            ),
+          const SizedBox(height: 10),
+          _VitalRow(
+            label: 'Breathing',
+            value: snapshot.body?.respiratoryRate?.toStringAsFixed(1) ?? '—',
+            delta: snapshot.performance.respiratoryDelta == null
+                ? null
+                : '${snapshot.performance.respiratoryDelta! >= 0 ? '+' : '−'}${snapshot.performance.respiratoryDelta!.abs().toStringAsFixed(1)}',
+            good: snapshot.performance.respiratoryDelta == null
+                ? null
+                : snapshot.performance.respiratoryDelta! < 1,
           ),
         ],
       ),
     );
   }
+}
+
+class _VitalRow extends StatelessWidget {
+  const _VitalRow({
+    required this.label,
+    required this.value,
+    this.delta,
+    this.good,
+  });
+
+  final String label;
+  final String value;
+  final String? delta;
+  final bool? good;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption,
+        ),
+      ),
+      Text(value, style: AppType.rowTitle.copyWith(fontSize: 13.5)),
+      if (delta != null) ...[
+        const SizedBox(width: 6),
+        Icon(
+          good == true ? Icons.north_east_rounded : Icons.south_east_rounded,
+          size: 12,
+          color: good == true ? AppColors.bandGreen : AppColors.bandYellow,
+        ),
+      ],
+    ],
+  );
 }
 
 class _InitialState extends StatelessWidget {
@@ -988,21 +1105,20 @@ class _InitialState extends StatelessWidget {
     }
     if (error != null) {
       return StateCard(
-        icon: Icons.error_outline_rounded,
-        color: AppColors.red,
-        title: 'Health data could not load',
-        body: error!,
+        icon: Icons.sync_problem_rounded,
+        color: AppColors.yellow,
+        title: 'Couldn’t read Health Connect',
+        body: 'Health Connect didn’t respond. This usually clears on retry.',
         actionLabel: 'Retry',
         onAction: onRetry,
       );
     }
     return StateCard(
       icon: Icons.link_rounded,
-      color: AppColors.yellow,
+      color: AppColors.accent,
       title: 'Set up Health Connect',
       body:
-          'Becel reads Fitbit Air records from Health Connect. Nothing is '
-          'uploaded.',
+          'Becel reads Fitbit Air and Google Health records. It never writes.',
       actionLabel: 'Open data sources',
       onAction: onData,
     );

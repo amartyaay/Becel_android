@@ -134,6 +134,15 @@ const exerciseCatalog = <Exercise>[
   Exercise('cable_crunch', 'Cable crunch', [Muscle.core]),
 ];
 
+/// Whether a synced Health Connect workout label is resistance training.
+bool isStrengthWorkout(String type) {
+  final value = type.toLowerCase();
+  return value.contains('strength') ||
+      value.contains('weight') ||
+      value.contains('calisthenics') ||
+      value.contains('resistance');
+}
+
 Exercise? exerciseById(String id) {
   for (final exercise in exerciseCatalog) {
     if (exercise.id == id) return exercise;

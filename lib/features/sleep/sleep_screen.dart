@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../data/health_store.dart';
-import '../../data/local_store.dart';
 import '../../domain/sleep_coach.dart';
 import '../../widgets/charts_kit.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
+import '../shell/shell_screen.dart';
 
 class SleepScreen extends StatefulWidget {
   const SleepScreen({super.key});
@@ -41,7 +41,7 @@ class _SleepScreenState extends State<SleepScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
                 children: [
                   const ScreenHeader(
                     eyebrow: 'NEED · DEBT · TIMING',
@@ -106,35 +106,6 @@ class _LastNightCard extends StatelessWidget {
   const _LastNightCard({required this.coach});
 
   final SleepCoach coach;
-
-  Future<void> _adjust(BuildContext context, AdjustedNight night) async {
-    final picked = await showTimePicker(
-      context: context,
-      helpText: 'WHEN DID YOU FALL ASLEEP?',
-      initialTime: TimeOfDay.fromDateTime(night.onset),
-    );
-    if (picked == null) return;
-    final start = night.night.start;
-    var onset = DateTime(
-      start.year,
-      start.month,
-      start.day,
-      picked.hour,
-      picked.minute,
-    );
-    if (onset.isBefore(start)) onset = onset.add(const Duration(days: 1));
-    if (!onset.isBefore(night.night.end)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pick a time inside the recorded session.'),
-          ),
-        );
-      }
-      return;
-    }
-    await LocalStore.instance.setOnsetOverride(sleepKey(night.night), onset);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -261,23 +232,6 @@ class _LastNightCard extends StatelessWidget {
             'Wrist stage estimates agree with lab sleep studies only moderately; '
             'Becel scores duration and timing, not stages.',
             style: AppType.caption.copyWith(fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _adjust(context, night),
-                icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                label: const Text('I fell asleep later'),
-              ),
-              if (night.onsetSource == OnsetSource.user)
-                TextButton(
-                  onPressed: () =>
-                      LocalStore.instance.setOnsetOverride(sleepKey(n), null),
-                  child: const Text('Reset'),
-                ),
-            ],
           ),
         ],
       ),

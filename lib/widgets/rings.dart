@@ -101,11 +101,11 @@ class MetricRing extends StatelessWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      label,
-                      style: AppType.eyebrow.copyWith(
-                        fontSize: math.max(9.5, size * 0.085),
-                        color: color,
-                        letterSpacing: 0.9,
+                      _sentenceCase(label),
+                      style: AppType.caption.copyWith(
+                        fontSize: math.max(10.5, size * 0.095),
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -487,15 +487,23 @@ class PanelCard extends StatelessWidget {
             Row(
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 15, color: accent),
-                  const SizedBox(width: 7),
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, size: 15, color: accent),
+                  ),
+                  const SizedBox(width: 10),
                 ],
                 Expanded(
                   child: Text(
-                    title!,
-                    style: AppType.eyebrow.copyWith(
-                      color: accent,
-                      letterSpacing: 1.0,
+                    _sentenceCase(title!),
+                    style: AppType.rowTitle.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 13.5,
                     ),
                   ),
                 ),
@@ -515,18 +523,12 @@ class PanelCard extends StatelessWidget {
       ),
     );
     final decoration = BoxDecoration(
-      borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: AppColors.border),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color.alphaBlend(
-            accent.withValues(alpha: 0.05),
-            AppColors.surfaceHigh,
-          ),
-          AppColors.surface,
-        ],
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: AppColors.hairline),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [AppColors.surfaceHigh, AppColors.surface],
       ),
     );
     if (onTap == null) return Container(decoration: decoration, child: body);
@@ -536,12 +538,28 @@ class PanelCard extends StatelessWidget {
         decoration: decoration,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(24),
           child: body,
         ),
       ),
     );
   }
+}
+
+/// "TODAY'S PLAN" → "Today's plan": quieter headers, values lead.
+String _sentenceCase(String text) {
+  if (text.isEmpty || text != text.toUpperCase()) return text;
+  final lower = text.toLowerCase();
+  final fixed = lower
+      .replaceAll('hrv', 'HRV')
+      .replaceAll('acwr', 'ACWR')
+      .replaceAll('1rm', '1RM')
+      .replaceAll('fitbit', 'Fitbit')
+      .replaceAll('becel', 'Becel')
+      .replaceAll(' vs ', ' vs ')
+      .replaceAll('karvonen', 'Karvonen')
+      .replaceAll('vo₂', 'VO₂');
+  return fixed[0].toUpperCase() + fixed.substring(1);
 }
 
 /// Pill-shaped tag with word + colour (never colour alone).
@@ -553,19 +571,59 @@ class Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.13),
+      color: color.withValues(alpha: 0.14),
       borderRadius: BorderRadius.circular(99),
-      border: Border.all(color: color.withValues(alpha: 0.35)),
     ),
-    child: Text(
-      text.toUpperCase(),
-      style: AppType.pill.copyWith(
-        color: color,
-        fontSize: 10,
-        letterSpacing: 0.6,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: AppType.pill.copyWith(
+            color: AppColors.textPrimary,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Soft radial glow behind a hero element, tinted by its metric colour.
+class Glow extends StatelessWidget {
+  const Glow({
+    super.key,
+    required this.color,
+    required this.child,
+    this.radius = 0.75,
+  });
+
+  final Color color;
+  final Widget child;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: RadialGradient(
+        radius: radius,
+        colors: [
+          color.withValues(alpha: 0.30),
+          color.withValues(alpha: 0.08),
+          color.withValues(alpha: 0),
+        ],
+        stops: const [0.0, 0.6, 1.0],
       ),
     ),
+    child: child,
   );
 }

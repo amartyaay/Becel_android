@@ -4,6 +4,7 @@ import '../domain/estimates.dart';
 import '../domain/metrics.dart';
 import '../domain/performance.dart';
 import '../domain/profile.dart';
+import '../domain/strength.dart';
 import 'health_connect_service.dart';
 import 'local_store.dart';
 
@@ -181,23 +182,35 @@ class HealthStore extends ChangeNotifier {
         notifyListeners();
       }
     }
+    // Health Connect can reject the first read right after install or a
+    // permission change while its cache settles. Retry once, quietly.
+    final failed = _snapshot == null || (_snapshot?.error != null && !_retried);
+    if (failed && !_retried && generation == _generation) {
+      _retried = true;
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      if (generation == _generation) await refresh(force: true);
+    } else if (_snapshot?.error == null) {
+      _retried = false;
+    }
   }
+
+  bool _retried = false;
 
   HealthSnapshot _compose(_RawRead raw) {
     final now = DateTime.now();
-    final local = LocalStore.instance.log;
-    final stored = local.profile;
-    final profile = stored == null
-        ? (raw.age == null ? null : BodyProfile(age: raw.age))
-        : BodyProfile(
-            age: stored.age ?? raw.age,
-            sex: stored.sex,
-            heightCm: stored.heightCm,
-            weightKg: stored.weightKg,
-            bodyFatPercent: stored.bodyFatPercent,
-            maxHrOverride: stored.maxHrOverride,
-            sleepNeedMinutes: stored.sleepNeedMinutes,
-          );
+    final stored = LocalStore.instance.profile;
+    final body = raw.body;
+    // Measurements recorded in Google Health (or a scale app) win over the
+    // fallback values typed in Settings.
+    final profile = BodyProfile(
+      age: stored?.age ?? raw.age,
+      sex: stored?.sex,
+      heightCm: body?.heightCm ?? stored?.heightCm,
+      weightKg: body?.weightKg ?? stored?.weightKg,
+      bodyFatPercent: body?.bodyFatPercent ?? stored?.bodyFatPercent,
+      maxHrOverride: stored?.maxHrOverride,
+      sleepNeedMinutes: stored?.sleepNeedMinutes,
+    );
     final performance = buildPerformance(
       heart: raw.heart,
       sleep: raw.sleep,
@@ -205,9 +218,20 @@ class HealthStore extends ChangeNotifier {
       activity: raw.activity,
       profile: profile,
       fallbackAge: raw.age,
-      strengthSessions: local.strengthSessions,
-      onsetOverrides: local.onsetOverrides,
-      checkInTags: local.checkInFor(now)?.tags ?? const <String>{},
+      strengthSessions: [
+        for (final workout in raw.activity?.workouts ?? const <WorkoutEntry>[])
+          if (isStrengthWorkout(workout.type))
+            StrengthSession(
+              id: workout.start.toIso8601String(),
+              start: workout.start,
+              durationMinutes: workout.minutes,
+              // Synced sessions carry no RPE; 6 maps to the Compendium's
+              // moderate resistance-training MET (5.0).
+              sessionRpe: 6,
+            ),
+      ],
+      onsetOverrides: const {},
+      checkInTags: const <String>{},
       now: now,
     );
     return HealthSnapshot(
@@ -218,7 +242,7 @@ class HealthStore extends ChangeNotifier {
       activity: raw.activity,
       body: raw.body,
       trends: raw.trends,
-      age: profile?.age ?? raw.age,
+      age: profile.age ?? raw.age,
       activityEstimate: raw.heart == null
           ? null
           : _service.activityEstimateFor(raw.heart!, raw.age),
@@ -241,6 +265,7 @@ class HealthStore extends ChangeNotifier {
     _loading = true;
     _inFlight = null;
     _raw = null;
+    _retried = true; // Tests control their own retries.
   }
 }
 

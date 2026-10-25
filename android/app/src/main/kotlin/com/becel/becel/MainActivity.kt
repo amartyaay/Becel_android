@@ -13,6 +13,10 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.HeightRecord
+import androidx.health.connect.client.records.NutritionRecord
+import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
@@ -34,6 +38,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -214,22 +219,7 @@ class MainActivity : FlutterFragmentActivity() {
         var fitbitAirRecordCount = 0
 
         if (HealthPermission.getReadPermission(StepsRecord::class) in granted) {
-            val range = TimeRangeFilter.between(todayStart, now)
-            val records = mutableListOf<StepsRecord>()
-            var pageToken: String? = null
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest<StepsRecord>(
-                        timeRangeFilter = range,
-                        pageSize = 1000,
-                        pageToken = pageToken,
-                        dataOriginFilter = AIR_SOURCE_ORIGINS,
-                    ),
-                )
-                records.addAll(response.records.filter { isFitbitAirRecord(it.metadata) })
-                pageToken = response.pageToken
-            } while (!pageToken.isNullOrEmpty())
-
+            val records = readAirRecords<StepsRecord>(client, todayStart, now)
             if (records.isNotEmpty()) {
                 fitbitAirRecordCount += records.size
                 data["stepCount"] = records.sumOf { it.count }
@@ -237,29 +227,14 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         if (HealthPermission.getReadPermission(HeartRateRecord::class) in granted) {
-            val start = now.minus(Duration.ofHours(24))
-            val records = mutableListOf<HeartRateRecord>()
-            var pageToken: String? = null
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest<HeartRateRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(start, now),
-                        pageSize = 1000,
-                        pageToken = pageToken,
-                        dataOriginFilter = AIR_SOURCE_ORIGINS,
-                    ),
-                )
-                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
-                fitbitAirRecordCount += airRecords.size
-                records.addAll(airRecords)
-                pageToken = response.pageToken
-            } while (!pageToken.isNullOrEmpty())
+            val records = readAirRecords<HeartRateRecord>(
+                client,
+                now.minus(Duration.ofHours(24)),
+                now,
+            )
+            fitbitAirRecordCount += records.size
             val latest = records
-                .flatMap { record ->
-                    record.samples.map { sample ->
-                        Triple(sample.time, sample.beatsPerMinute, record)
-                    }
-                }
+                .flatMap { record -> record.samples.map { it.time to it.beatsPerMinute } }
                 .maxByOrNull { it.first }
             if (latest != null) {
                 data["heartRateBpm"] = latest.second
@@ -269,23 +244,12 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         if (HealthPermission.getReadPermission(SleepSessionRecord::class) in granted) {
-            val start = now.minus(Duration.ofHours(36))
-            val records = mutableListOf<SleepSessionRecord>()
-            var pageToken: String? = null
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest<SleepSessionRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(start, now),
-                        pageSize = 100,
-                        pageToken = pageToken,
-                        dataOriginFilter = AIR_SOURCE_ORIGINS,
-                    ),
-                )
-                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
-                fitbitAirRecordCount += airRecords.size
-                records.addAll(airRecords)
-                pageToken = response.pageToken
-            } while (!pageToken.isNullOrEmpty())
+            val records = readAirRecords<SleepSessionRecord>(
+                client,
+                now.minus(Duration.ofHours(36)),
+                now,
+            )
+            fitbitAirRecordCount += records.size
             // This is a raw recent-session summary. Recovery selects its
             // qualifying session separately from full staged sleep detail.
             val recent = records.filter { it.endTime >= now.minus(Duration.ofHours(24)) }
@@ -302,23 +266,12 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted) {
-            val start = now.minus(Duration.ofDays(7))
-            val records = mutableListOf<ExerciseSessionRecord>()
-            var pageToken: String? = null
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest<ExerciseSessionRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(start, now),
-                        pageSize = 100,
-                        pageToken = pageToken,
-                        dataOriginFilter = AIR_SOURCE_ORIGINS,
-                    ),
-                )
-                val airRecords = response.records.filter { isFitbitAirRecord(it.metadata) }
-                fitbitAirRecordCount += airRecords.size
-                records.addAll(airRecords)
-                pageToken = response.pageToken
-            } while (!pageToken.isNullOrEmpty())
+            val records = readAirRecords<ExerciseSessionRecord>(
+                client,
+                now.minus(Duration.ofDays(7)),
+                now,
+            )
+            fitbitAirRecordCount += records.size
             val latest = records.maxByOrNull { it.endTime }
             if (latest != null) {
                 data["workoutType"] = exerciseName(latest.exerciseType)
@@ -333,6 +286,11 @@ class MainActivity : FlutterFragmentActivity() {
         return data
     }
 
+    /**
+     * Reads Fitbit Air records of one type. A failure for one record type
+     * (a transient Health Connect error, or a permission revoked mid-read)
+     * returns what was read so far instead of failing the whole screen.
+     */
     private suspend inline fun <reified T : Record> readAirRecords(
         client: HealthConnectClient,
         start: Instant,
@@ -341,20 +299,76 @@ class MainActivity : FlutterFragmentActivity() {
         val records = mutableListOf<T>()
         var pageToken: String? = null
         var pages = 0
-        do {
-            val response = client.readRecords(
-                ReadRecordsRequest<T>(
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                    pageSize = 1000,
-                    pageToken = pageToken,
-                    dataOriginFilter = AIR_SOURCE_ORIGINS,
-                ),
-            )
-            records.addAll(response.records.filter { isFitbitAirRecord(it.metadata) })
-            pageToken = response.pageToken
-            pages++
-        } while (!pageToken.isNullOrEmpty() && pages < 100)
+        try {
+            do {
+                val response = client.readRecords(
+                    ReadRecordsRequest<T>(
+                        timeRangeFilter = TimeRangeFilter.between(start, end),
+                        pageSize = 1000,
+                        pageToken = pageToken,
+                        dataOriginFilter = AIR_SOURCE_ORIGINS,
+                    ),
+                )
+                records.addAll(response.records.filter { isFitbitAirRecord(it.metadata) })
+                pageToken = response.pageToken
+                pages++
+            } while (!pageToken.isNullOrEmpty() && pages < 400)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            android.util.Log.w(LOG_TAG, "Read failed for ${T::class.simpleName}: ${error.javaClass.simpleName}")
+        }
         return records
+    }
+
+    /**
+     * Reads records of one type from any app that shares with Health
+     * Connect. Used for data the band cannot measure: food logs and body
+     * measurements from Google Health, Fitbit, scales, or nutrition apps.
+     */
+    private suspend inline fun <reified T : Record> readAnyRecords(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+    ): List<T> {
+        val records = mutableListOf<T>()
+        var pageToken: String? = null
+        var pages = 0
+        try {
+            do {
+                val response = client.readRecords(
+                    ReadRecordsRequest<T>(
+                        timeRangeFilter = TimeRangeFilter.between(start, end),
+                        pageSize = 1000,
+                        pageToken = pageToken,
+                    ),
+                )
+                records.addAll(response.records)
+                pageToken = response.pageToken
+                pages++
+            } while (!pageToken.isNullOrEmpty() && pages < 20)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            android.util.Log.w(LOG_TAG, "Read failed for ${T::class.simpleName}: ${error.javaClass.simpleName}")
+        }
+        return records
+    }
+
+    private fun sourceLabel(packageName: String): String = when (packageName) {
+        FITBIT_APP_PACKAGE -> "Fitbit"
+        "com.google.android.apps.healthdata" -> "Health Connect"
+        "com.google.android.apps.fitness" -> "Google Fit"
+        "com.myfitnesspal.android" -> "MyFitnessPal"
+        "com.cronometer.android.gold", "com.cronometer.android" -> "Cronometer"
+        "com.sec.android.app.shealth" -> "Samsung Health"
+        else -> try {
+            packageManager.getApplicationLabel(
+                packageManager.getApplicationInfo(packageName, 0),
+            ).toString()
+        } catch (error: Exception) {
+            packageName
+        }
     }
 
     private suspend fun readHeartDetail(): Map<String, Any?> {
@@ -396,30 +410,15 @@ class MainActivity : FlutterFragmentActivity() {
         )
 
         if (HealthPermission.getReadPermission(HeartRateRecord::class) in granted) {
-            var pageToken: String? = null
-            var pages = 0
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest<HeartRateRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(loadStart.minusSeconds(120), now),
-                        pageSize = 1000,
-                        pageToken = pageToken,
-                        dataOriginFilter = AIR_SOURCE_ORIGINS,
-                    ),
-                )
-                response.records
-                    .filter { isFitbitAirRecord(it.metadata) }
-                    .forEach { record ->
-                        record.samples.forEach { sample ->
-                            allSamples.add(sample.time to sample.beatsPerMinute)
-                            if (sample.time >= weekStart.minusSeconds(120)) {
-                                trainingSamples.add(sample.time to sample.beatsPerMinute)
-                            }
+            readAirRecords<HeartRateRecord>(client, loadStart.minusSeconds(120), now)
+                .forEach { record ->
+                    record.samples.forEach { sample ->
+                        allSamples.add(sample.time to sample.beatsPerMinute)
+                        if (sample.time >= weekStart.minusSeconds(120)) {
+                            trainingSamples.add(sample.time to sample.beatsPerMinute)
                         }
                     }
-                pageToken = response.pageToken
-                pages++
-            } while (!pageToken.isNullOrEmpty() && pages < 400)
+                }
 
             // One-minute medians keep interval peaks that 5-minute means
             // flatten, while staying small enough for the method channel.
@@ -870,6 +869,29 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
+        // Food logged in Google Health, Fitbit, or any nutrition app.
+        if (HealthPermission.getReadPermission(NutritionRecord::class) in granted) {
+            val weekStart = LocalDate.now(zone).minusDays(6).atStartOfDay(zone).toInstant()
+            val meals = readAnyRecords<NutritionRecord>(client, weekStart, now)
+            val dates = (6 downTo 0).map { LocalDate.now(zone).minusDays(it.toLong()) }
+            data["intakeDates"] = dates.map { it.toString() }
+            data["intakeKcalByDay"] = dates.map { date ->
+                val day = meals.filter { it.startTime.atZone(zone).toLocalDate() == date }
+                if (day.isEmpty()) null else day.sumOf { it.energy?.inKilocalories ?: 0.0 }
+            }
+            val today = meals.filter { it.startTime >= todayStart }
+            if (today.isNotEmpty()) {
+                data["intakeKcalToday"] = today.sumOf { it.energy?.inKilocalories ?: 0.0 }
+                data["proteinGToday"] = today.sumOf { it.protein?.inGrams ?: 0.0 }
+                data["carbsGToday"] = today.sumOf { it.totalCarbohydrate?.inGrams ?: 0.0 }
+                data["fatGToday"] = today.sumOf { it.totalFat?.inGrams ?: 0.0 }
+                data["mealsToday"] = today.size
+                data["intakeSources"] = today
+                    .map { sourceLabel(it.metadata.dataOrigin.packageName) }
+                    .distinct()
+            }
+        }
+
         return data
     }
 
@@ -944,6 +966,29 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(Vo2MaxRecord::class) in granted) {
             val records = readAirRecords<Vo2MaxRecord>(client, now.minus(Duration.ofDays(30)), now)
             data["vo2Max"] = records.maxByOrNull { it.time }?.vo2MillilitersPerMinuteKilogram
+        }
+
+        // Body measurements come from whichever app records them (a smart
+        // scale, Google Health, Fitbit). Health Connect limits history to
+        // what the user has allowed; the latest value in range is used.
+        val bodyStart = now.minus(Duration.ofDays(365))
+        if (HealthPermission.getReadPermission(WeightRecord::class) in granted) {
+            readAnyRecords<WeightRecord>(client, bodyStart, now).maxByOrNull { it.time }?.let {
+                data["weightKg"] = it.weight.inKilograms
+                data["weightAt"] = it.time.toString()
+                data["weightSource"] = sourceLabel(it.metadata.dataOrigin.packageName)
+            }
+        }
+        if (HealthPermission.getReadPermission(HeightRecord::class) in granted) {
+            readAnyRecords<HeightRecord>(client, bodyStart, now).maxByOrNull { it.time }?.let {
+                data["heightCm"] = it.height.inMeters * 100
+            }
+        }
+        if (HealthPermission.getReadPermission(BodyFatRecord::class) in granted) {
+            readAnyRecords<BodyFatRecord>(client, bodyStart, now).maxByOrNull { it.time }?.let {
+                data["bodyFatPercent"] = it.percentage.value
+                data["bodyFatAt"] = it.time.toString()
+            }
         }
 
         return data
@@ -1029,10 +1074,25 @@ class MainActivity : FlutterFragmentActivity() {
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "Pool swim"
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "Open-water swim"
         ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "Yoga"
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "Weightlifting"
+        ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "Calisthenics"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "HIIT"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> "Rowing machine"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING -> "Rowing"
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "Elliptical"
+        ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE -> "Stair climber"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "Hike"
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "Pilates"
+        ExerciseSessionRecord.EXERCISE_TYPE_BOOT_CAMP -> "Boot camp"
+        ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS -> "Martial arts"
+        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> "Tennis"
+        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> "Football"
+        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> "Basketball"
         else -> "Workout"
     }
 
     companion object {
+        private const val LOG_TAG = "Becel"
         private const val CHANNEL_NAME = "com.becel/health_connect"
         private const val LOCAL_CHANNEL = "com.becel/local"
         private const val LOCAL_LOG_PREFS = "becel_local_log"
@@ -1077,6 +1137,10 @@ class MainActivity : FlutterFragmentActivity() {
             HealthPermission.getReadPermission(RespiratoryRateRecord::class),
             HealthPermission.getReadPermission(SkinTemperatureRecord::class),
             HealthPermission.getReadPermission(Vo2MaxRecord::class),
+            HealthPermission.getReadPermission(WeightRecord::class),
+            HealthPermission.getReadPermission(HeightRecord::class),
+            HealthPermission.getReadPermission(BodyFatRecord::class),
+            HealthPermission.getReadPermission(NutritionRecord::class),
         )
     }
 }

@@ -9,7 +9,6 @@ import '../features/settings/settings_screen.dart';
 import '../features/shell/shell_screen.dart';
 import '../features/sleep/sleep_screen.dart';
 import '../features/today/today_screen.dart';
-import '../features/training/strength_screen.dart';
 import '../features/training/training_screen.dart';
 
 GoRouter buildRouter() => GoRouter(
@@ -66,10 +65,6 @@ GoRouter buildRouter() => GoRouter(
       builder: (context, state) => const RecoveryScreen(),
     ),
     GoRoute(path: '/energy', builder: (context, state) => const EnergyScreen()),
-    GoRoute(
-      path: '/strength',
-      builder: (context, state) => const StrengthScreen(),
-    ),
     GoRoute(path: '/vitals', builder: (context, state) => const VitalsScreen()),
     GoRoute(path: '/data', builder: (context, state) => const DataScreen()),
     // Older links.

@@ -124,7 +124,6 @@ Performance buildPerformance({
           sex: sex,
           now: now,
           days: 28,
-          strengthSessions: strengthSessions,
         );
   final load = strainDays.isEmpty ? null : trainingLoad(strainDays);
   final yesterdayStrain = strainDays.length < 2

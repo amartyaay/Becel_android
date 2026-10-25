@@ -9,6 +9,7 @@ import '../../domain/strain.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
+import '../shell/shell_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -85,12 +86,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
                 children: [
                   ScreenHeader(
                     eyebrow: p == null
-                        ? 'WEEKLY REVIEW'
-                        : 'WEEK OF ${formatShortDate(p.weekly.start).toUpperCase()}',
+                        ? 'Weekly review'
+                        : 'Week of ${formatShortDate(p.weekly.start)}',
                     title: 'Trends',
                   ),
                   const SizedBox(height: 12),

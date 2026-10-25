@@ -773,6 +773,14 @@ class ActivityDetail {
     this.floorsToday,
     this.caloriesTotalToday,
     this.caloriesActiveToday,
+    this.intakeKcalToday,
+    this.proteinGToday,
+    this.carbsGToday,
+    this.fatGToday,
+    this.mealsToday = 0,
+    this.intakeSources = const [],
+    this.intakeDates = const [],
+    this.intakeKcalByDay = const [],
     this.error,
   });
 
@@ -799,8 +807,29 @@ class ActivityDetail {
       floorsToday: _intFrom(map['floorsToday']),
       caloriesTotalToday: _intFrom(map['caloriesTotalToday']),
       caloriesActiveToday: _intFrom(map['caloriesActiveToday']),
+      intakeKcalToday: _doubleFrom(map['intakeKcalToday']),
+      proteinGToday: _doubleFrom(map['proteinGToday']),
+      carbsGToday: _doubleFrom(map['carbsGToday']),
+      fatGToday: _doubleFrom(map['fatGToday']),
+      mealsToday: _intFrom(map['mealsToday']) ?? 0,
+      intakeSources: HealthConnectInspection._stringList(map['intakeSources']),
+      intakeDates: HealthConnectInspection._stringList(map['intakeDates']),
+      intakeKcalByDay: _doubleListFrom(map['intakeKcalByDay']),
     );
   }
+
+  /// Food energy logged today in any app that shares with Health Connect.
+  final double? intakeKcalToday;
+  final double? proteinGToday;
+  final double? carbsGToday;
+  final double? fatGToday;
+  final int mealsToday;
+  final List<String> intakeSources;
+  final List<String> intakeDates;
+  final List<double?> intakeKcalByDay;
+
+  bool get canReadNutrition =>
+      granted.contains('android.permission.health.READ_NUTRITION');
 
   factory ActivityDetail.error(String message) =>
       ActivityDetail(status: 'error', granted: const [], error: message);
@@ -840,6 +869,11 @@ class BodyDetail {
     this.skinTempBaselineC,
     this.skinTempDeviationC,
     this.vo2Max,
+    this.weightKg,
+    this.weightAt,
+    this.weightSource,
+    this.heightCm,
+    this.bodyFatPercent,
     this.error,
   });
 
@@ -855,8 +889,23 @@ class BodyDetail {
       skinTempBaselineC: _doubleFrom(map['skinTempBaselineC']),
       skinTempDeviationC: _doubleFrom(map['skinTempDeviationC']),
       vo2Max: _doubleFrom(map['vo2Max']),
+      weightKg: _doubleFrom(map['weightKg']),
+      weightAt: DateTime.tryParse(map['weightAt'] as String? ?? ''),
+      weightSource: map['weightSource'] as String?,
+      heightCm: _doubleFrom(map['heightCm']),
+      bodyFatPercent: _doubleFrom(map['bodyFatPercent']),
     );
   }
+
+  /// Latest body measurements from any app that shares with Health Connect.
+  final double? weightKg;
+  final DateTime? weightAt;
+  final String? weightSource;
+  final double? heightCm;
+  final double? bodyFatPercent;
+
+  bool get canReadWeight =>
+      granted.contains('android.permission.health.READ_WEIGHT');
 
   factory BodyDetail.error(String message) =>
       BodyDetail(status: 'error', granted: const [], error: message);

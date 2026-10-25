@@ -1,4 +1,4 @@
-﻿// Renders every Becel screen with real fonts and a synthetic athlete dataset.
+// Renders every Becel screen with real fonts and a synthetic athlete dataset.
 //
 // Run:  flutter test test_shots --update-goldens
 // Output: test_shots/goldens/*.png (review artifacts, not regression goldens).
@@ -33,6 +33,12 @@ Future<void> loadFonts() async {
     roboto.addFont(Future.value(ByteData.view(bytes.buffer)));
   }
   await roboto.load();
+  final inter = FontLoader('Inter');
+  for (final weight in [400, 500, 600, 700, 800]) {
+    final bytes = File('assets/fonts/Inter-$weight.ttf').readAsBytesSync();
+    inter.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await inter.load();
   final icons = FontLoader('MaterialIcons')
     ..addFont(
       Future.value(
@@ -105,7 +111,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(NavigationBar),
-        matching: find.text(label),
+        matching: find.byTooltip(label),
       ),
     );
     await _settle(tester);
@@ -113,9 +119,9 @@ void main() {
 
   final tabs = <String, String>{
     '01_today': 'Today',
-    '02_activity': 'Activity',
+    '02_training': 'Training',
     '03_sleep': 'Sleep',
-    '04_history': 'History',
+    '04_trends': 'Trends',
     '05_settings': 'Settings',
   };
   for (final entry in tabs.entries) {
@@ -133,17 +139,7 @@ void main() {
     });
   }
 
-  for (final route in const [
-    '/recovery',
-    '/strain',
-    '/energy',
-    '/heart',
-    '/biology',
-    '/zones',
-    '/data',
-    '/training',
-    '/strength',
-  ]) {
+  for (final route in const ['/recovery', '/energy', '/vitals', '/data']) {
     testWidgets('shot route $route', (tester) async {
       await boot(tester);
       try {
@@ -152,7 +148,12 @@ void main() {
         return;
       }
       await _settle(tester);
-      if (tester.takeException() != null) return;
+      final error = tester.takeException();
+      if (error != null) {
+        // ignore: avoid_print
+        print('ROUTE ERROR $route: $error');
+        return;
+      }
       await shoot(tester, 'r_${route.substring(1)}');
     });
   }

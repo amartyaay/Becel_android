@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
 import '../../domain/heart_signal.dart';
 import '../../domain/performance.dart';
@@ -13,7 +12,6 @@ import '../../domain/strength.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
-import '../activity/strength_log_sheet.dart';
 import '../shell/shell_screen.dart';
 
 const zoneColors = [
@@ -55,16 +53,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
                 children: [
-                  ScreenHeader(
-                    eyebrow: 'STRAIN · LOAD · LIFTS',
+                  const ScreenHeader(
+                    eyebrow: 'Strain · load · zones',
                     title: 'Training',
-                    trailing: IconButton.filledTonal(
-                      tooltip: 'Log a lift',
-                      onPressed: () => showStrengthLogSheet(context),
-                      icon: const Icon(Icons.add_rounded),
-                    ),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null)
@@ -114,11 +107,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
       _TodayStrainCard(performance: p),
       const SizedBox(height: 12),
       _LoadTrendCard(performance: p),
-      const SizedBox(height: 12),
-      _StrengthSummaryCard(
-        performance: p,
-        onOpen: () => context.push('/strength'),
-      ),
       const SizedBox(height: 12),
       _WeekZonesCard(performance: p, onOpen: () => context.push('/vitals')),
       const SizedBox(height: 20),
@@ -471,117 +459,6 @@ class _AcwrGauge extends StatelessWidget {
   }
 }
 
-class _StrengthSummaryCard extends StatelessWidget {
-  const _StrengthSummaryCard({required this.performance, required this.onOpen});
-
-  final Performance performance;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final week = performance.strengthSessions
-        .where((s) => performance.now.difference(s.start).inDays < 7)
-        .toList();
-    final hardSets = week.fold<int>(0, (s, x) => s + x.hardSets);
-    final volume = week.fold<double>(0, (s, x) => s + x.volumeKg);
-    final top = [...performance.muscleVolume]
-      ..sort((a, b) => b.sets.compareTo(a.sets));
-    return PanelCard(
-      title: 'STRENGTH · 7 DAYS',
-      icon: Icons.fitness_center_rounded,
-      accent: AppColors.orange,
-      onTap: onOpen,
-      child: week.isEmpty
-          ? const Text(
-              'No lifts logged this week. Log sets to track muscle volume, '
-              'estimated 1RMs, and the load heart rate misses.',
-              style: AppType.note,
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: StatBlock(
-                        label: 'SESSIONS',
-                        value: '${week.length}',
-                      ),
-                    ),
-                    Expanded(
-                      child: StatBlock(label: 'HARD SETS', value: '$hardSets'),
-                    ),
-                    Expanded(
-                      child: StatBlock(
-                        label: 'VOLUME',
-                        value: volume >= 1000
-                            ? (volume / 1000).toStringAsFixed(1)
-                            : volume.round().toString(),
-                        unit: volume >= 1000 ? 't' : 'kg',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                for (final muscle in top.where((m) => m.sets > 0).take(4))
-                  _MuscleRow(volume: muscle),
-              ],
-            ),
-    );
-  }
-}
-
-class _MuscleRow extends StatelessWidget {
-  const _MuscleRow({required this.volume});
-
-  final MuscleVolume volume;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (volume.status) {
-      MuscleVolumeStatus.minimal => AppColors.textTertiary,
-      MuscleVolumeStatus.maintenance => AppColors.bandYellow,
-      MuscleVolumeStatus.growth => AppColors.bandGreen,
-      MuscleVolumeStatus.high => AppColors.orange,
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 86,
-            child: Text(
-              volume.muscle.label,
-              style: AppType.caption.copyWith(color: AppColors.textSecondary),
-            ),
-          ),
-          Expanded(
-            child: LinearMeter(
-              value: volume.sets,
-              max: 24,
-              color: color,
-              bandFrom: 10,
-              bandTo: 20,
-              height: 7,
-            ),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              volume.sets.toStringAsFixed(volume.sets % 1 == 0 ? 0 : 1),
-              textAlign: TextAlign.right,
-              style: AppType.caption.copyWith(
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _WeekZonesCard extends StatelessWidget {
   const _WeekZonesCard({required this.performance, required this.onOpen});
 
@@ -666,21 +543,21 @@ class _WorkoutList extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = snapshot.performance;
     final zones = p.zones!;
-    final synced = snapshot.activity?.workouts ?? const <WorkoutEntry>[];
-    final logged = p.strengthSessions
-        .where((s) => p.now.difference(s.start).inDays < 7)
-        .toList();
+    final synced = [...?snapshot.activity?.workouts]
+      ..sort((a, b) => b.start.compareTo(a.start));
     final items = <({DateTime at, Widget row})>[
       for (final workout in synced)
         (
           at: workout.start,
           row: _WorkoutRow(
             icon: _iconFor(workout.type),
-            color: AppColors.strain,
+            color: isStrengthWorkout(workout.type)
+                ? AppColors.textSecondary
+                : AppColors.strain,
             title: workout.type,
             subtitle:
                 '${formatDayShort(workout.start)} ${formatClock(workout.start)} · '
-                '${formatDurationMinutes(workout.minutes)} · synced',
+                '${formatDurationMinutes(workout.minutes)}',
             strain: sessionStrain(
               cleanedMinutes: p.clean.samples,
               start: workout.start,
@@ -691,37 +568,15 @@ class _WorkoutList extends StatelessWidget {
             ),
           ),
         ),
-      for (final session in logged)
-        (
-          at: session.start,
-          row: _WorkoutRow(
-            icon: Icons.fitness_center_rounded,
-            color: AppColors.orange,
-            title: session.exercises.isEmpty
-                ? 'Strength session'
-                : session.exercises
-                      .map((e) => e.exercise?.name ?? '')
-                      .where((n) => n.isNotEmpty)
-                      .take(2)
-                      .join(' · '),
-            subtitle:
-                '${formatDayShort(session.start)} ${formatClock(session.start)} · '
-                '${session.durationMinutes} min · RPE ${session.sessionRpe.round()} · '
-                '${session.hardSets} hard sets',
-            strain: null,
-            trailing: '${session.srpeLoad.round()} AU',
-            onTap: () => showStrengthLogSheet(context, existing: session),
-          ),
-        ),
-    ]..sort((a, b) => b.at.compareTo(a.at));
+    ];
     if (items.isEmpty) {
       return const StateCard(
         icon: Icons.fitness_center_rounded,
         color: AppColors.textSecondary,
         title: 'No workouts this week',
         body:
-            'Synced Fitbit Air workouts and lifts you log appear here with '
-            'their strain.',
+            'Workouts recorded by Fitbit Air or logged in Google Health appear '
+            'here with their strain.',
       );
     }
     return Column(
@@ -753,8 +608,6 @@ class _WorkoutRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.strain,
-    this.trailing,
-    this.onTap,
   });
 
   final IconData icon;
@@ -762,12 +615,8 @@ class _WorkoutRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final SessionStrain? strain;
-  final String? trailing;
-  final VoidCallback? onTap;
-
   @override
   Widget build(BuildContext context) => SurfaceCard(
-    onTap: onTap,
     padding: const EdgeInsets.all(12),
     color: AppColors.surface,
     child: Row(
@@ -805,11 +654,6 @@ class _WorkoutRow extends StatelessWidget {
               ),
               Text('strain', style: AppType.caption.copyWith(fontSize: 10)),
             ],
-          )
-        else if (trailing != null)
-          Text(
-            trailing!,
-            style: AppType.numS.copyWith(fontSize: 14, color: AppColors.orange),
           ),
       ],
     ),

@@ -11,7 +11,7 @@ import '../../domain/coaching.dart';
 import '../../domain/profile.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
-import '../today/check_in_sheet.dart';
+import '../shell/shell_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -36,167 +36,172 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: ListenableBuilder(
-          listenable: _listenable,
-          builder: (context, _) {
-            final snapshot = _health.snapshot;
-            final now = DateTime.now();
-            final checkIns = _local.log.recentCheckIns(days: 7, now: now);
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
-              children: [
-                const ScreenHeader(eyebrow: 'PREFERENCES', title: 'Settings'),
-                const SizedBox(height: 6),
-                const Text(
-                  'Connection, local context, and the data Becel keeps on this '
-                  'phone.',
-                  style: AppType.body,
-                ),
-                const SizedBox(height: 18),
-                _ConnectionCard(
-                  snapshot: snapshot,
-                  loading: _health.loading,
-                  onManage: () => context.go('/data'),
-                ),
-                const SizedBox(height: 22),
-                SectionHeader(
-                  title: 'Morning check-ins',
-                  caption: 'ON DEVICE',
-                  action: 'Check in',
-                  onAction: () => showCheckInSheet(context),
-                ),
-                const SizedBox(height: 10),
-                _CheckInList(checkIns: checkIns),
-                const SizedBox(height: 22),
-                const Text('FITNESS PROFILE', style: AppType.eyebrow),
-                const SizedBox(height: 10),
-                _SettingsCard(
-                  children: [
-                    _SettingsRow(
-                      icon: Icons.monitor_heart_rounded,
-                      color: AppColors.green,
-                      title: 'Body profile',
-                      subtitle: _profileSubtitle(
-                        _local.log.profile,
-                        snapshot?.age,
-                      ),
-                      onTap: () =>
-                          _editProfile(_local.log.profile, snapshot?.age),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                const Text('YOUR DATA', style: AppType.eyebrow),
-                const SizedBox(height: 10),
-                _SettingsCard(
-                  children: [
-                    _SettingsRow(
-                      icon: Icons.sensors_rounded,
-                      color: AppColors.teal,
-                      title: 'Data sources',
-                      subtitle: 'Health Connect status and permissions',
-                      onTap: () => context.go('/data'),
-                    ),
-                    const _SettingsDivider(),
-                    _SettingsRow(
-                      icon: Icons.ios_share_rounded,
-                      color: AppColors.violet,
-                      title: 'Share weekly summary',
-                      subtitle: snapshot == null
-                          ? 'Available after health data loads'
-                          : 'Plain text · no server',
-                      onTap: snapshot == null || _busy
-                          ? null
-                          : () => _shareWeek(snapshot),
-                    ),
-                    const _SettingsDivider(),
-                    _SettingsRow(
-                      icon: Icons.download_rounded,
-                      color: AppColors.orange,
-                      title: 'Export weekly CSV',
-                      subtitle: snapshot == null
-                          ? 'Available after health data loads'
-                          : 'Saved to Downloads/Becel',
-                      onTap: snapshot == null || _busy
-                          ? null
-                          : () => _exportWeek(snapshot),
-                    ),
-                    const _SettingsDivider(),
-                    _SettingsRow(
-                      icon: Icons.delete_outline_rounded,
-                      color: AppColors.red,
-                      title: 'Delete local data',
-                      subtitle: 'Check-ins, strength logs, and body profile',
-                      onTap: _confirmDelete,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                const Text('ABOUT', style: AppType.eyebrow),
-                const SizedBox(height: 10),
-                const _SettingsCard(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Row(
-                        children: [
-                          _BrandMark(),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Becel',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                                SizedBox(height: 3),
-                                Text(
-                                  'An independent wellness companion',
-                                  style: AppType.caption,
-                                ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          StatusPill(label: 'PREVIEW', color: AppColors.yellow),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Becel reads Fitbit Air records from Health Connect and keeps '
-                  'check-ins and strength logs on this phone. Nothing is '
-                  'uploaded. Estimates are wellness context, not a medical '
-                  'device or training clearance.',
+      body: ListenableBuilder(
+        listenable: _listenable,
+        builder: (context, _) {
+          final snapshot = _health.snapshot;
+          final body = snapshot?.body;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              MediaQuery.paddingOf(context).top + 12,
+              16,
+              navClearance,
+            ),
+            children: [
+              const ScreenHeader(eyebrow: 'Preferences', title: 'Settings'),
+              const SizedBox(height: 16),
+              _ConnectionCard(
+                snapshot: snapshot,
+                loading: _health.loading,
+                onManage: () => context.push('/data'),
+              ),
+              const SizedBox(height: 24),
+              const _GroupLabel('Profile'),
+              _SettingsCard(
+                children: [
+                  _SettingsRow(
+                    icon: Icons.person_rounded,
+                    color: AppColors.accent,
+                    title: 'Age, sex & settings',
+                    subtitle: _profileSubtitle(_local.profile, snapshot?.age),
+                    onTap: () => _editProfile(_local.profile, snapshot?.age),
+                  ),
+                  const _SettingsDivider(),
+                  _InfoRow(
+                    icon: Icons.monitor_weight_rounded,
+                    title: 'Weight',
+                    value: body?.weightKg == null
+                        ? (_local.profile?.weightKg == null
+                              ? 'Not recorded'
+                              : '${_local.profile!.weightKg!.round()} kg · manual')
+                        : '${body!.weightKg!.toStringAsFixed(1)} kg · '
+                              '${body.weightSource ?? 'Health Connect'}',
+                  ),
+                  const _SettingsDivider(),
+                  _InfoRow(
+                    icon: Icons.height_rounded,
+                    title: 'Height',
+                    value: body?.heightCm == null
+                        ? (_local.profile?.heightCm == null
+                              ? 'Not recorded'
+                              : '${_local.profile!.heightCm!.round()} cm · manual')
+                        : '${body!.heightCm!.round()} cm · Health Connect',
+                  ),
+                  const _SettingsDivider(),
+                  _InfoRow(
+                    icon: Icons.percent_rounded,
+                    title: 'Body fat',
+                    value: body?.bodyFatPercent == null
+                        ? (_local.profile?.bodyFatPercent == null
+                              ? 'Not recorded'
+                              : '${_local.profile!.bodyFatPercent!.round()}% · manual')
+                        : '${body!.bodyFatPercent!.toStringAsFixed(1)}% · Health Connect',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Weight, height, and body fat are read from Google Health '
+                  '(or any app sharing with Health Connect). Manual values are '
+                  'only a fallback.',
                   style: AppType.caption,
                 ),
-                if (kDebugMode) ...[
-                  const SizedBox(height: 24),
-                  const Text('DEVELOPER', style: AppType.eyebrow),
-                  const SizedBox(height: 10),
-                  const _AirHapticsTester(),
-                ],
-                const SizedBox(height: 20),
-                const Center(
-                  child: Text(
-                    'Wellness insights only · Not a medical device',
-                    textAlign: TextAlign.center,
-                    style: AppType.caption,
+              ),
+              const SizedBox(height: 24),
+              const _GroupLabel('Your data'),
+              _SettingsCard(
+                children: [
+                  _SettingsRow(
+                    icon: Icons.sensors_rounded,
+                    color: AppColors.intake,
+                    title: 'Data sources',
+                    subtitle: 'Health Connect permissions',
+                    onTap: () => context.push('/data'),
                   ),
+                  const _SettingsDivider(),
+                  _SettingsRow(
+                    icon: Icons.ios_share_rounded,
+                    color: AppColors.sleep,
+                    title: 'Share weekly summary',
+                    subtitle: snapshot == null
+                        ? 'Available after data loads'
+                        : 'Plain text · no server',
+                    onTap: snapshot == null || _busy
+                        ? null
+                        : () => _shareWeek(snapshot),
+                  ),
+                  const _SettingsDivider(),
+                  _SettingsRow(
+                    icon: Icons.download_rounded,
+                    color: AppColors.burned,
+                    title: 'Export weekly CSV',
+                    subtitle: snapshot == null
+                        ? 'Available after data loads'
+                        : 'Saved to Downloads/Becel',
+                    onTap: snapshot == null || _busy
+                        ? null
+                        : () => _exportWeek(snapshot),
+                  ),
+                  const _SettingsDivider(),
+                  _SettingsRow(
+                    icon: Icons.restart_alt_rounded,
+                    color: AppColors.red,
+                    title: 'Reset profile',
+                    subtitle: 'Clears age, sex, and settings on this phone',
+                    onTap: _confirmDelete,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const _GroupLabel('About'),
+              const _SettingsCard(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Row(
+                      children: [
+                        _BrandMark(),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Becel', style: AppType.cardTitle),
+                              SizedBox(height: 3),
+                              Text(
+                                'Reads Fitbit Air and Google Health. Never '
+                                'writes, never uploads.',
+                                style: AppType.caption,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'All metrics are calculated on this phone from Health '
+                  'Connect records. They are training and wellness '
+                  'guidance, not medical advice.',
+                  style: AppType.caption,
                 ),
+              ),
+              if (kDebugMode) ...[
+                const SizedBox(height: 24),
+                const _GroupLabel('Developer'),
+                const _AirHapticsTester(),
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -245,10 +250,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _profileSubtitle(BodyProfile? profile, int? nativeAge) {
     final age = profile?.age ?? nativeAge;
-    if (profile == null || !profile.hasEnergyInputs) {
-      return age == null
-          ? 'Add age, sex, height, and weight'
-          : 'Age $age · add sex, height, and weight';
+    if (profile == null || profile.sex == null || age == null) {
+      return age == null ? 'Add age and sex' : 'Age $age · add sex';
+    }
+    if (!profile.hasEnergyInputs) {
+      final sex = profile.sex == BiologicalSex.female ? 'Female' : 'Male';
+      return 'Age $age · $sex';
     }
     final sex = profile.sex == BiologicalSex.female ? 'Female' : 'Male';
     final extras = [
@@ -288,16 +295,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, updateDialog) => AlertDialog(
-            title: const Text('Body profile'),
+            title: const Text('Profile'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Becel uses age for heart-rate zones, and all four fields '
-                    'for energy and fitness-age estimates. Values stay on this '
-                    'device.',
+                    'Health Connect does not carry age or sex, so Becel asks '
+                    'once. Height and weight are only a fallback when Google '
+                    'Health has none. Stored on this phone only.',
                     style: AppType.note,
                   ),
                   const SizedBox(height: 14),
@@ -404,8 +411,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (invalid) ...[
                     const SizedBox(height: 10),
                     const Text(
-                      'Enter age 18–100, height 120–230 cm, and weight '
-                      '30–250 kg.',
+                      'Enter age 18–100 and choose sex. Height 120–230 cm and '
+                      'weight 30–250 kg if you fill them in.',
                       style: TextStyle(color: AppColors.red, fontSize: 12),
                     ),
                   ],
@@ -444,7 +451,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? (sleepHours * 60).round()
                         : null,
                   );
-                  if (!profile.hasEnergyInputs) {
+                  final validAge = age != null && age >= 18 && age <= 100;
+                  final validHeight =
+                      height == null || (height >= 120 && height <= 230);
+                  final validWeight =
+                      weight == null || (weight >= 30 && weight <= 250);
+                  if (!validAge ||
+                      sex == null ||
+                      !validHeight ||
+                      !validWeight) {
                     updateDialog(() => invalid = true);
                     return;
                   }
@@ -474,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           savedProfile && savedAge
-              ? 'Body profile saved.'
+              ? 'Profile saved.'
               : 'Profile saved locally; the activity age could not update.',
         ),
       ),
@@ -485,10 +500,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete local data?'),
+        title: const Text('Reset profile?'),
         content: const Text(
-          'This removes morning check-ins, manual strength days, and your body '
-          'profile from this phone. Health Connect records are not touched.',
+          'This clears age, sex, and calculation settings from this phone. '
+          'Health Connect and Google Health data are never touched.',
         ),
         actions: [
           TextButton(
@@ -511,8 +526,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           cleared
-              ? 'Local data deleted. Health Connect records are unchanged.'
-              : 'Could not delete all local data.',
+              ? 'Profile reset. Health Connect data is unchanged.'
+              : 'Could not reset the profile.',
         ),
       ),
     );
@@ -601,86 +616,48 @@ class _ConnectionCard extends StatelessWidget {
   }
 }
 
-class _CheckInList extends StatelessWidget {
-  const _CheckInList({required this.checkIns});
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.text);
 
-  final List<CheckIn> checkIns;
+  final String text;
 
   @override
-  Widget build(BuildContext context) {
-    if (checkIns.isEmpty) {
-      return const StateCard(
-        icon: Icons.wb_sunny_outlined,
-        color: AppColors.yellow,
-        title: 'No check-ins yet',
-        body:
-            'A morning check-in adds context Becel cannot measure. It stays '
-            'on this phone.',
-      );
-    }
-    return _SettingsCard(
-      children: [
-        for (var index = 0; index < checkIns.length; index++) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconChip(
-                  icon: Icons.check_circle_outline_rounded,
-                  color: AppColors.green,
-                  size: 36,
-                  iconSize: 18,
-                  radius: 12,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        checkIns[index].label.isEmpty
-                            ? 'Check-in'
-                            : checkIns[index].label,
-                        style: AppType.rowTitle.copyWith(fontSize: 14),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _dateLabel(checkIns[index].date),
-                        style: AppType.caption,
-                      ),
-                      if (checkIns[index].note != null) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          checkIns[index].note!,
-                          style: AppType.caption.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (index != checkIns.length - 1) const _SettingsDivider(),
-        ],
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+    child: Text(text, style: AppType.eyebrow),
+  );
+}
 
-  String _dateLabel(String date) {
-    final parsed = DateTime.tryParse(date);
-    if (parsed == null) return date;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(parsed.year, parsed.month, parsed.day);
-    final difference = today.difference(day).inDays;
-    if (difference == 0) return 'Today';
-    if (difference == 1) return 'Yesterday';
-    return formatShortDate(parsed);
-  }
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 52),
+    child: Row(
+      children: [
+        const SizedBox(width: 9),
+        Icon(icon, size: 19, color: AppColors.textTertiary),
+        const SizedBox(width: 21),
+        Expanded(child: Text(title, style: AppType.rowTitle)),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: AppType.caption.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SettingsCard extends StatelessWidget {

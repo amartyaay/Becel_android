@@ -50,7 +50,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(NavigationBar),
-            matching: find.text(tab),
+            matching: find.byTooltip(tab),
           ),
         );
         for (var i = 0; i < 6; i++) {

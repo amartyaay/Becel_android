@@ -22,10 +22,15 @@ class _DataScreenState extends State<DataScreen> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    // Refreshing notifies every screen listening to the store, so wait
+    // until this route has finished building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     await HealthStore.instance.refresh(force: true);
     final snapshot = HealthStore.instance.snapshot;

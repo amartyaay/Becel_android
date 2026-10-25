@@ -33,6 +33,8 @@ class AthleteFixture {
     'android.permission.health.READ_TOTAL_CALORIES_BURNED',
     'android.permission.health.READ_RESPIRATORY_RATE',
     'android.permission.health.READ_SKIN_TEMPERATURE',
+    'android.permission.health.READ_NUTRITION',
+    'android.permission.health.READ_WEIGHT',
   ];
 
   final heartMinutes = <List<int>>[];
@@ -382,6 +384,17 @@ class AthleteFixture {
     'checkedAt': now.toIso8601String(),
     'workouts': workouts,
     'caloriesTotalToday': 2310 + (now.hour * 60 + now.minute) ~/ 3,
+    'intakeKcalToday': 1840.0,
+    'proteinGToday': 142.0,
+    'carbsGToday': 190.0,
+    'fatGToday': 58.0,
+    'mealsToday': 4,
+    'intakeSources': ['Fitbit'],
+    'intakeDates': [
+      for (var offset = 6; offset >= 0; offset--)
+        _dateKey(today.subtract(Duration(days: offset))),
+    ],
+    'intakeKcalByDay': [2650.0, 2480.0, 2900.0, 2310.0, 2720.0, 2550.0, 1840.0],
   };
 
   Map<String, Object?> bodyDetail() => {
@@ -392,6 +405,11 @@ class AthleteFixture {
     'respiratoryBaseline': 14.4,
     'skinTempBaselineC': 33.9,
     'skinTempDeviationC': 0.2,
+    'weightKg': 82.4,
+    'weightAt': today.toIso8601String(),
+    'weightSource': 'Fitbit',
+    'heightCm': 180.0,
+    'bodyFatPercent': 15.0,
   };
 
   Map<String, Object?> trends7d() {
@@ -433,25 +451,11 @@ class AthleteFixture {
     _ => <String, Object?>{},
   };
 
-  /// A saved local log with a body profile and a few lifts.
+  /// The only locally stored data: age and sex (Health Connect has
+  /// neither). Weight, height, and body fat come from [bodyDetail].
   String localJson() => jsonEncode({
-    'version': 2,
-    'checkIns': [
-      {
-        'date': _dateKey(today),
-        'tags': ['normal'],
-        'at': now.toIso8601String(),
-        'note': null,
-      },
-    ],
-    'strengthDays': const <String>[],
-    'profile': {
-      'age': 34,
-      'sex': 'male',
-      'heightCm': 180.0,
-      'weightKg': 82.0,
-      'bodyFatPercent': 15.0,
-    },
+    'version': 3,
+    'profile': {'age': 34, 'sex': 'male'},
   });
 
   void install() {
