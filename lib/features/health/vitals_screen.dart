@@ -191,9 +191,11 @@ class _ZonesCard extends StatelessWidget {
                   ),
                 const Divider(height: 18),
                 Text(
-                  'Max ${max.bpm} bpm from ${max.sourceLabel}'
-                  '${max.observedBpm != null && max.source != MaxHrSource.observed ? ' (highest sustained seen: ${max.observedBpm})' : ''}. '
-                  'Age prediction: ${max.predictedBpm}. Resting ${zones.restingBpm.round()} bpm.',
+                  'Max ${max.bpm} bpm · ${max.source == MaxHrSource.tested
+                      ? 'tested'
+                      : max.source == MaxHrSource.observed
+                      ? 'seen in 28 days'
+                      : 'age-predicted'} · resting ${zones.restingBpm.round()}',
                   style: AppType.caption,
                 ),
                 if (max.source != MaxHrSource.tested) ...[
@@ -236,7 +238,7 @@ class _OvernightCard extends StatelessWidget {
     final body = snapshot.body;
     final p = snapshot.performance;
     return PanelCard(
-      title: 'Overnight signals · 28 days',
+      title: 'Overnight · 28 days',
       icon: Icons.nightlight_round,
       accent: AppColors.teal,
       child: Column(
@@ -357,7 +359,7 @@ class _FitnessCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final f = fitness;
     return PanelCard(
-      title: 'Cardio fitness · estimate',
+      title: 'Cardio fitness',
       icon: Icons.directions_run_rounded,
       accent: AppColors.green,
       trailing: f == null

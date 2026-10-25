@@ -107,7 +107,7 @@ void main() {
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
     expect(find.text('kcal so far'), findsOneWidget);
-    expect(find.textContaining('by midnight'), findsOneWidget);
+    expect(find.textContaining('by midnight'), findsWidgets);
     await _scrollTo(tester, find.text('Energy balance'));
     expect(find.textContaining('so far'), findsWidgets);
     await _scrollTo(tester, find.text('Steps'));
@@ -200,7 +200,7 @@ void main() {
     );
     await _scrollTo(tester, find.text('Training load'));
     expect(find.textContaining('ACWR'), findsOneWidget);
-    await _scrollTo(tester, find.text('Heart-rate zones · 7 days'));
+    await _scrollTo(tester, find.text('Zones · 7 days'));
     await _scrollTo(tester, find.text('Workouts'));
     expect(find.text('strain'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -218,7 +218,7 @@ void main() {
     expect(find.text('I fell asleep later'), findsNothing);
     await _scrollTo(tester, find.text('Tonight'));
     expect(find.text('In bed by'), findsOneWidget);
-    await _scrollTo(tester, find.text('Consistency · 7 nights'));
+    await _scrollTo(tester, find.text('Consistency'));
     expect(tester.takeException(), isNull);
   });
 

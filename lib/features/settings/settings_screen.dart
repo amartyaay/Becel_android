@@ -579,15 +579,12 @@ class _ConnectionCard extends StatelessWidget {
     final body = loading && snapshot == null
         ? 'Reading the connection state from this phone.'
         : connected
-        ? 'Records are read from Health Connect. Last refresh '
-              '${formatAgo(snapshot!.loadedAt)}.'
+        ? 'Synced ${formatAgo(snapshot!.loadedAt)}'
         : !available
-        ? 'This phone does not expose Health Connect, so Becel cannot read '
-              'Fitbit Air records.'
+        ? 'This phone does not offer Health Connect.'
         : !hasAccess
         ? 'Allow sleep, heart rate, and exercise access to see your brief.'
-        : 'The connection works, but no Fitbit Air records have arrived. '
-              'Check that the Fitbit app is syncing.';
+        : 'Open the Fitbit app to sync.';
     return SurfaceCard(
       color: AppColors.surface,
       padding: const EdgeInsets.all(16),

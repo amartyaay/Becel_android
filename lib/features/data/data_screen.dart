@@ -548,11 +548,6 @@ class _HealthSummaryCard extends StatelessWidget {
               StatusPill(label: 'Air filter', color: AppColors.green),
             ],
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Only records written for Fitbit Air by the Fitbit app or Google Health are shown. Other sources and devices are hidden.',
-            style: AppType.caption,
-          ),
           const SizedBox(height: 8),
           for (final item in values) ...[
             const Divider(height: 1),

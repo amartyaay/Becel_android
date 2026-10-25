@@ -100,18 +100,19 @@ class _TodayCard extends StatelessWidget {
     final t = energy.today;
     // Same order and colours as the Today card: rest in grey, modelled
     // everyday energy in pale orange, measured movement in full orange.
+    // Measured parts make the headline; modelled parts are listed below it
+    // as an estimated extra (the convention Apple, Fitbit, WHOOP use).
     final parts = [
       (
         'At rest',
         t.restingKcal,
         AppColors.textTertiary.withValues(alpha: 0.45),
       ),
-      ('Daily living', t.awakeKcal, AppColors.burned.withValues(alpha: 0.4)),
-      ('Digestion', t.tefKcal, AppColors.burned.withValues(alpha: 0.25)),
       ('Walking', t.stepKcal, AppColors.burned),
       ('Workouts (heart rate)', t.heartKcal, AppColors.strain),
       ('Lifting', t.strengthKcal, AppColors.active),
     ];
+    final extras = [('Daily living', t.awakeKcal), ('Digestion', t.tefKcal)];
     final pal = energy.rmr > 0 ? energy.projectedToday / energy.rmr : null;
     final palPlausible = pal == null || (pal >= 1.35 && pal <= 2.6);
     return PanelCard(
@@ -132,7 +133,7 @@ class _TodayCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        formatNumber(t.totalKcal.round()),
+                        formatNumber(t.measuredKcal.round()),
                         style: AppType.numXl,
                       ),
                       const Padding(
@@ -143,14 +144,6 @@ class _TodayCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  '±${t.uncertaintyKcal.round()}',
-                  style: AppType.caption.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -159,6 +152,13 @@ class _TodayCard extends StatelessWidget {
               Expanded(
                 child: StatBlock(
                   label: 'By midnight',
+                  value:
+                      '~${formatNumber(energy.projectedMeasuredToday.round())}',
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'Full estimate',
                   value: '~${formatNumber(energy.projectedToday.round())}',
                 ),
               ),
@@ -214,6 +214,25 @@ class _TodayCard extends StatelessWidget {
                   ],
                 ),
               ),
+          const Divider(height: 18, color: AppColors.border),
+          Text('Estimated extra', style: AppType.caption),
+          const SizedBox(height: 6),
+          for (final extra in extras)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(child: Text(extra.$1, style: AppType.note)),
+                  Text(
+                    '+${formatNumber(extra.$2.round())}',
+                    style: AppType.numS.copyWith(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -332,9 +351,8 @@ class _IntakeCard extends StatelessWidget {
                 if (weight != null) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Protein target for training: ${(weight * 1.6).round()}–'
-                    '${(weight * 2.2).round()} g (1.6–2.2 g/kg).',
-                    style: AppType.caption.copyWith(fontSize: 11.5),
+                    'Protein goal ${(weight * 1.6).round()}–${(weight * 2.2).round()} g',
+                    style: AppType.caption,
                   ),
                 ],
               ],
@@ -519,7 +537,7 @@ class _DeviceCard extends StatelessWidget {
               Expanded(
                 child: StatBlock(
                   label: 'Becel',
-                  value: formatNumber(t.totalKcal.round()),
+                  value: formatNumber(t.measuredKcal.round()),
                   unit: 'kcal',
                 ),
               ),

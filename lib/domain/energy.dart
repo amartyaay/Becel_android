@@ -50,6 +50,13 @@ const sleepingMetabolicFraction = 0.95;
 /// reserve, the range it was derived in.
 const keytelMinHrr = 0.5;
 
+/// Gross MET caps for heart-rate energy that steps or a recorded workout do
+/// not explain: vigorous resistance work is ~6 METs and light activity ~3
+/// (2024 Adult Compendium), so HR beyond that reflects pressor response,
+/// heat, or stress rather than oxygen cost.
+const capMet = 6.0;
+const easyCapMet = 3.0;
+
 /// Between FLEX-HR and [keytelMinHrr], Keytel overstates cost roughly twice
 /// over, so it counts at this fraction.
 const easyHrKeytelFraction = 0.5;
@@ -156,6 +163,18 @@ class DayEnergy {
 
   /// Today only: the remaining hours at resting plus a typical evening
   /// (part awake, part asleep), plus TEF on that remainder.
+  /// The headline: resting plus measured movement, the convention Apple,
+  /// Fitbit, WHOOP, and Oura use. Daily living and digestion ([livingKcal])
+  /// are modelled, so they are shown separately as an estimate.
+  double get measuredKcal => restingKcal + exerciseKcal;
+
+  /// [measuredKcal] by midnight, assuming rest for the remaining minutes.
+  double projectedMeasuredKcal(double rmrPerDay) {
+    if (complete) return measuredKcal;
+    final remaining = math.max(0, 1440 - minutesElapsed);
+    return measuredKcal + remaining * rmrPerDay / 1440;
+  }
+
   double projectedTotalKcal(double rmrPerDay) {
     if (complete) return totalKcal;
     final remaining = math.max(0, 1440 - minutesElapsed);
@@ -348,6 +367,10 @@ DayEnergy? estimateDayEnergy({
   var asleepMinutes = 0;
   final reserve = math.max(20.0, maxBpm - restingBpm);
   var lastHardMinute = -1000;
+  // 1 MET ≈ 1 kcal per kg per hour; caps are net of resting.
+  final kgPerMinute = (profile.weightKg ?? 70) / 60;
+  final hardCapNet = math.max(0.0, capMet * kgPerMinute - rmrPerMinute);
+  final easyCapNet = math.max(0.0, easyCapMet * kgPerMinute - rmrPerMinute);
   for (var m = 0; m < minutes; m++) {
     if (strengthMet[m] > 0) {
       // Corrected METs (2024 Compendium): METs are multiples of the
@@ -367,10 +390,14 @@ DayEnergy? estimateDayEnergy({
         0.0,
         keytelKcalPerMinute(hr, profile) - rmrPerMinute,
       );
+      // Without steps or a recorded workout, a high pulse may be lifting,
+      // heat, or stress, where HR overstates oxygen cost 1.5–2× (pressor
+      // response). Cap such minutes at a vigorous 6-MET gross cost.
+      final unexplained = stepEnergy[m] == 0 && !inWorkout[m];
       if (hrr >= keytelMinHrr) {
         // Real exercise: Keytel was derived in this range.
         lastHardMinute = m;
-        heart += keytelNet;
+        heart += unexplained ? math.min(keytelNet, hardCapNet) : keytelNet;
         heartMinutes++;
         continue;
       }
@@ -389,7 +416,8 @@ DayEnergy? estimateDayEnergy({
           continue;
         }
       } else if (inWorkout[m] || m - lastHardMinute <= 10 || sustainedBout[m]) {
-        heart += damped;
+        // Light effort with no steps tops out at a light 3-MET cost.
+        heart += inWorkout[m] ? damped : math.min(damped, easyCapNet);
         heartMinutes++;
         continue;
       }
@@ -436,7 +464,12 @@ class EnergyBalance {
   final double rmr;
   final int? deviceTotalToday;
 
+  /// Full estimate (incl. daily living and digestion) by midnight; used for
+  /// energy balance and activity level.
   double get projectedToday => today.projectedTotalKcal(rmr);
+
+  /// The headline (resting + measured movement) by midnight.
+  double get projectedMeasuredToday => today.projectedMeasuredKcal(rmr);
 
   /// Average total expenditure on complete, well-covered days: a practical
   /// maintenance-intake starting point.
@@ -444,9 +477,10 @@ class EnergyBalance {
       ? null
       : history.fold<double>(0, (s, d) => s + d.totalKcal) / history.length;
 
-  /// Device total minus Becel so far; positive means the device is higher.
+  /// Device total minus Becel's headline so far; positive means the device
+  /// is higher. Devices report resting + activity, so compare like for like.
   double? get deviceDelta =>
-      deviceTotalToday == null ? null : deviceTotalToday! - today.totalKcal;
+      deviceTotalToday == null ? null : deviceTotalToday! - today.measuredKcal;
 }
 
 DateTime localDay(DateTime value) {

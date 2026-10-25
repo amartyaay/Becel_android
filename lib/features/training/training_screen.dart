@@ -15,12 +15,15 @@ import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
 import '../shell/shell_screen.dart';
 
+/// Heart-rate zones are ordinal, so they use one hue (strain) from light
+/// to dark, never the status colours: green must only ever mean "good".
+/// Every zone bar also carries its Z1–Z5 label.
 const zoneColors = [
-  Color(0xFF7FA7C9),
-  AppColors.teal,
-  AppColors.bandGreen,
-  AppColors.orange,
-  AppColors.bandRed,
+  Color(0xFFFBCFB0),
+  Color(0xFFF7A06B),
+  Color(0xFFF2601E),
+  Color(0xFFC43F16),
+  Color(0xFF85280E),
 ];
 
 class TrainingScreen extends StatefulWidget {
@@ -494,7 +497,7 @@ class _WeekZonesCard extends StatelessWidget {
     }
     final top = totals.fold<double>(1, math.max);
     return PanelCard(
-      title: 'Heart-rate zones · 7 days',
+      title: 'Zones · 7 days',
       icon: Icons.favorite_rounded,
       accent: AppColors.bandRed,
       onTap: onOpen,
@@ -539,8 +542,7 @@ class _WeekZonesCard extends StatelessWidget {
             ),
           const SizedBox(height: 4),
           Text(
-            'Max ${max.bpm} bpm (${max.sourceLabel}) · resting '
-            '${zones.restingBpm.round()} bpm · Z2 ${zones.rangeLabel(1)}',
+            'Max ${max.bpm} · resting ${zones.restingBpm.round()} bpm',
             style: AppType.caption.copyWith(fontSize: 11),
           ),
         ],

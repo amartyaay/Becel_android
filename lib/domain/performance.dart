@@ -135,6 +135,15 @@ Performance buildPerformance({
       ? null
       : HeartZones(restingBpm: resting, maxBpm: maxHr.bpm);
 
+  // Synced lifting carries no RPE (read-only), so estimate it from how much
+  // of the session heart rate spent at 50 %+ of reserve.
+  final lifts = [
+    for (final session in strengthSessions)
+      zones == null
+          ? session
+          : estimateSessionRpe(session, clean.samples, zones),
+  ];
+
   final strainDays = zones == null
       ? const <DayStrain>[]
       : dailyStrain(
@@ -144,6 +153,7 @@ Performance buildPerformance({
           sex: sex,
           now: now,
           days: loadWindowDays,
+          strengthSessions: lifts,
           stepBuckets: stepBuckets,
           workoutWindows: workoutWindows,
         );
@@ -272,18 +282,23 @@ Performance buildPerformance({
     respiratoryDelta: respiratoryDelta,
     skinTempDelta: skinTempDelta,
   );
-  final muscleVolume = weeklyMuscleVolume(strengthSessions, now: now);
+  final muscleVolume = weeklyMuscleVolume(lifts, now: now);
   final plan = buildDailyPlan(
     recovery: recovery.estimate,
     load: load,
     sleep: coach,
     alert: alert,
     muscleVolume: muscleVolume,
-    logsStrength: strengthSessions.isNotEmpty,
+    logsStrength: lifts.isNotEmpty,
     now: now,
     ambientTrimp: ambientTrimp(strainDays, today: now),
     hrvTrend: trend,
     zones: zones,
+    zonesApproximate: maxHr?.source == MaxHrSource.predicted,
+    strainToday: strainDays.isEmpty ? null : strainDays.last.strain,
+    yesterdayTrainingStrain: strainDays.length < 2
+        ? null
+        : strainDays[strainDays.length - 2].trainingStrain,
   );
 
   // Calories burned are shown only when every input is present, and only up
@@ -338,7 +353,7 @@ Performance buildPerformance({
         sleep: asleep,
         restingBpm: zones.restingBpm,
         maxBpm: zones.maxBpm,
-        strengthSessions: strengthSessions,
+        strengthSessions: lifts,
         workoutWindows: workoutWindows,
         intakeKcal: intakeByDate[sleepKeyOf(date)],
       );
@@ -364,7 +379,7 @@ Performance buildPerformance({
     strainDays: strainDays,
     load: load,
     sleep: coach,
-    strengthSessions: strengthSessions,
+    strengthSessions: lifts,
     energyDays: energyDays,
     now: now,
   );
@@ -390,8 +405,8 @@ Performance buildPerformance({
     energy: energy,
     energyDays: energyDays,
     muscleVolume: muscleVolume,
-    lifts: liftBests(strengthSessions),
-    strengthSessions: strengthSessions,
+    lifts: liftBests(lifts),
+    strengthSessions: lifts,
     weekly: weekly,
   );
 }
@@ -421,4 +436,40 @@ int _coverage(List<TimedValue> samples, DateTime date) {
     if (at >= start && at < end) count++;
   }
   return math.min(count, 1440);
+}
+
+/// Session RPE for a synced lifting session that carries none.
+///
+/// Foster's session RPE tracks internal load in resistance training, and in
+/// those sessions it rises with the share of time spent at high heart rate
+/// (work sets vs rest). Becel maps the fraction of covered minutes at 50 %+
+/// of heart-rate reserve onto CR-10: 0 % → 4 (light), ~30 % → 6.5,
+/// ~60 %+ → 9 (very hard). With under half the session covered by heart
+/// rate it falls back to 6 (moderate).
+StrengthSession estimateSessionRpe(
+  StrengthSession session,
+  List<TimedValue> cleanedMinutes,
+  HeartZones zones,
+) {
+  var covered = 0;
+  var hard = 0;
+  final hardBpm = zones.bpmAt(0.5);
+  for (final sample in cleanedMinutes) {
+    if (sample.at.isBefore(session.start) || !sample.at.isBefore(session.end)) {
+      continue;
+    }
+    covered++;
+    if (sample.value >= hardBpm) hard++;
+  }
+  final rpe = covered < session.durationMinutes / 2
+      ? 6.0
+      : (4 + 8.3 * hard / covered).clamp(4.0, 9.0);
+  return StrengthSession(
+    id: session.id,
+    start: session.start,
+    durationMinutes: session.durationMinutes,
+    sessionRpe: (rpe * 2).round() / 2,
+    exercises: session.exercises,
+    note: session.note,
+  );
 }

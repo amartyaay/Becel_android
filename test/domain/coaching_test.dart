@@ -45,15 +45,21 @@ DailyPlan _plan({
   RecoveryEstimate? recovery,
   BodyAlert? alert,
   HrvTrend? trend,
+  DateTime? now,
+  SleepCoach sleep = _emptySleep,
+  double? strainToday,
+  double? yesterdayTrainingStrain,
 }) => buildDailyPlan(
   recovery: recovery,
   load: null,
-  sleep: _emptySleep,
+  sleep: sleep,
   alert: alert,
   muscleVolume: const [],
   logsStrength: false,
-  now: DateTime(2026, 10, 25, 8),
+  now: now ?? DateTime(2026, 10, 25, 8),
   hrvTrend: trend,
+  strainToday: strainToday,
+  yesterdayTrainingStrain: yesterdayTrainingStrain,
 );
 
 void main() {
@@ -105,6 +111,43 @@ void main() {
       expect(plan.tone, PlanTone.train);
       expect(plan.notes.first, contains('7-day HRV'));
       expect(_plan(recovery: _recovery(75)).tone, PlanTone.push);
+    });
+
+    test('hard days are spaced: no intervals the day after strain 14+', () {
+      final plan = _plan(recovery: _recovery(75), yesterdayTrainingStrain: 15);
+      expect(plan.tone, PlanTone.train);
+      expect(plan.prescription.first.label, isNot(contains('Intervals')));
+      expect(
+        _plan(recovery: _recovery(75), yesterdayTrainingStrain: 9).tone,
+        PlanTone.push,
+      );
+    });
+
+    test('late in the evening the plan winds down; a met target says so', () {
+      final sleep = SleepCoach(
+        lastNight: null,
+        nights: const [],
+        baselineNeed: 480,
+        strainNeed: 0,
+        debtNeed: 0,
+        debtMinutes: 0,
+        midpointSdMinutes: 20,
+        recommendedBedtime: DateTime(2026, 10, 25, 22),
+        typicalWake: null,
+      );
+      final late = _plan(
+        recovery: _recovery(50),
+        sleep: sleep,
+        now: DateTime(2026, 10, 25, 20, 30),
+      );
+      expect(late.headline, 'Wind down');
+      final done = _plan(recovery: _recovery(50), strainToday: 12);
+      expect(done.headline, 'Target reached');
+      // A recovery day's band is a ceiling, never a goal to reach.
+      expect(
+        _plan(recovery: _recovery(20), strainToday: 3).headline,
+        'Recovery day',
+      );
     });
 
     test('a body alert overrides a green score', () {

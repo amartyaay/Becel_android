@@ -336,7 +336,7 @@ class _ConsistencyCard extends StatelessWidget {
     final nights = coach.nights;
     final need = coach.baselineNeed;
     return PanelCard(
-      title: 'Consistency · 7 nights',
+      title: 'Consistency',
       icon: Icons.schedule_rounded,
       accent: AppColors.sleep,
       trailing: coach.consistencyPercent == null

@@ -539,7 +539,18 @@ class PanelCard extends StatelessWidget {
                 Expanded(
                   child: Text(_sentenceCase(title!), style: AppType.cardTitle),
                 ),
-                ?trailing,
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  // Tags such as "as of 10:12 PM" scale down rather than
+                  // overflow on narrow phones with large text.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: trailing,
+                    ),
+                  ),
+                ],
                 if (onTap != null && trailing == null)
                   const Icon(
                     Icons.chevron_right_rounded,

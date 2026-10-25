@@ -192,8 +192,7 @@ class _ContributorsCard extends StatelessWidget {
             value: '${estimate.hrvCurrent.round()} ms',
             detail:
                 '${hrvPct >= 0 ? '+' : ''}${hrvPct.round()}% vs '
-                '${estimate.hrvBaseline.round()} ms baseline · median of '
-                '${estimate.hrvSampleCount} in-sleep readings',
+                '${estimate.hrvBaseline.round()} ms baseline',
             contribution: estimate.hrvContribution,
           ),
           _Contributor(
@@ -209,8 +208,7 @@ class _ContributorsCard extends StatelessWidget {
             label: 'Sleep vs need',
             weight: RecoveryModel.sleepWeight,
             value: '${estimate.sleepPercentOfNeed}%',
-            detail:
-                '85% of need is neutral; extra sleep never counts against you',
+            detail: 'of the need going into last night',
             contribution: estimate.sleepContribution,
           ),
           if (estimate.contextReasons.isNotEmpty) ...[

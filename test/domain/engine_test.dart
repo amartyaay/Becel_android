@@ -3,6 +3,7 @@ import 'package:becel/domain/coaching.dart';
 import 'package:becel/domain/energy.dart';
 import 'package:becel/domain/estimates.dart';
 import 'package:becel/domain/heart_signal.dart';
+import 'package:becel/domain/performance.dart';
 import 'package:becel/domain/profile.dart';
 import 'package:becel/domain/sleep_coach.dart';
 import 'package:becel/domain/strain.dart';
@@ -137,6 +138,39 @@ void main() {
       expect(dayAt(111, 165).strain, closeTo(dayAt(111, 0).strain, 0.01));
       // Brisk walking is not training load.
       expect(dayAt(82, 110).trainingTrimp, 0);
+    });
+
+    test('synced lifting gets an RPE from its heart-rate density', () {
+      const zones = HeartZones(restingBpm: 52, maxBpm: 184);
+      final start = DateTime(2026, 10, 25, 18);
+      StrengthSession rated(double Function(int) bpm) => estimateSessionRpe(
+        StrengthSession(
+          id: 'lift',
+          start: start,
+          durationMinutes: 60,
+          sessionRpe: 6,
+        ),
+        minutes(start, 60, bpm),
+        zones,
+      );
+      // Mostly resting between easy sets.
+      expect(rated((_) => 95).sessionRpe, 4);
+      // Half of the session at 50 %+ HRR (≥ 118 bpm): a hard session.
+      expect(rated((i) => i.isEven ? 130 : 100).sessionRpe, 8);
+      // No heart rate in the window: moderate fallback.
+      expect(
+        estimateSessionRpe(
+          StrengthSession(
+            id: 'x',
+            start: start,
+            durationMinutes: 60,
+            sessionRpe: 6,
+          ),
+          const [],
+          zones,
+        ).sessionRpe,
+        6,
+      );
     });
 
     test('heart rate below 20% HRR adds no load', () {
@@ -325,6 +359,37 @@ void main() {
       // Resting 12 h ≈ 905 kcal, plus a small awake allowance.
       expect(day.heartKcal, 0);
       expect(day.totalKcal, lessThan(1150));
+    });
+
+    test('headline is measured; high HR without steps is capped at 6 METs', () {
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 20);
+      // An hour at 160 bpm with no steps and no recorded workout: could be
+      // an unlogged lift or stress, where HR overstates oxygen cost.
+      final day = estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: now,
+        cleanedMinutes: [
+          ...minutes(DateTime(2026, 10, 25, 9), 60, (_) => 70),
+          ...minutes(DateTime(2026, 10, 25, 10), 60, (_) => 160),
+          ...minutes(DateTime(2026, 10, 25, 11), 60, (_) => 70),
+        ],
+        stepBuckets: const [],
+        sleep: [AsleepInterval(start: date, end: DateTime(2026, 10, 25, 7))],
+        restingBpm: 52,
+        maxBpm: 184,
+      )!;
+      final rmrPerMinute = restingMetabolicRate(athlete) / 1440;
+      final capPerMinute = 6 * 82 / 60 - rmrPerMinute;
+      // Ten minutes of recovery afterwards may add damped HR; the hard hour
+      // itself never exceeds the cap.
+      expect(day.heartKcal, lessThanOrEqualTo(capPerMinute * 70 + 1));
+      expect(
+        day.measuredKcal,
+        closeTo(day.restingKcal + day.exerciseKcal, 1e-6),
+      );
+      expect(day.totalKcal, greaterThan(day.measuredKcal));
     });
 
     test('a step-free bout must be clearly above FLEX to earn HR energy', () {

@@ -191,10 +191,19 @@ final guideSections = <GuideSection>[
   GuideSection(
     id: 'calories',
     title: 'Calories burned',
-    summary: 'Everything your body burned today, split by where it went.',
+    summary: 'What you burned today: measured, plus an estimated extra.',
     icon: Icons.local_fire_department_rounded,
     color: AppColors.burned,
     entries: [
+      (
+        'The headline number',
+        'Calories burned is resting energy plus measured movement (steps, '
+            'workouts, lifting): the same convention Apple, Fitbit, WHOOP, '
+            'and Oura use, so it compares with them. Daily living and '
+            'digestion are real but not measured, so they are shown '
+            'separately as an estimated extra, and the full estimate '
+            '(both together) is used for energy balance and maintenance.',
+      ),
       (
         'At rest',
         'What your body burns lying still, just staying alive: heart, '
@@ -205,7 +214,7 @@ final guideSections = <GuideSection>[
             '${((1 - sleepingMetabolicFraction) * 100).round()}% lower.',
       ),
       (
-        'Everyday',
+        'Everyday (estimated extra)',
         'Resting rate is measured lying down, fasted, and perfectly still. '
             'Real life costs more: sitting upright, standing, fidgeting, and '
             'digesting food. Lab studies put sitting still at +4%, standing '
@@ -230,11 +239,15 @@ final guideSections = <GuideSection>[
       ),
       ('Full method', energyMethod),
       (
-        'Is the total too high?',
+        'Is the full estimate too high?',
         'A whole day of sitting still burns about 1.3–1.4× your resting rate. '
             'Doubly labelled water studies, the gold standard for free-living '
             'energy, find about 1.4–1.6 for sedentary people and 1.7–2.0+ for '
-            'active ones (FAO/WHO). '
+            'active ones (FAO/WHO); devices that count only measured movement '
+            'read about 16% below that (Murakami 2019, Chowdhury 2017). A gym '
+            'session typically adds 250–550 kcal; heart rate with no steps '
+            'or recorded workout is capped at ${capMet.round()} METs, because '
+            'lifting and stress raise pulse far more than oxygen use. '
             'Becel shows this ratio as "activity level"; outside 1.35–2.6 '
             'usually means missing wear time or a wrong profile value.',
       ),

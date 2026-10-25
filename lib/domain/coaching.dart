@@ -101,6 +101,9 @@ DailyPlan buildDailyPlan({
   double? ambientTrimp,
   HrvTrend? hrvTrend,
   HeartZones? zones,
+  bool zonesApproximate = false,
+  double? strainToday,
+  double? yesterdayTrainingStrain,
 }) {
   final score = recovery?.score;
   // A 7-day HRV average below the normal range means accumulated fatigue
@@ -143,6 +146,17 @@ DailyPlan buildDailyPlan({
     headline = 'Train by feel';
     session =
         'Recovery is calibrating. Keep hard work to RPE 7–8 until it is ready.';
+  } else if (trainingBand == RecoveryBand.green &&
+      (yesterdayTrainingStrain ?? 0) >= 14) {
+    // Hard days need a day between them (polarised training); a green
+    // morning after a strain-14+ day trains, but not at intervals again.
+    tone = PlanTone.train;
+    headline = 'Recovered, but yesterday was hard';
+    session = 'Steady Z2 or a moderate lift. Save intervals for tomorrow.';
+    notes.add(
+      'Yesterday reached strain ${yesterdayTrainingStrain!.toStringAsFixed(1)}: '
+      'space hard days.',
+    );
   } else if (trainingBand == RecoveryBand.green) {
     tone = PlanTone.push;
     headline = 'Green light: go hard';
@@ -202,33 +216,64 @@ DailyPlan buildDailyPlan({
     }
   }
 
-  String range(double from, double to) =>
-      zones == null ? '' : ' · ${zones.bpmAt(from)}–${zones.bpmAt(to)} bpm';
+  // With an age-predicted max HR (±10 bpm) the ranges are approximate.
+  final approx = zonesApproximate ? '~' : '';
+  String range(double from, double to) => zones == null
+      ? ''
+      : ' · $approx${zones.bpmAt(from)}–${zones.bpmAt(to)} bpm';
   final prescription = switch (tone) {
     PlanTone.push => [
       PlanItem.cardio('Intervals 4–6 × 4 min Z4${range(0.8, 0.9)}'),
       const PlanItem.lift('Heavy compounds · RPE 8–9'),
     ],
     PlanTone.train => [
-      PlanItem.cardio('45–60 min Z2${range(0.6, 0.7)}'),
+      // Easy aerobic work sits below the first ventilatory threshold;
+      // 55–65 % HRR keeps most people there.
+      PlanItem.cardio('45–60 min Z2${range(0.55, 0.65)}'),
       const PlanItem.lift('Lift · RPE 7 or below'),
     ],
     PlanTone.recover => [
       PlanItem.cardio(
-        '20–40 min Z1${zones == null ? '' : ' · under ${zones.bpmAt(0.6)} bpm'}',
+        '20–40 min Z1${zones == null ? '' : ' · under $approx${zones.bpmAt(0.55)} bpm'}',
       ),
       const PlanItem.mobility('Mobility 10–15 min'),
     ],
     PlanTone.rest => [const PlanItem.mobility('Walk or full rest')],
   };
 
+  // Timing: hard work ending within ~1 h of bed delays sleep (Stutz et al.,
+  // 2019), and once today's target is met the job is done.
+  final windDown =
+      bedtime != null &&
+      now.isAfter(bedtime.subtract(const Duration(minutes: 150))) &&
+      now.isBefore(bedtime.add(const Duration(hours: 3)));
+  // On recover/rest days the band is a ceiling, not a goal.
+  final targetMet =
+      (tone == PlanTone.push || tone == PlanTone.train) &&
+      strainToday != null &&
+      strainToday >= target.low;
+  var finalHeadline = headline;
+  var finalPrescription = prescription;
+  if (alert == null && targetMet) {
+    finalHeadline = 'Target reached';
+    finalPrescription = [
+      const PlanItem.mobility('Done for today · easy walk or stretch'),
+    ];
+  } else if (alert == null && windDown) {
+    finalHeadline = 'Wind down';
+    finalPrescription = [
+      const PlanItem.mobility('Easy walk or stretch only'),
+      PlanItem.mobility('Bed by ${_clock(bedtime)}'),
+    ];
+  }
+
   return DailyPlan(
     tone: tone,
-    headline: headline,
+    headline: finalHeadline,
     session: session,
     target: target,
     notes: notes.take(3).toList(),
-    prescription: prescription,
+    prescription: finalPrescription,
   );
 }
 

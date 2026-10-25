@@ -471,13 +471,16 @@ class _HeroRing extends StatelessWidget {
           ring,
           if (caption != null) ...[
             const SizedBox(height: 8),
-            Text(
-              caption!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.caption.copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+            // Scales down rather than truncating on narrow phones.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                caption!,
+                maxLines: 1,
+                style: AppType.caption.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           ],
@@ -569,9 +572,13 @@ class _BurnCard extends StatelessWidget {
     final asOf = p.energyAsOf;
     final delta = energy.deviceDelta;
     final stale = asOf != null && p.now.difference(asOf).inMinutes > 30;
-    final projected = math.max(energy.projectedToday, today.totalKcal);
-    final remaining = projected - today.totalKcal;
-    final perHour = (energy.rmr / 24).round();
+    // Headline: resting + measured movement (how Apple, Fitbit, WHOOP and
+    // Oura count). Daily living and digestion are modelled, so they are a
+    // separate, clearly estimated extra.
+    final burned = today.measuredKcal;
+    final projected = math.max(energy.projectedMeasuredToday, burned);
+    final remaining = projected - burned;
+    final fullEstimate = math.max(energy.projectedToday, today.totalKcal);
     // Resting first and in neutral grey: most of any day's burn is the body
     // at rest, and colouring it like activity made it read as "earned".
     final restingColor = AppColors.textTertiary.withValues(alpha: 0.45);
@@ -582,12 +589,6 @@ class _BurnCard extends StatelessWidget {
         hint: 'just being alive',
         kcal: today.restingKcal,
         color: restingColor,
-      ),
-      (
-        label: 'Everyday',
-        hint: 'sitting, digesting',
-        kcal: today.livingKcal,
-        color: everydayColor,
       ),
       (
         label: 'Movement',
@@ -621,10 +622,7 @@ class _BurnCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(
-                        formatNumber(today.totalKcal.round()),
-                        style: AppType.numXl,
-                      ),
+                      Text(formatNumber(burned.round()), style: AppType.numXl),
                       const SizedBox(width: 6),
                       const Text('kcal so far', style: AppType.unit),
                     ],
@@ -690,8 +688,7 @@ class _BurnCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final (i, part) in parts.indexed) ...[
-                if (i > 0) const SizedBox(width: 8),
+              for (final part in parts) ...[
                 Expanded(
                   child: _BurnTile(
                     color: part.color,
@@ -700,18 +697,25 @@ class _BurnCard extends StatelessWidget {
                     kcal: part.kcal,
                   ),
                 ),
+                const SizedBox(width: 8),
               ],
+              Expanded(
+                child: _BurnTile(
+                  color: everydayColor,
+                  label: 'Everyday',
+                  hint: 'estimated extra',
+                  kcal: today.livingKcal,
+                  estimated: true,
+                ),
+              ),
             ],
           ),
-          if (energy.deviceTotalToday != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Fitbit ${formatNumber(energy.deviceTotalToday!)}'
-              '${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}'
-              ' · resting $perHour kcal/h',
-              style: AppType.caption,
-            ),
-          ],
+          const SizedBox(height: 10),
+          Text(
+            'Full estimate ~${formatNumber(fullEstimate.round())} by midnight'
+            '${energy.deviceTotalToday == null ? '' : ' · Fitbit ${formatNumber(energy.deviceTotalToday!)}${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}'}',
+            style: AppType.caption,
+          ),
           // Without a sleep record every night minute is costed as awake,
           // which adds ~200 kcal; say so instead of hiding it.
           if (p.sleep.lastNight == null && p.now.hour >= 6) ...[
@@ -742,6 +746,7 @@ class _BurnTile extends StatelessWidget {
     required this.label,
     required this.hint,
     required this.kcal,
+    this.estimated = false,
   });
 
   final Color color;
@@ -749,12 +754,16 @@ class _BurnTile extends StatelessWidget {
   final String hint;
   final double kcal;
 
+  /// Modelled rather than measured: outlined and shown as "+X".
+  final bool estimated;
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: estimated ? AppColors.surface : AppColors.bg,
+        border: estimated ? Border.all(color: AppColors.border) : null,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -772,20 +781,36 @@ class _BurnTile extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(formatNumber(kcal.round()), style: AppType.numS),
+            child: Text(
+              '${estimated ? '+' : ''}${formatNumber(kcal.round())}',
+              style: AppType.numS.copyWith(
+                color: estimated ? AppColors.textSecondary : null,
+              ),
+            ),
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.body.copyWith(fontWeight: FontWeight.w700),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: AppType.body.copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
-          Text(
-            hint,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.caption,
+          // The hint is a nicety; drop it rather than truncate it on small
+          // phones or with large text.
+          LayoutBuilder(
+            builder: (context, box) =>
+                box.maxWidth * 13 / MediaQuery.textScalerOf(context).scale(13) <
+                    92
+                ? const SizedBox.shrink()
+                : Text(
+                    hint,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption,
+                  ),
           ),
         ],
       ),
@@ -827,26 +852,24 @@ class _BalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.bottomLeft,
-                  child: Text(
-                    '${deficit ? '−' : '+'}${formatNumber(net.abs().round())}',
-                    style: AppType.numM.copyWith(fontSize: 34),
-                  ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.bottomLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  '${deficit ? '−' : '+'}${formatNumber(net.abs().round())}',
+                  style: AppType.numM.copyWith(fontSize: 34),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                deficit ? 'kcal deficit so far' : 'kcal surplus so far',
-                style: AppType.unit,
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  deficit ? 'kcal deficit so far' : 'kcal surplus so far',
+                  style: AppType.unit,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           // Centre is energy balance; the fill grows toward deficit (left)
@@ -920,7 +943,7 @@ class _BalanceCard extends StatelessWidget {
                   label: 'Burned',
                   value: formatNumber(burned.round()),
                   unit: 'kcal',
-                  delta: 'so far',
+                  delta: 'full estimate',
                 ),
               ),
               Expanded(
@@ -928,9 +951,11 @@ class _BalanceCard extends StatelessWidget {
                   label: 'Protein',
                   value: protein == null ? '—' : protein.round().toString(),
                   unit: 'g',
-                  delta: proteinTarget == null
+                  delta: proteinTarget == null || protein == null
                       ? 'logged'
-                      : 'goal $proteinTarget g',
+                      : protein >= proteinTarget
+                      ? 'goal met'
+                      : '${proteinTarget - protein.round()} g to go',
                 ),
               ),
             ],
@@ -1366,7 +1391,7 @@ class _VitalsTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _VitalRow(
-            label: 'Resting HR',
+            label: 'RHR',
             value: rhr == null ? '—' : '${rhr.round()}',
             delta: r == null ? null : delta(r.restingHrChange, ''),
             good: r == null ? null : r.restingHrChange <= 0,
@@ -1380,7 +1405,7 @@ class _VitalsTile extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _VitalRow(
-            label: 'Breathing',
+            label: 'Breaths',
             value: snapshot.body?.respiratoryRate?.toStringAsFixed(1) ?? '—',
             delta: snapshot.performance.respiratoryDelta == null
                 ? null
