@@ -615,7 +615,7 @@ class _BurnCard extends StatelessWidget {
                   label: 'Total so far',
                   value: formatNumber(today.totalKcal.round()),
                   delta:
-                      '~${formatNumber(energy.projectedToday.round())} by midnight',
+                      '~${formatNumber(energy.projectedToday.round())} full day',
                 ),
               ),
               Expanded(
