@@ -25,11 +25,16 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 14 | **Create CLAUDE.md**, revisit all prompts, keep a todo list of anything missed. | This file — update it every iteration. |
 | 16 | "The previous calories display was better: show **total**, then the **breakdown below with predictions**." | Done: total so far → "on track for ~X by midnight" → bar + rows (movement, daily living & digestion, resting, predicted rest of day) → Fitbit line. Keep this layout. |
 | 17 | "I literally haven't done anything, how could I burn 1,900?" + "the cal display UI is bad". | Explained: owner's RMR ≈ 1,950/day (81 kcal/h), so ~1,400 of a 5 pm total is just being alive. Card redesigned: total → "~X by midnight" → bar + tiles **At rest (grey) / Everyday / Movement** → sentence saying most of the total is not activity. Sleep now costs 95 % of RMR. Keep the total-first layout (#16) but never colour resting like activity. |
+| 18 | Get **≥ 9.5 from all evaluator subagents** (PhD science evaluator + UX/product evaluator added iter 7). | Ongoing. |
+| 19 | **Too much explanation text** on screens → move meanings/calculations to a page inside Settings. | Done: "How Becel works" (`/guide`, Settings › Learn) + ⓘ `GuideButton` on each screen opening its section. Keep screens numbers-first. |
+| 20 | App took ~10 s to show data → **show old data on open, refresh after**. | Done: last raw Health Connect read cached in app-private file (`readCache`/`writeCache`), shown instantly with "Syncing". |
+| 21 | Strain must not overestimate; recovery too low for some. | Day-strain floor 10 → 20 % HRR + cadence intensity floor (owner quiet day 6.6 → 2.7). Recovery display: typical 58 %, green ≥ 67 % (z ≥ +0.5), red ≤ 33 % (z ≤ −0.75). |
+| 22 | Calories still feel high (2.2k at 8 pm, 5.5k steps); "is the everyday 455 already inside the 81 kcal/h?"; "does a 1 h walk add 81 + walking?" | Answered: Mifflin RMR is lying-still/fasted, so sitting/standing/digestion are extra (Levine 2000); walking minutes get net walking cost *instead of* the allowance; IOM DLW EER for owner ≈ 2,876 sedentary vs Becel ~2,708. PhD evaluator asked to audit (iter 7). |
 | 15 | "1,668 kcal and strain 4.4 seem high for my day — research it; what does the PhD evaluator say?" | Answered with DLW/Mifflin/WHOOP evidence: total burn is mostly resting metabolism (81 kcal/h for the owner); free-living PAL ≥ 1.4, so the total was if anything low; 4.4 is "light" on WHOOP's scale (member average 11). Evaluator agreed calories were too low and ambient HR padded load. Home now leads with **active** kcal; total/resting shown beneath. |
 
 ### Decisions to keep (with evidence)
 - **Calories**: target a light ambulatory day near PAL 1.35–1.45 (DLW floor for free-living adults); do NOT tune to undercut Fitbit's total — Fitbit's known error is exercise kcal. Keytel only ≥ 50 % HRR; FLEX–50 % uses max(step cost, ½ Keytel).
-- **Strain**: day strain counts from 10 % HRR (WHOOP-like); training load / ACWR / monotony use effort ≥ 30 % HRR only.
+- **Strain**: day strain counts from 20 % HRR (owner: 10 % over-counted sitting) with a cadence intensity floor (≥ 100 spm → 40 % HRR, ≥ 130 → 60 %); training load / ACWR / monotony use effort ≥ 30 % HRR only.
 - **Recovery %**: Φ mapping centred on the user's typical morning (= 50 %). Green ≥ 67 % (z ≥ +0.5) means push; red ≤ 25 % (z ≤ −0.75) means recover. A single band drives the ring, words, plan and history. Method copy is generated from the constants (`recoveryMethod`, `energyMethod`), so never hand-write numbers into it.
 - **Strain target** = everyday strain + a session: the bands shift by the user's median non-training TRIMP (`ambientTrimp`).
 - **Calories card layout** (owner): total first, then the breakdown and the prediction.
@@ -43,7 +48,8 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 3 | `8083007`…`91cc01c` | 7.1 | Green fires on average mornings; ambient load breaks monotony/ACWR; PAL 1.27 too low; TEF drops with partial food log; cadence filter deletes real starts; active min ignores cadence; sleep-need units mismatch; coverage rule fragile; narrow-screen truncation; no HRV trend card / day timeline |
 | 4 | `d8343a3`, `4618de6` | 7.4 | Two recovery band systems (ring % vs plan); history vs today need mismatch; cadence-lock exit = normal HR recovery; target ignores ambient strain; strength top-up units; stale method copy; aboveFlexRun too loose; hero "active" includes modelled kcal; learned need double-counts split nights; nav labels clipped; VO₂max category on wide ranges |
 | 5 | `8eeba5a` | 7.6 | "Everyday strain" counted training → yellow day got push target; sleep z fixed at 85 % (steady 7 h sleeper ≈ 43 %); compositeScale ignored HRV/RHR correlation; UTC wake dates; 5-min step buckets; strength RPE constant 6; plan ignores HRV trend; no day timeline; narrow truncation; PAL / onset toggle not surfaced |
-| 6 | `888e39e` | _awaiting rating_ | — |
+| 6 | `888e39e` | not rated (evaluator hit rate limit) | — |
+| 7 | `2e87dfb` | _awaiting: PhD + UX evaluators_ | — |
 
 ## Open todos (missed or planned, not done)
 
