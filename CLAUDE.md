@@ -24,6 +24,7 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 13 | **Fix the bottom bar** (clipped, inset applied twice). | Replaced Material NavigationBar with custom `BecelNavBar`; verify on device. |
 | 14 | **Create CLAUDE.md**, revisit all prompts, keep a todo list of anything missed. | This file — update it every iteration. |
 | 16 | "The previous calories display was better: show **total**, then the **breakdown below with predictions**." | Done: total so far → "on track for ~X by midnight" → bar + rows (movement, daily living & digestion, resting, predicted rest of day) → Fitbit line. Keep this layout. |
+| 17 | "I literally haven't done anything, how could I burn 1,900?" + "the cal display UI is bad". | Explained: owner's RMR ≈ 1,950/day (81 kcal/h), so ~1,400 of a 5 pm total is just being alive. Card redesigned: total → "~X by midnight" → bar + tiles **At rest (grey) / Everyday / Movement** → sentence saying most of the total is not activity. Sleep now costs 95 % of RMR. Keep the total-first layout (#16) but never colour resting like activity. |
 | 15 | "1,668 kcal and strain 4.4 seem high for my day — research it; what does the PhD evaluator say?" | Answered with DLW/Mifflin/WHOOP evidence: total burn is mostly resting metabolism (81 kcal/h for the owner); free-living PAL ≥ 1.4, so the total was if anything low; 4.4 is "light" on WHOOP's scale (member average 11). Evaluator agreed calories were too low and ambient HR padded load. Home now leads with **active** kcal; total/resting shown beneath. |
 
 ### Decisions to keep (with evidence)
@@ -41,7 +42,8 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 2 | `a71ed31`, `e7a9cfc` | 6.6 | Load used partial day; sleep graded against own debt; rest-day kcal low; strain saturates; cadence lock |
 | 3 | `8083007`…`91cc01c` | 7.1 | Green fires on average mornings; ambient load breaks monotony/ACWR; PAL 1.27 too low; TEF drops with partial food log; cadence filter deletes real starts; active min ignores cadence; sleep-need units mismatch; coverage rule fragile; narrow-screen truncation; no HRV trend card / day timeline |
 | 4 | `d8343a3`, `4618de6` | 7.4 | Two recovery band systems (ring % vs plan); history vs today need mismatch; cadence-lock exit = normal HR recovery; target ignores ambient strain; strength top-up units; stale method copy; aboveFlexRun too loose; hero "active" includes modelled kcal; learned need double-counts split nights; nav labels clipped; VO₂max category on wide ranges |
-| 5 | `8eeba5a` | _awaiting rating_ | — |
+| 5 | `8eeba5a` | 7.6 | "Everyday strain" counted training → yellow day got push target; sleep z fixed at 85 % (steady 7 h sleeper ≈ 43 %); compositeScale ignored HRV/RHR correlation; UTC wake dates; 5-min step buckets; strength RPE constant 6; plan ignores HRV trend; no day timeline; narrow truncation; PAL / onset toggle not surfaced |
+| 6 | `888e39e` | _awaiting rating_ | — |
 
 ## Open todos (missed or planned, not done)
 
@@ -49,11 +51,11 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 - [ ] Verify iteration 5 on the phone (it was locked at install): calories card, nav pill labels, recovery at the 50 % centre, strain target band.
 - [ ] Today below-the-fold feels empty vs Bevel: add a day timeline (HR/strain over the day with workout bands) and per-signal sparklines on recovery drivers.
 - [ ] Training: seed the EWMA from days before the iteration start (minor double count with short history).
-- [ ] Sleep-onset correction toggle (`BodyProfile.correctSleepOnset`) has no Settings switch yet.
+- [ ] 1-minute step buckets (`STEP_BUCKET_MILLIS` in MainActivity.kt) — needs `StepBucket` to carry its duration; every Dart consumer assumes 5 min (cadence = steps/5, phantom thresholds, energy spreading).
+- [ ] Strength RPE is a constant 6 for synced lifts; estimate it from session HR density (evaluator iter 5 #5).
 - [ ] Today at 360 px / 1.3× text: some captions still truncate (hero captions, vitals labels).
 - [ ] Training: show artifact / cadence-lock minutes per workout.
 - [ ] Synced strength sessions add no muscular load beyond HR (no RPE available read-only); consider HR-density-scaled top-up.
-- [ ] Calories screen: show PAL (TDEE ÷ RMR) and flag implausible days.
 - [ ] Update `README.md` and `docs/fitness-scoring.md` — they still describe the old algorithms.
 - [ ] `GOAL.md` predates the owner's pivot (Bevel-style scores, read-only); reconcile or mark sections superseded.
 - [ ] GOAL.md items never started this session: phone step-challenge alarm, GPS, data-quality review flow.
