@@ -5,17 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('recoveryReadiness', () {
     test('a typical morning reads 50 %, the middle of the scale', () {
-      final result = _estimate(sleepMinutes: 408);
+      // Same HRV, resting HR, and sleep (420 min) as the user's usual night.
+      final result = _estimate(sleepMinutes: 420);
       final estimate = result.estimate!;
 
-      // 408 of 480 min = 85 % of need, the neutral point: composite z = 0.
-      expect(estimate.sleepPercentOfNeed, 85);
+      expect(estimate.sleepPercentOfNeed, 88);
+      expect(estimate.sleepZ, 0);
       expect(estimate.hrvZ, 0);
       expect(estimate.restingHrZ, 0);
       expect(estimate.score, 50);
       expect(estimate.band, RecoveryBand.yellow);
       expect(estimate.hrvBaselineDays, 10);
       expect(estimate.provisional, isFalse);
+    });
+
+    test('sleep is scored against your own usual night, with guards', () {
+      // A steady 7 h sleeper is not penalised for being a 7 h sleeper.
+      expect(_estimate(sleepMinutes: 420).estimate!.sleepZ, 0);
+      // An hour short of usual counts against recovery.
+      expect(_estimate(sleepMinutes: 360).estimate!.sleepZ, lessThan(-1));
+      // Sleeping longer than usual helps.
+      expect(_estimate(sleepMinutes: 480).estimate!.sleepZ, greaterThan(0));
     });
 
     test('favourable signals reach the green band', () {

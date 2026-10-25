@@ -81,9 +81,17 @@ DailyPlan buildDailyPlan({
   required bool logsStrength,
   required DateTime now,
   double? ambientTrimp,
+  HrvTrend? hrvTrend,
 }) {
   final score = recovery?.score;
-  final trainingBand = recovery?.trainingBand;
+  // A 7-day HRV average below the normal range means accumulated fatigue
+  // that one good night does not undo (Plews 2013; Buchheit 2014): cap the
+  // day at yellow.
+  final trendLow = hrvTrend?.state == HrvTrendState.below;
+  final nightBand = recovery?.trainingBand;
+  final trainingBand = trendLow && nightBand == RecoveryBand.green
+      ? RecoveryBand.yellow
+      : nightBand;
   // The prescription follows the evidence band, not the raw %.
   final bandScore = switch (trainingBand) {
     RecoveryBand.green => 80,
@@ -131,6 +139,13 @@ DailyPlan buildDailyPlan({
     tone = PlanTone.recover;
     headline = 'Recovery day';
     session = 'Z1 walk, easy spin, or mobility. Protect tonight’s sleep.';
+  }
+
+  if (trendLow && alert == null) {
+    notes.add(
+      'Your 7-day HRV is below its normal range'
+      '${nightBand == RecoveryBand.green ? ', so today is capped at controlled training despite a good night' : ''}.',
+    );
   }
 
   if (load != null && load.status == LoadStatus.spike) {

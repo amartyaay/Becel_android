@@ -41,16 +41,20 @@ const _emptySleep = SleepCoach(
   typicalWake: null,
 );
 
-DailyPlan _plan({RecoveryEstimate? recovery, BodyAlert? alert}) =>
-    buildDailyPlan(
-      recovery: recovery,
-      load: null,
-      sleep: _emptySleep,
-      alert: alert,
-      muscleVolume: const [],
-      logsStrength: false,
-      now: DateTime(2026, 10, 25, 8),
-    );
+DailyPlan _plan({
+  RecoveryEstimate? recovery,
+  BodyAlert? alert,
+  HrvTrend? trend,
+}) => buildDailyPlan(
+  recovery: recovery,
+  load: null,
+  sleep: _emptySleep,
+  alert: alert,
+  muscleVolume: const [],
+  logsStrength: false,
+  now: DateTime(2026, 10, 25, 8),
+  hrvTrend: trend,
+);
 
 void main() {
   group('daily plan', () {
@@ -93,6 +97,14 @@ void main() {
       expect(_plan(recovery: withComposite(66, 0.45)).tone, PlanTone.train);
       expect(_plan(recovery: withComposite(70, 0.6)).tone, PlanTone.push);
       expect(_plan(recovery: withComposite(24, -0.8)).tone, PlanTone.recover);
+    });
+
+    test('a suppressed 7-day HRV trend caps a green night at train', () {
+      const low = HrvTrend(nights: [], rolling: 3.9, baseline: 4.1, swc: 0.05);
+      final plan = _plan(recovery: _recovery(75), trend: low);
+      expect(plan.tone, PlanTone.train);
+      expect(plan.notes.first, contains('7-day HRV'));
+      expect(_plan(recovery: _recovery(75)).tone, PlanTone.push);
     });
 
     test('a body alert overrides a green score', () {

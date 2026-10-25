@@ -140,6 +140,40 @@ void main() {
       expect(days.single.strain, inInclusiveRange(10, 14));
     });
 
+    test('training never counts as everyday strain', () {
+      final now = DateTime(2026, 10, 25, 20);
+      final start = DateTime(2026, 10, 25, 18);
+      // 10 min warm-up at ~20 % HRR, 40 min run, 10 min cool-down; easy
+      // walking at ~20 % HRR earlier in the day.
+      final day = [
+        ...minutes(DateTime(2026, 10, 25, 9), 60, (_) => 78),
+        ...minutes(start, 60, (i) => i < 10 || i >= 50 ? 78 : 150),
+      ];
+      final withWorkout = dailyStrain(
+        cleanedMinutes: day,
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+        workoutWindows: [
+          (start: start, end: start.add(const Duration(minutes: 60))),
+        ],
+      ).single;
+      final walkOnly = dailyStrain(
+        cleanedMinutes: minutes(DateTime(2026, 10, 25, 9), 60, (_) => 78),
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+      ).single;
+      // Only the morning walk is everyday load; the session, its warm-up,
+      // and its cool-down are training.
+      expect(withWorkout.ambientTrimp, closeTo(walkOnly.ambientTrimp, 0.5));
+      expect(withWorkout.trainingStrain, greaterThan(8));
+    });
+
     test('logged lifting adds the load heart rate missed', () {
       final now = DateTime(2026, 10, 25, 20);
       final lift = StrengthSession(

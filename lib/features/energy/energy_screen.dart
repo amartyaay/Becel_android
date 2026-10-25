@@ -153,6 +153,24 @@ class _TodayCard extends StatelessWidget {
             'midnight at your current pace.',
             style: AppType.caption,
           ),
+          if (energy.rmr > 0) ...[
+            const SizedBox(height: 4),
+            Builder(
+              builder: (context) {
+                final pal = energy.projectedToday / energy.rmr;
+                final plausible = pal >= 1.35 && pal <= 2.6;
+                return Text(
+                  'Activity level (PAL) ${pal.toStringAsFixed(2)}: total ÷ '
+                  'resting. Studies of free-living adults find 1.4 for desk '
+                  'days and up to 2.0+ for very active ones.'
+                  '${plausible ? '' : ' This is outside that range, so check wear time and your profile.'}',
+                  style: AppType.caption.copyWith(
+                    color: plausible ? null : AppColors.bandYellow,
+                  ),
+                );
+              },
+            ),
+          ],
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(7),

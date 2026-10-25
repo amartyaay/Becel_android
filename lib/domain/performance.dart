@@ -102,6 +102,13 @@ Performance buildPerformance({
   final clean = excludeCadenceLock(cleanHeartRate(rawMinutes), stepBuckets);
   final sessions = sleep?.sessions ?? const <SleepNight>[];
   final workouts = activity?.workouts ?? const <WorkoutEntry>[];
+  final workoutWindows = [
+    for (final workout in workouts)
+      (
+        start: workout.start,
+        end: workout.start.add(Duration(minutes: workout.minutes)),
+      ),
+  ];
 
   // Resting HR: latest record within 72 h, else the sleeping-HR floor.
   double? resting;
@@ -138,11 +145,13 @@ Performance buildPerformance({
           now: now,
           days: loadWindowDays,
           stepBuckets: stepBuckets,
+          workoutWindows: workoutWindows,
         );
   final load = strainDays.isEmpty ? null : trainingLoad(strainDays, today: now);
+  // Sleep need responds to training, not to a day of walking around.
   final yesterdayStrain = strainDays.length < 2
       ? null
-      : strainDays[strainDays.length - 2].strain;
+      : strainDays[strainDays.length - 2].trainingStrain;
 
   final correctOnset = profile?.correctSleepOnset ?? true;
   final hardBpm = zones?.bpmAt(0.6).toDouble();
@@ -212,7 +221,9 @@ Performance buildPerformance({
   // today uses exactly the ring's need, so today's bar equals the ring.
   final longestByWakeDate = <DateTime, SleepWindow>{};
   for (final window in adjustedWindows) {
-    final day = DateTime(window.end.year, window.end.month, window.end.day);
+    // Sleep times arrive in UTC; key by the local wake date.
+    final end = window.end.toLocal();
+    final day = DateTime(end.year, end.month, end.day);
     final existing = longestByWakeDate[day];
     if (existing == null || window.sleepMinutes > existing.sleepMinutes) {
       longestByWakeDate[day] = window;
@@ -271,6 +282,7 @@ Performance buildPerformance({
     logsStrength: strengthSessions.isNotEmpty,
     now: now,
     ambientTrimp: ambientTrimp(strainDays, today: now),
+    hrvTrend: trend,
   );
 
   // Calories burned are shown only when every input is present, and only up
@@ -314,13 +326,6 @@ Performance buildPerformance({
             ? activity.intakeKcalByDay[i]
             : null,
     };
-    final windows = [
-      for (final workout in workouts)
-        (
-          start: workout.start,
-          end: workout.start.add(Duration(minutes: workout.minutes)),
-        ),
-    ];
     for (var offset = 6; offset >= 0; offset--) {
       final date = today.subtract(Duration(days: offset));
       final day = estimateDayEnergy(
@@ -333,7 +338,7 @@ Performance buildPerformance({
         restingBpm: zones.restingBpm,
         maxBpm: zones.maxBpm,
         strengthSessions: strengthSessions,
-        workoutWindows: windows,
+        workoutWindows: workoutWindows,
         intakeKcal: intakeByDate[sleepKeyOf(date)],
       );
       if (day != null) energyDays.add(day);

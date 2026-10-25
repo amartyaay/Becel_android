@@ -289,6 +289,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : (current!.sleepNeedMinutes! / 60).toStringAsFixed(1),
     );
     var sex = current?.sex;
+    var correctOnset = current?.correctSleepOnset ?? true;
     var invalid = false;
     final selected = await showDialog<BodyProfile>(
       context: context,
@@ -405,7 +406,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Baseline sleep need',
                       suffixText: 'h',
-                      helperText: 'Default 8 h',
+                      helperText: 'Leave empty to learn it from your nights',
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: correctOnset,
+                    onChanged: (value) =>
+                        updateDialog(() => correctOnset = value),
+                    title: const Text(
+                      'Correct sleep start from heart rate',
+                      style: AppType.body,
+                    ),
+                    subtitle: const Text(
+                      'Fitbit often logs sleep while you are still awake in '
+                      'bed. Becel trims it when your heart rate shows you '
+                      'were awake.',
+                      style: AppType.caption,
                     ),
                   ),
                   if (invalid) ...[
@@ -450,6 +468,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             sleepHours <= 10
                         ? (sleepHours * 60).round()
                         : null,
+                    correctSleepOnset: correctOnset,
                   );
                   final validAge = age != null && age >= 18 && age <= 100;
                   final validHeight =

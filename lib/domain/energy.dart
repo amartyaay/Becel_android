@@ -41,6 +41,11 @@ const tefFractionOfIntake = 0.10;
 /// which only chair-bound subjects reach.
 const tefFractionOfExpenditure = 0.08;
 
+/// Resting equations (Mifflin–St Jeor, Katch–McArdle) predict awake, lying
+/// rest. Metabolism during sleep runs about 5 % lower (sleeping metabolic
+/// rate ≈ BMR, below RMR; Goldberg et al., 1988; Kumahara et al., 2004).
+const sleepingMetabolicFraction = 0.95;
+
 /// Keytel's equation is used in full only at or above this heart-rate
 /// reserve, the range it was derived in.
 const keytelMinHrr = 0.5;
@@ -62,7 +67,8 @@ final energyMethod =
     '${_pct(keytelMinHrr)}, the larger of step cost and '
     '${_pct(easyHrKeytelFraction)} of Keytel is used, because HR equations '
     'overstate easy effort about twice over. Awake time without movement '
-    'adds ${_pct(awakeAllowance)} of resting; sleep adds nothing. Digestion '
+    'adds ${_pct(awakeAllowance)} of resting; sleep adds nothing and runs '
+    '${_pct(1 - sleepingMetabolicFraction)} below resting. Digestion '
     'adds ${_pct(tefFractionOfIntake)} of food logged, or '
     '${_pct(tefFractionOfExpenditure)} of the day when less is logged. '
     'Spikes and cadence-locked heart rate are removed first.';
@@ -339,6 +345,7 @@ DayEnergy? estimateDayEnergy({
 
   var heart = 0.0, steps = 0.0, strength = 0.0, awake = 0.0;
   var heartMinutes = 0;
+  var asleepMinutes = 0;
   final reserve = math.max(20.0, maxBpm - restingBpm);
   var lastHardMinute = -1000;
   for (var m = 0; m < minutes; m++) {
@@ -349,7 +356,10 @@ DayEnergy? estimateDayEnergy({
       strength += (strengthMet[m] - 1) * rmrPerMinute;
       continue;
     }
-    if (asleep[m]) continue;
+    if (asleep[m]) {
+      asleepMinutes++;
+      continue;
+    }
     final hr = hrByMinute[m];
     if (hr != null && hr >= flex) {
       final hrr = (hr - restingBpm) / reserve;
@@ -393,7 +403,9 @@ DayEnergy? estimateDayEnergy({
 
   return DayEnergy(
     date: dayStart,
-    restingKcal: rmrPerMinute * minutes,
+    restingKcal:
+        rmrPerMinute *
+        (minutes - asleepMinutes * (1 - sleepingMetabolicFraction)),
     heartKcal: heart,
     stepKcal: steps,
     strengthKcal: strength,

@@ -14,8 +14,16 @@ abstract final class RecoveryModel {
   static const restingHrWeight = 0.25;
   static const sleepWeight = 0.20;
 
-  /// SD of the weighted sum of three roughly independent unit z-scores.
-  static const compositeScale = 0.64;
+  /// SD of the weighted sum of the three unit z-scores. HRV and resting HR
+  /// are not independent (r ≈ −0.4 to −0.6 within a person; Buchheit 2014),
+  /// so with ρ = 0.5 between HRV z and −RHR z:
+  /// √(0.55² + 0.25² + 0.20² + 2·0.55·0.25·0.5) ≈ 0.74. Using the independent
+  /// value (0.64) made the bands fire more often than stated.
+  static const compositeScale = 0.74;
+
+  /// Sleep below this share of need is penalised even if it is typical for
+  /// you: chronic short sleep should never read as neutral.
+  static const shortSleepPercent = 75;
 
   /// Score = 100 × Φ(slope × composite z): a typical morning for you
   /// (z = 0) reads 50 %. The bands are evidence thresholds, so the number,
@@ -38,9 +46,12 @@ abstract final class RecoveryModel {
 final recoveryMethod =
     'Recovery compares last night with your own 28-day baseline. Overnight '
     'HRV (ln RMSSD, only readings inside asleep stages) and morning resting '
-    'heart rate become robust z-scores (median and MAD). Sleep is scored '
-    'against the need going into that night, and sleeping longer is never '
-    'penalised. The weighted z-scores (${RecoveryModel.weightsLabel}) are '
+    'heart rate become robust z-scores (median and MAD). Sleep, as a share '
+    'of the need going into that night, is compared with your own last 28 '
+    'nights the same way; under ${RecoveryModel.shortSleepPercent}% of need '
+    'always counts against you, and meeting your need never does. The '
+    'weighted z-scores (${RecoveryModel.weightsLabel}), scaled for HRV and '
+    'resting HR moving together, are '
     'mapped to 0–100% with a normal curve centred on your typical morning, '
     'which reads 50%. ${RecoveryModel.green}% or more means clearly better '
     'than usual (go hard); ${RecoveryModel.red}% or less means clearly worse '
@@ -360,9 +371,29 @@ RecoveryReadiness recoveryReadiness({
   );
   final hrvZ = rawHrvZ > 1 && restingHrZ > 1 ? 0.0 : rawHrvZ;
   final need = math.max(360, sleepNeedMinutes);
-  final sleepPercent = ((sleepMinutes ?? 0) / need * 100).round();
-  // 85 % of need is neutral; extra sleep helps a little and never hurts.
-  final sleepZ = _clamp((sleepPercent - 85) / 12, -3, 1.5);
+  final exactSleepPercent = (sleepMinutes ?? 0) / need * 100;
+  final sleepPercent = exactSleepPercent.round();
+  // Like HRV and RHR, sleep is scored against your own last 28 nights, so
+  // a steady 7 h sleeper is not dragged down every day. Two guards: sleep
+  // under 75 % of need is penalised however usual it is, and meeting your
+  // need never counts against you.
+  final pastPercents = _pastSleepPercents(
+    sleepWindows,
+    currentSleepDay: currentSleepDay,
+    need: need,
+  );
+  final absoluteZ = (exactSleepPercent - RecoveryModel.shortSleepPercent) / 12;
+  double sleepZ;
+  if (pastPercents.length >= recoveryMinimumBaselineNights) {
+    final median = _median(pastPercents);
+    final mad = _median([for (final v in pastPercents) (v - median).abs()]);
+    sleepZ = (exactSleepPercent - median) / math.max(6.0, 1.4826 * mad);
+    if (absoluteZ < 0) sleepZ = math.min(sleepZ, absoluteZ);
+  } else {
+    sleepZ = (exactSleepPercent - 85) / 12;
+  }
+  if (exactSleepPercent >= 100) sleepZ = math.max(sleepZ, 0);
+  sleepZ = _clamp(sleepZ, -3, 1.5);
 
   var adjustment = 0.0;
   final reasons = <String>[];
@@ -501,7 +532,9 @@ HrvTrend? hrvTrend({
     ],
     rolling: recent.reduce((a, b) => a + b) / recent.length,
     baseline: mean,
-    swc: math.max(0.03, 0.5 * sd),
+    // Wrist RMSSD is noisier than chest-strap ECG, so the band is at least
+    // ±4 % of the baseline.
+    swc: math.max(0.04, 0.5 * sd),
   );
 }
 
@@ -663,6 +696,24 @@ List<TimedValue> _validSamples(
           !sample.at.isAfter(latest),
     )
     .toList();
+
+/// Sleep as % of [need] for the main sleep (longest per wake date) of each
+/// of the 28 days before [currentSleepDay].
+List<double> _pastSleepPercents(
+  List<SleepWindow> windows, {
+  required DateTime currentSleepDay,
+  required int need,
+}) {
+  final first = currentSleepDay.subtract(const Duration(days: 28));
+  final longest = <DateTime, int>{};
+  for (final window in windows) {
+    if (window.sleepMinutes < 180) continue;
+    final day = _localDay(window.end);
+    if (!day.isBefore(currentSleepDay) || day.isBefore(first)) continue;
+    longest[day] = math.max(longest[day] ?? 0, window.sleepMinutes);
+  }
+  return [for (final minutes in longest.values) minutes / need * 100];
+}
 
 DateTime _localDay(DateTime value) {
   final local = value.toLocal();
