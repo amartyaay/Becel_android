@@ -295,7 +295,13 @@ Performance buildPerformance({
     hrvTrend: trend,
     zones: zones,
     zonesApproximate: maxHr?.source == MaxHrSource.predicted,
-    strainToday: strainDays.isEmpty ? null : strainDays.last.strain,
+    // Training strain, so a long walking day never counts as "done".
+    strainToday: strainDays.isEmpty ? null : strainDays.last.trainingStrain,
+    // Minutes at 80 %+ HRR (Z4–Z5) over the previous two days.
+    recentHardMinutes: [
+      for (final d in strainDays.reversed.skip(1).take(2))
+        d.zoneMinutes[3] + d.zoneMinutes[4],
+    ].fold<double>(0, (s, v) => s + v),
     yesterdayTrainingStrain: strainDays.length < 2
         ? null
         : strainDays[strainDays.length - 2].trainingStrain,
@@ -442,10 +448,10 @@ int _coverage(List<TimedValue> samples, DateTime date) {
 ///
 /// Foster's session RPE tracks internal load in resistance training, and in
 /// those sessions it rises with the share of time spent at high heart rate
-/// (work sets vs rest). Becel maps the fraction of covered minutes at 50 %+
-/// of heart-rate reserve onto CR-10: 0 % → 4 (light), ~30 % → 6.5,
-/// ~60 %+ → 9 (very hard). With under half the session covered by heart
-/// rate it falls back to 6 (moderate).
+/// (work sets vs rest). Becel starts every session at RPE 6 and raises it
+/// with the fraction of covered minutes at 50 %+ of heart-rate reserve:
+/// 0 % → 6, 25 % → 7.5, 50 %+ → 9. With under half the session covered by
+/// heart rate it stays at 6.
 StrengthSession estimateSessionRpe(
   StrengthSession session,
   List<TimedValue> cleanedMinutes,
@@ -461,9 +467,12 @@ StrengthSession estimateSessionRpe(
     covered++;
     if (sample.value >= hardBpm) hard++;
   }
+  // Heart rate tracks density, not load: heavy triples with long rests sit
+  // mostly below 50 % HRR. Session RPE in lifting averages ~6–7 (Day 2004;
+  // McGuigan & Foster 2004), so HR density can only raise it from 6.
   final rpe = covered < session.durationMinutes / 2
       ? 6.0
-      : (4 + 8.3 * hard / covered).clamp(4.0, 9.0);
+      : (6 + 6 * hard / covered).clamp(6.0, 9.0);
   return StrengthSession(
     id: session.id,
     start: session.start,

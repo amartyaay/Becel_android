@@ -362,6 +362,28 @@ DayEnergy? estimateDayEnergy({
     m = end;
   }
 
+  // Steady aerobic work (cycling, rowing, elliptical) holds 60 %+ HRR for
+  // 15+ minutes in a row; lifting drops below that between sets. Such
+  // stretches keep full Keytel energy even without steps or a recorded
+  // workout; the MET cap below is for sawtooth or short bouts only.
+  final steadyAerobic = List<bool>.filled(minutes, false);
+  {
+    final steadyBpm = restingBpm + 0.6 * math.max(20.0, maxBpm - restingBpm);
+    var runStart = -1;
+    for (var m = 0; m <= minutes; m++) {
+      final high = m < minutes && (hrByMinute[m] ?? 0) >= steadyBpm;
+      if (high && runStart < 0) runStart = m;
+      if (!high && runStart >= 0) {
+        if (m - runStart >= 15) {
+          for (var j = runStart; j < m; j++) {
+            steadyAerobic[j] = true;
+          }
+        }
+        runStart = -1;
+      }
+    }
+  }
+
   var heart = 0.0, steps = 0.0, strength = 0.0, awake = 0.0;
   var heartMinutes = 0;
   var asleepMinutes = 0;
@@ -393,7 +415,8 @@ DayEnergy? estimateDayEnergy({
       // Without steps or a recorded workout, a high pulse may be lifting,
       // heat, or stress, where HR overstates oxygen cost 1.5–2× (pressor
       // response). Cap such minutes at a vigorous 6-MET gross cost.
-      final unexplained = stepEnergy[m] == 0 && !inWorkout[m];
+      final unexplained =
+          stepEnergy[m] == 0 && !inWorkout[m] && !steadyAerobic[m];
       if (hrr >= keytelMinHrr) {
         // Real exercise: Keytel was derived in this range.
         lastHardMinute = m;
@@ -477,10 +500,12 @@ class EnergyBalance {
       ? null
       : history.fold<double>(0, (s, d) => s + d.totalKcal) / history.length;
 
-  /// Device total minus Becel's headline so far; positive means the device
-  /// is higher. Devices report resting + activity, so compare like for like.
+  /// Device total minus Becel's full estimate so far; positive means the
+  /// device is higher. Fitbit's total includes its own accelerometer-based
+  /// everyday movement, so the like-for-like comparison is the full
+  /// estimate, not the measured headline.
   double? get deviceDelta =>
-      deviceTotalToday == null ? null : deviceTotalToday! - today.measuredKcal;
+      deviceTotalToday == null ? null : deviceTotalToday! - today.totalKcal;
 }
 
 DateTime localDay(DateTime value) {

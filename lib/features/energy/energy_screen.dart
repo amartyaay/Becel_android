@@ -536,8 +536,9 @@ class _DeviceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'Becel',
-                  value: formatNumber(t.measuredKcal.round()),
+                  // Fitbit counts everyday movement too: compare totals.
+                  label: 'Becel total',
+                  value: formatNumber(t.totalKcal.round()),
                   unit: 'kcal',
                 ),
               ),

@@ -153,10 +153,10 @@ void main() {
         minutes(start, 60, bpm),
         zones,
       );
-      // Mostly resting between easy sets.
-      expect(rated((_) => 95).sessionRpe, 4);
-      // Half of the session at 50 %+ HRR (≥ 118 bpm): a hard session.
-      expect(rated((i) => i.isEven ? 130 : 100).sessionRpe, 8);
+      // Heavy sets with long rests keep HR low: never below RPE 6.
+      expect(rated((_) => 95).sessionRpe, 6);
+      // Half of the session at 50 %+ HRR (≥ 118 bpm): very hard.
+      expect(rated((i) => i.isEven ? 130 : 100).sessionRpe, 9);
       // No heart rate in the window: moderate fallback.
       expect(
         estimateSessionRpe(
@@ -364,15 +364,20 @@ void main() {
     test('headline is measured; high HR without steps is capped at 6 METs', () {
       final date = DateTime(2026, 10, 25);
       final now = DateTime(2026, 10, 25, 20);
-      // An hour at 160 bpm with no steps and no recorded workout: could be
-      // an unlogged lift or stress, where HR overstates oxygen cost.
+      // An hour of sawtooth HR (160 working, 110 resting) with no steps and
+      // no recorded workout: an unlogged lift, where HR overstates oxygen
+      // cost.
       final day = estimateDayEnergy(
         profile: athlete,
         date: date,
         now: now,
         cleanedMinutes: [
           ...minutes(DateTime(2026, 10, 25, 9), 60, (_) => 70),
-          ...minutes(DateTime(2026, 10, 25, 10), 60, (_) => 160),
+          ...minutes(
+            DateTime(2026, 10, 25, 10),
+            60,
+            (i) => i % 4 < 2 ? 160 : 110,
+          ),
           ...minutes(DateTime(2026, 10, 25, 11), 60, (_) => 70),
         ],
         stepBuckets: const [],
@@ -390,6 +395,23 @@ void main() {
         closeTo(day.restingKcal + day.exerciseKcal, 1e-6),
       );
       expect(day.totalKcal, greaterThan(day.measuredKcal));
+    });
+
+    test('steady unrecorded cardio is not capped like lifting', () {
+      final date = DateTime(2026, 10, 25);
+      final day = estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: DateTime(2026, 10, 25, 20),
+        // An unlogged hour on a bike: steady 150 bpm (~74 % HRR), no steps.
+        cleanedMinutes: minutes(DateTime(2026, 10, 25, 10), 60, (_) => 150),
+        stepBuckets: const [],
+        sleep: [AsleepInterval(start: date, end: DateTime(2026, 10, 25, 7))],
+        restingBpm: 52,
+        maxBpm: 184,
+      )!;
+      final rmrPerMinute = restingMetabolicRate(athlete) / 1440;
+      expect(day.heartKcal, greaterThan((6 * 82 / 60 - rmrPerMinute) * 60));
     });
 
     test('a step-free bout must be clearly above FLEX to earn HR energy', () {

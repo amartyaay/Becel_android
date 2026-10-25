@@ -47,7 +47,7 @@ class _TodayScreenState extends State<TodayScreen> {
             left: 0,
             right: 0,
             height: MediaQuery.paddingOf(context).top,
-            child: const ColoredBox(color: Color(0xF2F3F4F8)),
+            child: const ColoredBox(color: AppColors.bg),
           ),
         ],
       ),
@@ -711,10 +711,27 @@ class _BurnCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            'Full estimate ~${formatNumber(fullEstimate.round())} by midnight'
-            '${energy.deviceTotalToday == null ? '' : ' · Fitbit ${formatNumber(energy.deviceTotalToday!)}${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}'}',
-            style: AppType.caption,
+          Text.rich(
+            TextSpan(
+              style: AppType.caption,
+              children: [
+                const TextSpan(text: 'Total incl. everyday '),
+                TextSpan(
+                  text: '~${formatNumber(fullEstimate.round())}',
+                  style: AppType.caption.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const TextSpan(text: ' by midnight'),
+                if (energy.deviceTotalToday != null)
+                  TextSpan(
+                    text:
+                        ' · Fitbit ${formatNumber(energy.deviceTotalToday!)} so far'
+                        '${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}',
+                  ),
+              ],
+            ),
           ),
           // Without a sleep record every night minute is costed as awake,
           // which adds ~200 kcal; say so instead of hiding it.
@@ -773,7 +790,9 @@ class _BurnTile extends StatelessWidget {
             width: 18,
             height: 5,
             decoration: BoxDecoration(
-              color: color,
+              // Estimated parts are not in the bar: an outline, not a fill.
+              color: estimated ? null : color,
+              border: estimated ? Border.all(color: AppColors.burned) : null,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -940,10 +959,10 @@ class _BalanceCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'Burned',
+                  label: 'Total burn',
                   value: formatNumber(burned.round()),
                   unit: 'kcal',
-                  delta: 'full estimate',
+                  delta: 'incl. everyday',
                 ),
               ),
               Expanded(

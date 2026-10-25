@@ -19,7 +19,7 @@ import '../shell/shell_screen.dart';
 /// to dark, never the status colours: green must only ever mean "good".
 /// Every zone bar also carries its Z1–Z5 label.
 const zoneColors = [
-  Color(0xFFFBCFB0),
+  Color(0xFFF4B48A),
   Color(0xFFF7A06B),
   Color(0xFFF2601E),
   Color(0xFFC43F16),
@@ -513,8 +513,9 @@ class _WeekZonesCard extends StatelessWidget {
                     width: 104,
                     child: Text(
                       HeartZones.names[z],
+                      // Text stays in ink; the zone colour is on the bar.
                       style: AppType.caption.copyWith(
-                        color: zoneColors[z],
+                        color: AppColors.textSecondary,
                         fontWeight: FontWeight.w800,
                       ),
                     ),

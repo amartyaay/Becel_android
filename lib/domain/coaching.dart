@@ -104,6 +104,7 @@ DailyPlan buildDailyPlan({
   bool zonesApproximate = false,
   double? strainToday,
   double? yesterdayTrainingStrain,
+  double recentHardMinutes = 0,
 }) {
   final score = recovery?.score;
   // A 7-day HRV average below the normal range means accumulated fatigue
@@ -147,15 +148,18 @@ DailyPlan buildDailyPlan({
     session =
         'Recovery is calibrating. Keep hard work to RPE 7–8 until it is ready.';
   } else if (trainingBand == RecoveryBand.green &&
-      (yesterdayTrainingStrain ?? 0) >= 14) {
+      ((yesterdayTrainingStrain ?? 0) >= 14 || recentHardMinutes >= 10)) {
     // Hard days need a day between them (polarised training); a green
     // morning after a strain-14+ day trains, but not at intervals again.
     tone = PlanTone.train;
     headline = 'Recovered, but yesterday was hard';
     session = 'Steady Z2 or a moderate lift. Save intervals for tomorrow.';
     notes.add(
-      'Yesterday reached strain ${yesterdayTrainingStrain!.toStringAsFixed(1)}: '
-      'space hard days.',
+      (yesterdayTrainingStrain ?? 0) >= 14
+          ? 'Yesterday reached strain ${yesterdayTrainingStrain!.toStringAsFixed(1)}: '
+                'space hard days.'
+          : '${recentHardMinutes.round()} min in Z4–Z5 in the last 2 days: '
+                'space hard days.',
     );
   } else if (trainingBand == RecoveryBand.green) {
     tone = PlanTone.push;
@@ -261,6 +265,8 @@ DailyPlan buildDailyPlan({
     ];
   } else if (alert == null && windDown) {
     finalHeadline = 'Wind down';
+    // The bedtime is already a chip; don't repeat it as a note.
+    notes.removeWhere((n) => n.startsWith('Bed by'));
     finalPrescription = [
       const PlanItem.mobility('Easy walk or stretch only'),
       PlanItem.mobility('Bed by ${_clock(bedtime)}'),
