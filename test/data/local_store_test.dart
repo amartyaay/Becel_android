@@ -1,5 +1,6 @@
 import 'package:becel/data/local_store.dart';
 import 'package:becel/domain/profile.dart';
+import 'package:becel/domain/strength.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -117,6 +118,39 @@ void main() {
     expect(store.log.profile?.weightKg, 64);
     expect(store.log.profile?.hasEnergyInputs, isTrue);
   });
+  test('strength sessions and onset corrections round-trip', () async {
+    final store = LocalStore.instance;
+    final session = StrengthSession(
+      id: 's1',
+      start: DateTime(2026, 3, 10, 7, 30),
+      durationMinutes: 55,
+      sessionRpe: 8,
+      exercises: const [
+        ExerciseEntry(
+          exerciseId: 'back_squat',
+          sets: [StrengthSet(reps: 5, loadKg: 140, rpe: 8)],
+        ),
+      ],
+    );
+    await store.saveStrengthSession(session);
+    await store.setOnsetOverride('2026-03-10', DateTime(2026, 3, 10, 0, 40));
+
+    store.resetForTest();
+    await store.ensureLoaded();
+
+    final loaded = store.log.strengthSessions.single;
+    expect(loaded.srpeLoad, 440);
+    expect(loaded.exercises.single.sets.single.loadKg, 140);
+    expect(
+      store.log.onsetOverrides['2026-03-10'],
+      DateTime(2026, 3, 10, 0, 40),
+    );
+    expect(store.log.strengthDates, hasLength(1));
+
+    await store.deleteStrengthSession('s1');
+    expect(store.log.strengthSessions, isEmpty);
+  });
+
   test('falls back to session-only data when the channel is missing', () async {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;

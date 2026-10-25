@@ -5,8 +5,12 @@ import '../../app/theme.dart';
 import '../../data/health_store.dart';
 import '../../data/local_store.dart';
 import '../../domain/coaching.dart';
+import '../../domain/estimates.dart';
+import '../../domain/performance.dart';
+import '../../domain/strain.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
+import '../../widgets/rings.dart';
 import '../activity/strength_log_sheet.dart';
 import '../shell/shell_screen.dart';
 import 'check_in_sheet.dart';
@@ -47,170 +51,61 @@ class _TodayScreenState extends State<TodayScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
                 children: [
                   _TopBar(
+                    now: now,
                     loading: _health.loading,
                     connected: snapshot?.airMatched ?? false,
-                    onData: () => context.go('/data'),
+                    onData: () => context.push('/data'),
                     onSettings: () => openSettings(context),
                   ),
-                  const SizedBox(height: 20),
-                  _Greeting(now: now),
-                  const SizedBox(height: 18),
-                  _CheckInCard(
-                    checkIn: checkIn,
-                    onTap: () => showCheckInSheet(context),
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   if (snapshot == null)
                     _InitialState(
                       loading: _health.loading,
                       error: _health.error,
                       onRetry: () => _health.refresh(force: true),
-                      onData: () => context.go('/data'),
+                      onData: () => context.push('/data'),
                     )
-                  else ...[
-                    if (!snapshot.hasAccess)
-                      StateCard(
-                        icon: Icons.link_rounded,
-                        color: AppColors.yellow,
-                        title: snapshot.isAvailable
-                            ? 'Connect your health data'
-                            : 'Health Connect is not available',
-                        body: snapshot.isAvailable
-                            ? 'Allow Fitbit Air records in Health Connect so '
-                                  'Becel can show your sleep, recovery range, '
-                                  'and activity.'
-                            : 'This phone does not expose Health Connect. '
-                                  'Becel needs it to read Fitbit Air records.',
-                        actionLabel: 'Open data sources',
-                        onAction: () => context.go('/data'),
-                      )
-                    else if (snapshot.error != null && !snapshot.hasAnyRecord)
-                      StateCard(
-                        icon: Icons.error_outline_rounded,
-                        color: AppColors.red,
-                        title: 'Health data could not load',
-                        body: snapshot.error!,
-                        actionLabel: 'Retry',
-                        onAction: () => _health.refresh(force: true),
-                      )
-                    else if (!snapshot.hasAnyRecord)
-                      StateCard(
-                        icon: Icons.sensors_off_rounded,
-                        color: AppColors.yellow,
-                        title: 'No Fitbit Air records yet',
-                        body:
-                            snapshot.error ??
-                            'Health Connect is connected, but no records have '
-                                'arrived. Check that the Fitbit app is syncing '
-                                'and sharing with Health Connect.',
-                        actionLabel: 'Open data sources',
-                        onAction: () => context.go('/data'),
-                      )
-                    else ...[
-                      _RecoveryCard(
-                        context: snapshot.recoveryContext,
-                        loadedAt: snapshot.loadedAt,
-                        onTap: () => context.push('/recovery'),
-                      ),
-                      const SizedBox(height: 10),
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _BriefTile(
-                                icon: Icons.bedtime_rounded,
-                                color: AppColors.blue,
-                                label: 'SLEEP · LAST NIGHT',
-                                value: snapshot.selectedNight == null
-                                    ? '—'
-                                    : formatDurationMinutes(
-                                        snapshot.selectedNight!.minutes,
-                                      ),
-                                detail: _sleepDetail(snapshot),
-                                footnote: _sleepFootnote(snapshot),
-                                onTap: () => context.go('/sleep'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _BriefTile(
-                                icon: Icons.directions_run_rounded,
-                                color: AppColors.orange,
-                                label: 'AEROBIC · HR ESTIMATE',
-                                value: snapshot.activityEstimate == null
-                                    ? '—'
-                                    : '≈${snapshot.activityEstimate!.displayedEquivalentMinutes} min',
-                                detail: _activityDetail(snapshot),
-                                footnote: _activityFootnote(snapshot),
-                                onTap: () => context.go('/activity'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      _FocusCard(
-                        focus: _focus(snapshot, checkIn),
-                        onAction: () => _runFocus(context, snapshot, checkIn),
-                      ),
-                      const SizedBox(height: 22),
-                      SectionHeader(
-                        title: 'Today’s movement',
-                        action: 'Activity',
-                        onAction: () => context.go('/activity'),
-                      ),
-                      const SizedBox(height: 10),
-                      _MovementCard(
-                        snapshot: snapshot,
-                        onTap: () => context.go('/activity'),
-                      ),
-                      const SizedBox(height: 22),
-                      const SectionHeader(
-                        title: 'Latest signals',
-                        caption: 'MEASURED',
-                      ),
-                      const SizedBox(height: 10),
-                      _SignalsCard(
-                        snapshot: snapshot,
-                        onHeart: () => context.push('/heart'),
-                        onBody: () => context.push('/biology'),
-                      ),
-                    ],
-                    if (snapshot.error != null && snapshot.hasAnyRecord) ...[
-                      const SizedBox(height: 14),
-                      InfoNote(
-                        text:
-                            'Some health data could not refresh: '
-                            '${snapshot.error}',
-                        textColor: AppColors.yellow,
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => _health.refresh(force: true),
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Retry'),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                    SourceLine(
-                      text:
-                          'Fitbit Air via Health Connect · refreshed '
-                          '${formatAgo(snapshot.loadedAt)}',
-                      icon: Icons.sync_rounded,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  const TrustFooter(
-                    text:
-                        'BECEL ESTIMATES ARE WELLNESS CONTEXT, NOT MEDICAL '
-                        'ADVICE',
-                  ),
+                  else if (!snapshot.hasAccess)
+                    StateCard(
+                      icon: Icons.link_rounded,
+                      color: AppColors.yellow,
+                      title: snapshot.isAvailable
+                          ? 'Connect your health data'
+                          : 'Health Connect is not available',
+                      body: snapshot.isAvailable
+                          ? 'Allow Fitbit Air records in Health Connect so '
+                                'Becel can calculate recovery, strain, and sleep.'
+                          : 'This phone does not expose Health Connect. '
+                                'Becel needs it to read Fitbit Air records.',
+                      actionLabel: 'Open data sources',
+                      onAction: () => context.push('/data'),
+                    )
+                  else if (snapshot.error != null && !snapshot.hasAnyRecord)
+                    StateCard(
+                      icon: Icons.error_outline_rounded,
+                      color: AppColors.red,
+                      title: 'Health data could not load',
+                      body: snapshot.error!,
+                      actionLabel: 'Retry',
+                      onAction: () => _health.refresh(force: true),
+                    )
+                  else if (!snapshot.hasAnyRecord)
+                    StateCard(
+                      icon: Icons.sensors_off_rounded,
+                      color: AppColors.yellow,
+                      title: 'No Fitbit Air records yet',
+                      body:
+                          'Health Connect is connected, but no records have '
+                          'arrived. Check that the Fitbit app is syncing and '
+                          'sharing with Health Connect.',
+                      actionLabel: 'Open data sources',
+                      onAction: () => context.push('/data'),
+                    )
+                  else
+                    ..._dashboard(context, snapshot, checkIn),
                 ],
               ),
             );
@@ -220,88 +115,80 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  FocusRecommendation _focus(HealthSnapshot snapshot, CheckIn? checkIn) {
-    final strengthDays = strengthDaysInWindow(
-      workouts: snapshot.strengthCandidates,
-      loggedDays: _local.log.strengthDates,
-      now: snapshot.loadedAt,
-    );
-    return buildFocusRecommendation(
-      sleep: snapshot.sleepTrend,
-      strengthDays: strengthDays,
-      activity: snapshot.activityEstimate,
-      checkInTags: checkIn?.tags ?? const <String>{},
-    );
-  }
-
-  Future<void> _runFocus(
+  List<Widget> _dashboard(
     BuildContext context,
     HealthSnapshot snapshot,
     CheckIn? checkIn,
-  ) async {
-    final focus = _focus(snapshot, checkIn);
-    switch (focus.kind) {
-      case FocusKind.strength:
-        final logged = await showStrengthLogSheet(context);
-        if (logged && context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Strength day logged.')));
-        }
-      case FocusKind.aerobic:
-        if (context.mounted) context.go('/activity');
-      case FocusKind.maintain:
-        if (context.mounted) context.go('/history');
-      case FocusKind.sleepDuration:
-      case FocusKind.sleepRegularity:
-      case FocusKind.recover:
-        if (context.mounted) context.go('/sleep');
-    }
-  }
-
-  String _sleepDetail(HealthSnapshot snapshot) {
-    final night = snapshot.selectedNight;
-    if (night == null) return 'No qualifying session yet';
-    final inBed = night.end.difference(night.start).inMinutes;
-    return 'asleep · ${formatDurationMinutes(inBed)} in bed';
-  }
-
-  String _sleepFootnote(HealthSnapshot snapshot) {
-    final trend = snapshot.sleepTrend;
-    if (!trend.hasData) return 'Adult range 7–9h · stages are context only';
-    final average = formatDurationMinutes(trend.averageMinutes!);
-    return '${trend.nights}-night avg $average · adult range 7–9h';
-  }
-
-  String _activityDetail(HealthSnapshot snapshot) {
-    final activity = snapshot.activityEstimate;
-    if (activity == null) return 'Needs heart-rate coverage';
-    if (activity.usableDays >= 7) return 'heart rate on all 7 days';
-    return 'lower bound \u00b7 ${activity.usableDays}/7 days with HR';
-  }
-
-  String _activityFootnote(HealthSnapshot snapshot) {
-    final activity = snapshot.activityEstimate;
-    if (activity == null) {
-      return 'Add age and allow heart-rate access for a personal estimate';
-    }
-    if (activity.potentialEquivalentMinutes >
-        activity.displayedEquivalentMinutes) {
-      return 'Up to ${activity.potentialEquivalentMinutes} min if every day '
-          'had coverage';
-    }
-    return 'Heart-rate coverage was available every day this week.';
+  ) {
+    final p = snapshot.performance;
+    final needsProfile = snapshot.profile?.hasEnergyInputs != true;
+    return [
+      _RingsHero(
+        performance: p,
+        onRecovery: () => context.push('/recovery'),
+        onStrain: () => context.go('/training'),
+        onSleep: () => context.go('/sleep'),
+      ),
+      if (p.alert != null) ...[
+        const SizedBox(height: 12),
+        _AlertCard(alert: p.alert!),
+      ],
+      const SizedBox(height: 12),
+      _PlanCard(
+        plan: p.plan,
+        strainNow: p.today?.strain,
+        onLog: () => showStrengthLogSheet(context),
+      ),
+      const SizedBox(height: 12),
+      _CheckInCard(checkIn: checkIn, onTap: () => showCheckInSheet(context)),
+      if (needsProfile) ...[
+        const SizedBox(height: 12),
+        StateCard(
+          icon: Icons.person_outline_rounded,
+          color: AppColors.teal,
+          title: 'Finish your profile',
+          body:
+              'Age, sex, height, and weight unlock calories, strain, and '
+              'personal heart-rate zones. Body fat % makes calories more '
+              'accurate for muscular builds.',
+          actionLabel: 'Add profile',
+          onAction: () => openSettings(context),
+        ),
+      ],
+      const SizedBox(height: 12),
+      _EnergyCard(performance: p, onTap: () => context.push('/energy')),
+      const SizedBox(height: 12),
+      _LoadCard(performance: p, onTap: () => context.go('/training')),
+      const SizedBox(height: 12),
+      _VitalsCard(snapshot: snapshot, onTap: () => context.push('/vitals')),
+      if (snapshot.error != null) ...[
+        const SizedBox(height: 12),
+        InfoNote(
+          text: 'Some data could not refresh: ${snapshot.error}',
+          textColor: AppColors.yellow,
+        ),
+      ],
+      const SizedBox(height: 16),
+      SourceLine(
+        text:
+            'Fitbit Air via Health Connect · calculated on this phone · '
+            'refreshed ${formatAgo(snapshot.loadedAt)}',
+        icon: Icons.sync_rounded,
+      ),
+    ];
   }
 }
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
+    required this.now,
     required this.loading,
     required this.connected,
     required this.onData,
     required this.onSettings,
   });
 
+  final DateTime now;
   final bool loading;
   final bool connected;
   final VoidCallback onData;
@@ -309,41 +196,23 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final greeting = now.hour < 12
+        ? 'Good morning'
+        : now.hour < 18
+        ? 'Good afternoon'
+        : 'Good evening';
     return Row(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(13),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFD9FA83), Color(0xFF91BD49)],
-            ),
-          ),
-          child: const Icon(
-            Icons.monitor_heart_rounded,
-            color: Color(0xFF14200B),
-            size: 21,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'BECEL',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                ),
+                formatShortDate(now).toUpperCase(),
+                style: AppType.eyebrow.copyWith(color: AppColors.teal),
               ),
-              SizedBox(height: 2),
-              Text('FITNESS COMPANION', style: AppType.eyebrow),
+              const SizedBox(height: 4),
+              Text(greeting, style: AppType.screenTitle),
             ],
           ),
         ),
@@ -403,55 +272,358 @@ class _RoundButton extends StatelessWidget {
   );
 }
 
-class _Greeting extends StatelessWidget {
-  const _Greeting({required this.now});
+class _RingsHero extends StatelessWidget {
+  const _RingsHero({
+    required this.performance,
+    required this.onRecovery,
+    required this.onStrain,
+    required this.onSleep,
+  });
 
-  final DateTime now;
+  final Performance performance;
+  final VoidCallback onRecovery;
+  final VoidCallback onStrain;
+  final VoidCallback onSleep;
 
   @override
   Widget build(BuildContext context) {
-    final weekday = const [
-      'MON',
-      'TUE',
-      'WED',
-      'THU',
-      'FRI',
-      'SAT',
-      'SUN',
-    ][now.weekday - 1];
-    final month = const [
-      'JAN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAY',
-      'JUN',
-      'JUL',
-      'AUG',
-      'SEP',
-      'OCT',
-      'NOV',
-      'DEC',
-    ][now.month - 1];
-    final title = now.hour < 12 ? 'Morning brief' : 'Today’s brief';
+    final p = performance;
+    final recovery = p.recoveryEstimate;
+    final score = recovery?.score;
+    final strain = p.today?.strain;
+    final target = p.plan.target;
+    final sleepPct = p.sleep.performancePercent;
+    final waiting = p.recovery.nightsUntilScore;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.border),
+        gradient: RadialGradient(
+          center: const Alignment(0, -1.2),
+          radius: 1.4,
+          colors: [
+            recoveryColor(score).withValues(alpha: 0.13),
+            AppColors.surface,
+          ],
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final ring = ((constraints.maxWidth - 12) / 3 - 8).clamp(80.0, 108.0);
+          return _rings(
+            ring,
+            score,
+            strain,
+            target,
+            sleepPct,
+            waiting,
+            recovery,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _rings(
+    double ring,
+    int? score,
+    double? strain,
+    StrainTarget target,
+    int? sleepPct,
+    int waiting,
+    RecoveryEstimate? recovery,
+  ) {
+    final p = performance;
     return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _RingButton(
+              onTap: onRecovery,
+              child: MetricRing(
+                size: ring,
+                fraction: score == null ? null : score / 100,
+                color: recoveryColor(score),
+                value: score == null ? '—' : '$score',
+                unit: score == null ? null : '%',
+                label: 'RECOVERY',
+                semanticsLabel: score == null
+                    ? 'Recovery calibrating'
+                    : 'Recovery $score percent, ${recoveryWord(score)}',
+              ),
+            ),
+            _RingButton(
+              onTap: onStrain,
+              child: MetricRing(
+                size: ring,
+                fraction: strain == null ? null : strain / strainMax,
+                color: AppColors.strain,
+                value: strain == null ? '—' : strain.toStringAsFixed(1),
+                label: 'STRAIN',
+                bandFrom: target.low / strainMax,
+                bandTo: target.high / strainMax,
+                semanticsLabel: strain == null
+                    ? 'Strain unavailable'
+                    : 'Strain ${strain.toStringAsFixed(1)} of 21, target '
+                          '${target.low.round()} to ${target.high.round()}',
+              ),
+            ),
+            _RingButton(
+              onTap: onSleep,
+              child: MetricRing(
+                size: ring,
+                fraction: sleepPct == null ? null : sleepPct / 100,
+                color: AppColors.sleep,
+                value: sleepPct == null ? '—' : '$sleepPct',
+                unit: sleepPct == null ? null : '%',
+                label: 'SLEEP',
+                semanticsLabel: sleepPct == null
+                    ? 'Sleep performance unavailable'
+                    : 'Sleep performance $sleepPct percent of need',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Expanded(
+              child: _RingCaption(
+                text: score == null
+                    ? waiting > 0
+                          ? '$waiting more night${waiting == 1 ? '' : 's'}'
+                          : 'Needs last night'
+                    : recoveryWord(score),
+                color: recoveryColor(score),
+              ),
+            ),
+            Expanded(
+              child: _RingCaption(
+                text: strain == null
+                    ? 'Needs HR + age'
+                    : 'Target ${target.low.round()}–${target.high.round()}',
+                color: AppColors.strain,
+              ),
+            ),
+            Expanded(
+              child: _RingCaption(
+                text: p.sleep.lastNight == null
+                    ? 'No main sleep'
+                    : formatDurationMinutes(p.sleep.lastNight!.asleepMinutes),
+                color: AppColors.sleep,
+              ),
+            ),
+          ],
+        ),
+        if (recovery != null && recovery.provisional) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Provisional · ${recovery.hrvBaselineDays} of 10 baseline nights',
+            style: AppType.caption.copyWith(fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _RingButton extends StatelessWidget {
+  const _RingButton({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    customBorder: const CircleBorder(),
+    child: Padding(padding: const EdgeInsets.all(4), child: child),
+  );
+}
+
+class _RingCaption extends StatelessWidget {
+  const _RingCaption({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    textAlign: TextAlign.center,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: AppType.caption.copyWith(
+      color: AppColors.textSecondary,
+      fontWeight: FontWeight.w700,
+    ),
+  );
+}
+
+class _AlertCard extends StatelessWidget {
+  const _AlertCard({required this.alert});
+
+  final BodyAlert alert;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.bandRed.withValues(alpha: 0.09),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.bandRed.withValues(alpha: 0.4)),
+    ),
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$weekday  ·  $month ${now.day}',
-          style: AppType.eyebrow.copyWith(
-            color: AppColors.teal,
-            letterSpacing: 1.1,
+        const Icon(
+          Icons.warning_amber_rounded,
+          color: AppColors.bandRed,
+          size: 20,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(alert.title, style: AppType.rowTitle),
+              const SizedBox(height: 4),
+              Text(alert.detail, style: AppType.note),
+            ],
           ),
         ),
-        const SizedBox(height: 7),
-        Text(title, style: AppType.screenTitle),
-        const SizedBox(height: 6),
-        const Text(
-          'Your usual range, last night’s sleep, and one thing to try.',
-          style: AppType.body,
-        ),
       ],
+    ),
+  );
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.plan,
+    required this.strainNow,
+    required this.onLog,
+  });
+
+  final DailyPlan plan;
+  final double? strainNow;
+  final VoidCallback onLog;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (plan.tone) {
+      PlanTone.push => AppColors.bandGreen,
+      PlanTone.train => AppColors.bandYellow,
+      PlanTone.recover => AppColors.bandRed,
+      PlanTone.rest => AppColors.bandRed,
+    };
+    final target = plan.target;
+    final now = strainNow ?? 0;
+    final remaining = (target.low - now).clamp(0, strainMax);
+    return PanelCard(
+      title: 'TODAY’S PLAN',
+      icon: Icons.flag_rounded,
+      accent: color,
+      trailing: Tag(target.label, color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            plan.headline,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 21,
+              height: 1.15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(plan.session, style: AppType.body),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  'STRAIN ${now.toStringAsFixed(1)}',
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.eyebrow.copyWith(color: AppColors.strain),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  remaining > 0
+                      ? '${remaining.toStringAsFixed(1)} to target'
+                      : now > target.high
+                      ? 'Above target'
+                      : 'In target',
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          LinearMeter(
+            value: now,
+            max: strainMax,
+            color: AppColors.strain,
+            bandFrom: target.low,
+            bandTo: target.high,
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Text('0', style: AppType.caption.copyWith(fontSize: 10)),
+              const Spacer(),
+              Text(
+                'target ${target.low.round()}–${target.high.round()}',
+                style: AppType.caption.copyWith(fontSize: 10),
+              ),
+              const Spacer(),
+              Text('21', style: AppType.caption.copyWith(fontSize: 10)),
+            ],
+          ),
+          if (plan.notes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            for (final note in plan.notes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(child: Text(note, style: AppType.note)),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: onLog,
+              icon: const Icon(Icons.fitness_center_rounded, size: 17),
+              label: const Text('Log a lift'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -467,49 +639,323 @@ class _CheckInCard extends StatelessWidget {
     final existing = checkIn;
     return SurfaceCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       color: AppColors.surface,
       child: Row(
         children: [
-          IconChip(
-            icon: existing == null
-                ? Icons.wb_sunny_outlined
-                : Icons.check_circle_outline_rounded,
-            color: existing == null ? AppColors.yellow : AppColors.green,
-            size: 42,
-            iconSize: 20,
-            radius: 14,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  existing == null
-                      ? 'How do you feel this morning?'
-                      : 'Checked in: ${existing.label}',
-                  style: AppType.rowTitle,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  existing == null
-                      ? 'One tap adds context to today’s suggestion. Stored '
-                            'on this phone.'
-                      : existing.note ??
-                            'Tap to change how you feel or add a note.',
-                  style: AppType.caption,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
           Icon(
             existing == null
-                ? Icons.add_circle_outline_rounded
-                : Icons.edit_outlined,
-            color: AppColors.teal,
+                ? Icons.wb_sunny_outlined
+                : Icons.check_circle_rounded,
+            color: existing == null ? AppColors.yellow : AppColors.green,
             size: 20,
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              existing == null
+                  ? 'How do you feel this morning?'
+                  : 'Checked in: ${existing.label}',
+              style: AppType.rowTitle,
+            ),
+          ),
+          Icon(
+            existing == null ? Icons.add_rounded : Icons.edit_outlined,
+            color: AppColors.teal,
+            size: 19,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EnergyCard extends StatelessWidget {
+  const _EnergyCard({required this.performance, required this.onTap});
+
+  final Performance performance;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final energy = performance.energy;
+    if (energy == null) {
+      return PanelCard(
+        title: 'CALORIES',
+        icon: Icons.local_fire_department_rounded,
+        accent: AppColors.energy,
+        onTap: onTap,
+        child: const Text(
+          'Needs your body profile and today’s heart rate.',
+          style: AppType.note,
+        ),
+      );
+    }
+    final today = energy.today;
+    final delta = energy.deviceDelta;
+    return PanelCard(
+      title: 'CALORIES · SO FAR',
+      icon: Icons.local_fire_department_rounded,
+      accent: AppColors.energy,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatNumber(today.totalKcal.round()),
+                        style: AppType.numXl.copyWith(fontSize: 40),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 5, bottom: 6),
+                        child: Text('kcal', style: AppType.unit),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: StatBlock(
+                    label: 'BY MIDNIGHT',
+                    value: '~${formatNumber(energy.projectedToday.round())}',
+                    align: CrossAxisAlignment.end,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: StatBlock(
+                  label: 'ACTIVE',
+                  value: formatNumber(today.activeKcal.round()),
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'RESTING',
+                  value: formatNumber(today.restingKcal.round()),
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'MAINTENANCE',
+                  value: energy.maintenanceKcal == null
+                      ? '—'
+                      : formatNumber(energy.maintenanceKcal!.round()),
+                  delta: energy.maintenanceKcal == null
+                      ? 'needs 3 full days'
+                      : 'avg of ${energy.history.length} days',
+                ),
+              ),
+            ],
+          ),
+          if (delta != null && delta.abs() >= 50) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceHigher.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                delta > 0
+                    ? 'Fitbit says ${formatNumber(energy.deviceTotalToday!)} '
+                          '(+${formatNumber(delta.round())}). Becel ignores HR '
+                          'below ${today.flexBpm} bpm and '
+                          '${formatNumber(today.filteredSteps)} incidental steps.'
+                    : 'Fitbit says ${formatNumber(energy.deviceTotalToday!)} '
+                          '(${formatNumber(delta.round())}).',
+                style: AppType.caption.copyWith(color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadCard extends StatelessWidget {
+  const _LoadCard({required this.performance, required this.onTap});
+
+  final Performance performance;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final load = performance.load;
+    final days = performance.strainDays;
+    final week = days.length <= 7 ? days : days.sublist(days.length - 7);
+    final status = load?.status ?? LoadStatus.calibrating;
+    final color = switch (status) {
+      LoadStatus.productive => AppColors.bandGreen,
+      LoadStatus.maintaining => AppColors.teal,
+      LoadStatus.detraining => AppColors.blue,
+      LoadStatus.overreaching => AppColors.bandYellow,
+      LoadStatus.spike => AppColors.bandRed,
+      LoadStatus.calibrating => AppColors.textTertiary,
+    };
+    return PanelCard(
+      title: 'TRAINING LOAD',
+      icon: Icons.stacked_line_chart_rounded,
+      accent: AppColors.strain,
+      onTap: onTap,
+      trailing: Tag(status.label, color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: StatBlock(
+                  label: '7-DAY (FATIGUE)',
+                  value: load == null
+                      ? '—'
+                      : load.acuteStrain.toStringAsFixed(1),
+                  delta: 'avg daily strain',
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: '28-DAY (FITNESS)',
+                  value: load == null
+                      ? '—'
+                      : load.chronicStrain.toStringAsFixed(1),
+                  delta: 'avg daily strain',
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'RATIO',
+                  value: load?.acwr == null
+                      ? '—'
+                      : load!.acwr!.toStringAsFixed(2),
+                  delta: 'sweet spot 0.8–1.3',
+                ),
+              ),
+            ],
+          ),
+          if (week.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            DayBars(
+              values: [for (final d in week) d.hasData ? d.strain : null],
+              labels: [for (final d in week) formatDayShort(d.date)[0]],
+              maxValue: strainMax,
+              height: 54,
+              valueLabel: (v) => v.toStringAsFixed(0),
+              colorFor: (i, v) => AppColors.strain.withValues(
+                alpha: i == week.length - 1 ? 1 : 0.45,
+              ),
+              semanticsLabel: 'Daily strain, last 7 days',
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(status.advice, style: AppType.caption),
+        ],
+      ),
+    );
+  }
+}
+
+class _VitalsCard extends StatelessWidget {
+  const _VitalsCard({required this.snapshot, required this.onTap});
+
+  final HealthSnapshot snapshot;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = snapshot.performance;
+    final r = p.recoveryEstimate;
+    String signed(double v, {int digits = 0}) =>
+        '${v >= 0 ? '+' : '−'}${v.abs().toStringAsFixed(digits)}';
+    Color tone(double v, {bool higherIsBetter = true, double tolerance = 0}) {
+      if (v.abs() <= tolerance) return AppColors.textTertiary;
+      final good = higherIsBetter ? v > 0 : v < 0;
+      return good ? AppColors.bandGreen : AppColors.bandYellow;
+    }
+
+    final rhr = r?.restingHrCurrent ?? snapshot.heart?.restingHrBpm?.toDouble();
+    final hrv = r?.hrvCurrent;
+    final resp = snapshot.body?.respiratoryRate;
+    final skin = p.skinTempDelta;
+    return PanelCard(
+      title: 'OVERNIGHT VITALS',
+      icon: Icons.monitor_heart_rounded,
+      accent: AppColors.teal,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: StatBlock(
+              label: 'RHR',
+              value: rhr == null ? '—' : rhr.round().toString(),
+              unit: 'bpm',
+              delta: r == null ? null : '${signed(r.restingHrChange)} vs base',
+              deltaColor: r == null
+                  ? null
+                  : tone(
+                      r.restingHrChange,
+                      higherIsBetter: false,
+                      tolerance: 1,
+                    ),
+            ),
+          ),
+          Expanded(
+            child: StatBlock(
+              label: 'HRV',
+              value: hrv == null ? '—' : hrv.round().toString(),
+              unit: 'ms',
+              delta: r == null
+                  ? 'night median'
+                  : '${signed(r.hrvChangePercent)}% vs base',
+              deltaColor: r == null
+                  ? null
+                  : tone(r.hrvChangePercent, tolerance: 4),
+            ),
+          ),
+          Expanded(
+            child: StatBlock(
+              label: 'RESP',
+              value: resp == null ? '—' : resp.toStringAsFixed(1),
+              unit: '/min',
+              delta: p.respiratoryDelta == null
+                  ? null
+                  : '${signed(p.respiratoryDelta!, digits: 1)} vs base',
+              deltaColor: p.respiratoryDelta == null
+                  ? null
+                  : tone(
+                      p.respiratoryDelta!,
+                      higherIsBetter: false,
+                      tolerance: 0.5,
+                    ),
+            ),
+          ),
+          Expanded(
+            child: StatBlock(
+              label: 'SKIN',
+              value: skin == null ? '—' : signed(skin, digits: 1),
+              unit: '°C',
+              delta: skin == null ? null : 'vs baseline',
+              deltaColor: skin == null
+                  ? null
+                  : tone(skin, higherIsBetter: false, tolerance: 0.3),
+            ),
           ),
         ],
       ),
@@ -535,7 +981,7 @@ class _InitialState extends StatelessWidget {
     if (loading) {
       return const StateCard(
         title: 'Reading Health Connect',
-        body: 'Loading last night’s sleep, heart signals, and activity.',
+        body: 'Loading 28 days of heart rate, sleep, and recovery signals.',
         icon: Icons.sync_rounded,
         loading: true,
       );
@@ -561,497 +1007,4 @@ class _InitialState extends StatelessWidget {
       onAction: onData,
     );
   }
-}
-
-class _RecoveryCard extends StatelessWidget {
-  const _RecoveryCard({
-    required this.context,
-    required this.loadedAt,
-    required this.onTap,
-  });
-
-  final RecoveryContext context;
-  final DateTime loadedAt;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext widgetContext) {
-    final current = context.current;
-    if (current == null) {
-      return SurfaceCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(16),
-        color: AppColors.surface,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const IconChip(
-              icon: Icons.energy_savings_leaf_rounded,
-              color: AppColors.teal,
-              size: 42,
-              iconSize: 20,
-              radius: 14,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Recovery is calibrating',
-                    style: AppType.rowTitle,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(context.detail, style: AppType.caption),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Becel needs a few scored mornings before it can show your '
-                    'usual range.',
-                    style: AppType.caption,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final color = switch (context.band) {
-      RecoveryBand.below => AppColors.yellow,
-      RecoveryBand.above => AppColors.blue,
-      RecoveryBand.within => AppColors.teal,
-      RecoveryBand.unknown => AppColors.teal,
-    };
-    return SurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-      color: const Color(0xFF14201B),
-      borderColor: color.withValues(alpha: 0.22),
-      radius: 24,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.energy_savings_leaf_rounded, color: color, size: 16),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  'RECOVERY · PERSONAL RANGE',
-                  style: AppType.eyebrow.copyWith(color: color),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  context.provisional ? 'BUILDING' : 'EXPERIMENTAL',
-                  style: AppType.eyebrow.copyWith(
-                    color: color,
-                    fontSize: 9.5,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            context.label,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 22,
-              height: 1.15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(context.detail, style: AppType.caption),
-          const SizedBox(height: 12),
-          RangeGauge(
-            value: current,
-            low: context.low,
-            high: context.high,
-            color: color,
-            bandLabel: context.provisional ? 'building baseline' : null,
-            semanticsLabel:
-                'Recovery ${context.label.toLowerCase()}. Today $current out of '
-                '100. Usual range ${context.low} to ${context.high}.',
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Built from overnight HRV, resting heart rate, sleep duration, and '
-            'your morning check-in. Each signal is shown in Recovery detail.',
-            style: AppType.caption.copyWith(fontSize: 11.5),
-          ),
-          const SizedBox(height: 8),
-          SourceLine(
-            text: 'Calculated · Fitbit Air · refreshed ${formatAgo(loadedAt)}',
-            icon: Icons.calculate_outlined,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BriefTile extends StatelessWidget {
-  const _BriefTile({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
-    required this.detail,
-    required this.footnote,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String value;
-  final String detail;
-  final String footnote;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(14, 13, 13, 13),
-      radius: 20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 15, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(
-                    color: color,
-                    fontSize: 10.5,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(value, style: AppType.numM.copyWith(fontSize: 25)),
-          const SizedBox(height: 4),
-          Text(
-            detail,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.caption.copyWith(fontSize: 11.5),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            footnote,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.caption.copyWith(fontSize: 10.5, height: 1.3),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FocusCard extends StatelessWidget {
-  const _FocusCard({required this.focus, required this.onAction});
-
-  final FocusRecommendation focus;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return SurfaceCard(
-      color: const Color(0xFF17211A),
-      borderColor: AppColors.teal.withValues(alpha: 0.22),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.flag_rounded, size: 16, color: AppColors.green),
-              const SizedBox(width: 7),
-              Text(
-                'ONE THING THIS WEEK',
-                style: AppType.eyebrow.copyWith(color: AppColors.green),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            focus.title,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              height: 1.2,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(focus.body, style: AppType.body),
-          const SizedBox(height: 10),
-          Text(
-            'WHY · ${focus.why}',
-            style: AppType.caption.copyWith(fontSize: 10.5, height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: OutlinedButton(
-              onPressed: onAction,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.teal,
-                side: BorderSide(color: AppColors.teal.withValues(alpha: 0.45)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
-                ),
-              ),
-              child: Text(focus.actionLabel),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MovementCard extends StatelessWidget {
-  const _MovementCard({required this.snapshot, required this.onTap});
-
-  final HealthSnapshot snapshot;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = snapshot.summary;
-    final steps = summary?.stepCount;
-    return SurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const IconChip(
-                icon: Icons.directions_walk_rounded,
-                color: AppColors.green,
-                size: 42,
-                iconSize: 20,
-                radius: 14,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      steps == null
-                          ? 'No steps yet today'
-                          : _formatNumber(steps),
-                      style: steps == null
-                          ? AppType.rowTitle
-                          : AppType.numM.copyWith(fontSize: 22),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      steps == null
-                          ? 'Waiting for the next Fitbit Air sync'
-                          : 'steps today · measured by Fitbit Air',
-                      style: AppType.caption,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: AppColors.textTertiary,
-              ),
-            ],
-          ),
-          if (summary?.workoutType != null) ...[
-            const Divider(height: 20),
-            Row(
-              children: [
-                const Icon(
-                  Icons.fitness_center_rounded,
-                  size: 16,
-                  color: AppColors.orange,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    summary!.workoutType!,
-                    style: AppType.rowTitle.copyWith(fontSize: 14),
-                  ),
-                ),
-                Text(
-                  '${summary.workoutDurationMinutes ?? 0} min',
-                  style: AppType.caption,
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SignalsCard extends StatelessWidget {
-  const _SignalsCard({
-    required this.snapshot,
-    required this.onHeart,
-    required this.onBody,
-  });
-
-  final HealthSnapshot snapshot;
-  final VoidCallback onHeart;
-  final VoidCallback onBody;
-
-  @override
-  Widget build(BuildContext context) {
-    final heart = snapshot.heart;
-    final body = snapshot.body;
-    final rows = <Widget>[];
-    if (heart?.restingHrBpm != null) {
-      rows.add(
-        _SignalRow(
-          icon: Icons.favorite_rounded,
-          color: AppColors.red,
-          title: 'Resting heart rate',
-          value: '${heart!.restingHrBpm} bpm',
-          onTap: onHeart,
-        ),
-      );
-    }
-    if (heart?.hrvRmssd != null) {
-      rows.add(
-        _SignalRow(
-          icon: Icons.monitor_heart_rounded,
-          color: AppColors.teal,
-          title: 'HRV (RMSSD)',
-          value: '${heart!.hrvRmssd!.round()} ms',
-          onTap: onHeart,
-        ),
-      );
-    }
-    if (body?.spo2Percent != null) {
-      rows.add(
-        _SignalRow(
-          icon: Icons.bloodtype_rounded,
-          color: AppColors.blue,
-          title: 'Blood oxygen',
-          value: '${body!.spo2Percent!.round()}%',
-          onTap: onBody,
-        ),
-      );
-    }
-    if (body?.respiratoryRate != null) {
-      rows.add(
-        _SignalRow(
-          icon: Icons.air_rounded,
-          color: AppColors.blue,
-          title: 'Respiratory rate',
-          value: '${body!.respiratoryRate!.toStringAsFixed(1)}/min',
-          onTap: onBody,
-        ),
-      );
-    }
-
-    if (rows.isEmpty) {
-      return const StateCard(
-        title: 'No signals recorded yet',
-        body:
-            'Heart and body signals appear after Fitbit Air shares them with '
-            'Health Connect.',
-        icon: Icons.sensors_off_rounded,
-        color: AppColors.yellow,
-      );
-    }
-
-    return SurfaceCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      color: AppColors.surface,
-      child: Column(
-        children: [
-          for (var index = 0; index < rows.length; index++) ...[
-            rows[index],
-            if (index != rows.length - 1) const Divider(height: 1),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SignalRow extends StatelessWidget {
-  const _SignalRow({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.value,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Icon(icon, size: 17, color: color),
-            const SizedBox(width: 10),
-            Expanded(child: Text(title, style: AppType.rowTitle)),
-            Text(value, style: AppType.numS.copyWith(fontSize: 14)),
-            const SizedBox(width: 6),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
-              size: 18,
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-String _formatNumber(int value) {
-  final text = value.toString();
-  final buffer = StringBuffer();
-  for (var index = 0; index < text.length; index++) {
-    if (index > 0 && (text.length - index) % 3 == 0) buffer.write(',');
-    buffer.write(text[index]);
-  }
-  return buffer.toString();
 }

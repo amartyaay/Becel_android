@@ -1,16 +1,16 @@
 import 'package:flutter/foundation.dart';
 
-import '../domain/coaching.dart';
 import '../domain/estimates.dart';
 import '../domain/metrics.dart';
+import '../domain/performance.dart';
 import '../domain/profile.dart';
 import 'health_connect_service.dart';
 import 'local_store.dart';
 
 /// One consistent read of every Health Connect surface Becel uses.
 ///
-/// All tabs read from the same snapshot, so Today, Activity, Sleep, History,
-/// and Settings cannot disagree about the same night, session, or estimate.
+/// All tabs read from the same snapshot, so Today, Training, Sleep, and
+/// Trends cannot disagree about the same night, session, or estimate.
 class HealthSnapshot {
   const HealthSnapshot({
     required this.inspection,
@@ -21,15 +21,11 @@ class HealthSnapshot {
     required this.body,
     required this.trends,
     required this.age,
-    required this.recoveryStatus,
-    required this.recoveryHistory,
-    required this.recoveryContext,
     required this.activityEstimate,
     required this.loadedAt,
+    required this.performance,
     this.profile,
-    this.energy,
-    this.trainingLoad,
-    this.fitnessAge,
+    this.cardioFitness,
   });
 
   final HealthConnectInspection inspection;
@@ -40,22 +36,20 @@ class HealthSnapshot {
   final BodyDetail? body;
   final Trends7d? trends;
   final int? age;
-  final RecoveryReadiness? recoveryStatus;
-  final List<RecoveryHistoryPoint> recoveryHistory;
-  final RecoveryContext recoveryContext;
   final ActivityEstimate? activityEstimate;
   final DateTime loadedAt;
+  final Performance performance;
   final BodyProfile? profile;
-  final EnergyEstimate? energy;
-  final TrainingLoadEstimate? trainingLoad;
-  final FitnessAgeEstimate? fitnessAge;
+  final CardioFitness? cardioFitness;
 
   bool get isAvailable => inspection.isAvailable;
   bool get hasAccess => inspection.hasAnyPermission;
   bool get allPermissionsGranted => inspection.allPermissionsGranted;
   bool get airMatched => summary?.fitbitAirMetadataMatched == true;
   SleepNight? get selectedNight => sleep?.selectedRecentSession;
-  RecoveryEstimate? get recovery => recoveryStatus?.estimate;
+  RecoveryReadiness get recoveryStatus => performance.recovery;
+  RecoveryEstimate? get recovery => performance.recovery.estimate;
+  List<RecoveryHistoryPoint> get recoveryHistory => performance.recoveryHistory;
 
   String? get error =>
       heart?.error ??
@@ -71,42 +65,23 @@ class HealthSnapshot {
       summary?.heartRateBpm != null ||
       summary?.sleepSessionMinutes != null ||
       recovery != null ||
+      (heart?.minuteSeries.isNotEmpty ?? false) ||
+      (sleep?.sessions.isNotEmpty ?? false) ||
       (activity?.workouts.isNotEmpty ?? false) ||
       (trends?.steps.any((value) => value != null) ?? false) ||
       (trends?.hrAvg.any((value) => value != null) ?? false) ||
       (trends?.sleepMinutes.any((value) => value != null) ?? false);
-
-  SleepTrend get sleepTrend =>
-      buildSleepTrend(sleep?.sessions ?? const <SleepNight>[], now: loadedAt);
-
-  List<StrengthCandidate> get strengthCandidates => [
-    for (final workout in activity?.workouts ?? const <WorkoutEntry>[])
-      StrengthCandidate(at: workout.start, type: workout.type),
-  ];
-
-  WeeklyReview weeklyReview({
-    required Iterable<DateTime> loggedStrengthDays,
-    Set<String> checkInTags = const <String>{},
-  }) => buildWeeklyReview(
-    sleepSessions: sleep?.sessions ?? const <SleepNight>[],
-    workouts: strengthCandidates,
-    loggedStrengthDays: loggedStrengthDays,
-    activity: activityEstimate,
-    recoveryHistory: recoveryHistory,
-    steps: trends?.steps ?? const <int?>[],
-    checkInTags: checkInTags,
-    now: loadedAt,
-  );
 }
 
 /// Shared, coalesced Health Connect loader.
 ///
 /// A permission change or explicit invalidation bumps
-/// [HealthConnectService.dataRevision]; every screen then re-renders from one
-/// new snapshot instead of each starting its own batch of platform reads.
+/// [HealthConnectService.dataRevision]; local edits (profile, lifts, sleep
+/// corrections) recompute metrics without new platform reads.
 class HealthStore extends ChangeNotifier {
   HealthStore._() {
     HealthConnectService.instance.dataRevision.addListener(_onRevision);
+    LocalStore.instance.addListener(_onLocalChange);
   }
 
   static final instance = HealthStore._();
@@ -117,6 +92,7 @@ class HealthStore extends ChangeNotifier {
   String? _error;
   Future<void>? _inFlight;
   int _generation = 0;
+  _RawRead? _raw;
 
   HealthSnapshot? get snapshot => _snapshot;
   bool get loading => _loading;
@@ -127,6 +103,13 @@ class HealthStore extends ChangeNotifier {
     _snapshot = null;
     _error = null;
     refresh(force: true);
+  }
+
+  void _onLocalChange() {
+    final raw = _raw;
+    if (raw == null || _inFlight != null) return;
+    _snapshot = _compose(raw);
+    notifyListeners();
   }
 
   Future<void> ensureLoaded() {
@@ -174,73 +157,7 @@ class HealthStore extends ChangeNotifier {
       if (generation != _generation) return;
       final age = await _service.readFitnessAge();
       if (generation != _generation) return;
-      final now = DateTime.now();
-      final local = LocalStore.instance.log;
-      final storedProfile = local.profile;
-      final profile = storedProfile == null
-          ? null
-          : BodyProfile(
-              age: storedProfile.age ?? age,
-              sex: storedProfile.sex,
-              heightCm: storedProfile.heightCm,
-              weightKg: storedProfile.weightKg,
-            );
-      final checkIn = local.checkInFor(now);
-      final night = sleep?.selectedRecentSession;
-      final recoveryStatus = heart == null
-          ? null
-          : recoveryReadiness(
-              hrvSamples: heart.hrvSamples,
-              restingHrSamples: heart.restingHrSamples,
-              sleepMinutes: night?.minutes,
-              sleepStart: night?.start,
-              sleepEnd: night?.end,
-              asleepIntervals:
-                  night?.asleepIntervals ?? const <AsleepInterval>[],
-              sleepWindows: sleep?.sleepWindows ?? const <SleepWindow>[],
-              checkInTags: checkIn?.tags ?? const <String>{},
-              now: now,
-            );
-      final history = heart == null || sleep == null
-          ? const <RecoveryHistoryPoint>[]
-          : recoveryHistory(
-              hrvSamples: heart.hrvSamples,
-              restingHrSamples: heart.restingHrSamples,
-              sleepWindows: sleep.sleepWindows,
-              now: now,
-            );
-      final todaySteps = summary?.stepCount;
-      final energy = profile == null
-          ? null
-          : estimateDailyEnergy(
-              profile: profile,
-              todayHeartRate: [
-                for (final sample in heart?.series ?? const <HeartSample>[])
-                  TimedValue(at: sample.at, value: sample.bpm.toDouble()),
-              ],
-              stepCount: todaySteps,
-              now: now,
-              deviceActiveKcal: activity?.caloriesActiveToday,
-              deviceTotalKcal: activity?.caloriesTotalToday,
-            );
-      final trainingLoad = estimateTrainingLoad(
-        weekHeartRate: [
-          for (final sample in heart?.weeklySeries ?? const <HeartSample>[])
-            TimedValue(at: sample.at, value: sample.bpm.toDouble()),
-        ],
-        age: profile?.age ?? age,
-        restingHr: heart?.restingHrBpm?.toDouble(),
-        now: now,
-      );
-      final fitnessAge = profile == null
-          ? null
-          : estimateFitnessAge(
-              profile: profile,
-              vo2Max: body?.vo2Max,
-              restingHrSamples: heart?.restingHrSamples ?? const <TimedValue>[],
-              now: now,
-            );
-      final snapshot = HealthSnapshot(
+      final raw = _RawRead(
         inspection: inspection,
         summary: summary,
         heart: heart,
@@ -249,22 +166,9 @@ class HealthStore extends ChangeNotifier {
         body: body,
         trends: trends,
         age: age,
-        recoveryStatus: recoveryStatus,
-        recoveryHistory: history,
-        recoveryContext: buildRecoveryContext(
-          currentScore: recoveryStatus?.estimate?.score,
-          history: history,
-          now: now,
-        ),
-        activityEstimate: heart == null
-            ? null
-            : _service.activityEstimateFor(heart, age),
-        loadedAt: now,
-        profile: profile,
-        energy: energy,
-        trainingLoad: trainingLoad,
-        fitnessAge: fitnessAge,
       );
+      _raw = raw;
+      final snapshot = _compose(raw);
       if (generation != _generation) return;
       _snapshot = snapshot;
       _error = snapshot.error;
@@ -279,6 +183,56 @@ class HealthStore extends ChangeNotifier {
     }
   }
 
+  HealthSnapshot _compose(_RawRead raw) {
+    final now = DateTime.now();
+    final local = LocalStore.instance.log;
+    final stored = local.profile;
+    final profile = stored == null
+        ? (raw.age == null ? null : BodyProfile(age: raw.age))
+        : BodyProfile(
+            age: stored.age ?? raw.age,
+            sex: stored.sex,
+            heightCm: stored.heightCm,
+            weightKg: stored.weightKg,
+            bodyFatPercent: stored.bodyFatPercent,
+            maxHrOverride: stored.maxHrOverride,
+            sleepNeedMinutes: stored.sleepNeedMinutes,
+          );
+    final performance = buildPerformance(
+      heart: raw.heart,
+      sleep: raw.sleep,
+      body: raw.body,
+      activity: raw.activity,
+      profile: profile,
+      fallbackAge: raw.age,
+      strengthSessions: local.strengthSessions,
+      onsetOverrides: local.onsetOverrides,
+      checkInTags: local.checkInFor(now)?.tags ?? const <String>{},
+      now: now,
+    );
+    return HealthSnapshot(
+      inspection: raw.inspection,
+      summary: raw.summary,
+      heart: raw.heart,
+      sleep: raw.sleep,
+      activity: raw.activity,
+      body: raw.body,
+      trends: raw.trends,
+      age: profile?.age ?? raw.age,
+      activityEstimate: raw.heart == null
+          ? null
+          : _service.activityEstimateFor(raw.heart!, raw.age),
+      loadedAt: now,
+      performance: performance,
+      profile: profile,
+      cardioFitness: estimateCardioFitness(
+        profile: profile,
+        maxHr: performance.maxHr,
+        restingBpm: performance.restingBpm,
+      ),
+    );
+  }
+
   @visibleForTesting
   void resetForTest() {
     _generation++;
@@ -286,5 +240,28 @@ class HealthStore extends ChangeNotifier {
     _error = null;
     _loading = true;
     _inFlight = null;
+    _raw = null;
   }
+}
+
+class _RawRead {
+  const _RawRead({
+    required this.inspection,
+    required this.summary,
+    required this.heart,
+    required this.sleep,
+    required this.activity,
+    required this.body,
+    required this.trends,
+    required this.age,
+  });
+
+  final HealthConnectInspection inspection;
+  final HealthSummary? summary;
+  final HeartDetail? heart;
+  final SleepDetail? sleep;
+  final ActivityDetail? activity;
+  final BodyDetail? body;
+  final Trends7d? trends;
+  final int? age;
 }

@@ -19,14 +19,21 @@ abstract final class AppColors {
   static const blue = Color(0xFF8EA9FF);
   static const violet = Color(0xFFB9A4FF);
 
-  // Retained semantic names for detail screens while the app moves toward
-  // the companion-first information architecture.
+  // Metric identities: one hue per pillar, used on rings, charts, and
+  // headers so a metric is recognisable before its label is read.
   static const recovery = green;
-  static const sleep = blue;
-  static const strain = red;
+  static const strainBlue = Color(0xFF5AA9FF);
+  static const strain = strainBlue;
+  static const sleep = Color(0xFFA592FF);
   static const stress = yellow;
-  static const energy = teal;
+  static const energy = orange;
   static const nutrition = green;
+
+  // Recovery bands (WHOOP-style traffic light, never color alone: every
+  // band also carries a word).
+  static const bandGreen = Color(0xFF4BE08A);
+  static const bandYellow = Color(0xFFFFD25A);
+  static const bandRed = Color(0xFFFF6B5E);
 }
 
 /// Central type scale for the redesigned interface.
@@ -150,6 +157,7 @@ ThemeData buildDarkTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'Roboto',
     brightness: Brightness.dark,
     scaffoldBackgroundColor: AppColors.bg,
     colorScheme: colorScheme,
@@ -255,6 +263,28 @@ ThemeData buildDarkTheme() {
     listTileTheme: const ListTileThemeData(
       iconColor: AppColors.textSecondary,
       textColor: AppColors.textPrimary,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: AppColors.surfaceHigher,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.green),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: AppColors.surfaceHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
   );
 }

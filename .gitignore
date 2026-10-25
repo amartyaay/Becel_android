@@ -53,3 +53,6 @@ app.*.map.json
 /brag-output/
 /skills/
 /opencode/
+
+# Review screenshots rendered by test_shots/ (regenerate with --update-goldens)
+test_shots/goldens/

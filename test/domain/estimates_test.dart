@@ -4,33 +4,42 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('recoveryReadiness', () {
-    test('neutral personal signals produce a transparent 61-point index', () {
-      final result = _estimate();
+    test('a typical morning maps to the low-to-mid 60s', () {
+      final result = _estimate(sleepMinutes: 408);
       final estimate = result.estimate!;
 
-      expect(estimate.score, 61);
-      expect(estimate.sleepComponent, 100);
-      expect(estimate.hrvComponent, 50);
-      expect(estimate.restingHrComponent, 50);
+      // 408 of 480 min = 85 % of need, the neutral point: composite z = 0.
+      expect(estimate.sleepPercentOfNeed, 85);
+      expect(estimate.hrvZ, 0);
+      expect(estimate.restingHrZ, 0);
+      expect(estimate.score, 64);
+      expect(estimate.band, RecoveryBand.yellow);
       expect(estimate.hrvBaselineDays, 10);
-      expect(estimate.restingHrBaselineDays, 10);
-      expect(result.limitedSamples, isTrue);
+      expect(estimate.provisional, isFalse);
     });
 
-    test('favorable signals can reach 100 on the displayed scale', () {
+    test('favourable signals reach the green band', () {
       final result = _estimate(currentHrv: 100, currentRestingHr: 50);
 
-      expect(result.estimate?.hrvComponent, 100);
-      expect(result.estimate?.restingHrComponent, 100);
-      expect(result.estimate?.score, 100);
+      expect(result.estimate!.hrvZ, 3);
+      expect(result.estimate!.restingHrZ, -3);
+      expect(result.estimate!.score, greaterThanOrEqualTo(95));
+      expect(result.estimate!.band, RecoveryBand.green);
     });
 
-    test('requires ten distinct historical nights per signal', () {
-      final result = _estimate(historicalNights: 9);
+    test('suppressed HRV and raised resting HR land in the red band', () {
+      final result = _estimate(currentHrv: 35, currentRestingHr: 66);
 
-      expect(result.estimate, isNull);
-      expect(result.hrvBaselineNights, 9);
-      expect(result.restingHrBaselineNights, 9);
+      expect(result.estimate!.band, RecoveryBand.red);
+    });
+
+    test('a provisional score starts after four baseline nights', () {
+      expect(_estimate(historicalNights: 3).estimate, isNull);
+      expect(_estimate(historicalNights: 3).nightsUntilScore, 1);
+      final provisional = _estimate(historicalNights: 4);
+      expect(provisional.estimate, isNotNull);
+      expect(provisional.estimate!.provisional, isTrue);
+      expect(provisional.limitedSamples, isTrue);
     });
 
     test(
@@ -90,25 +99,35 @@ void main() {
       expect(result.limitedSamples, isFalse);
     });
 
-    test('sleep duration contributes to the readiness score', () {
+    test('short sleep lowers recovery; long sleep is never penalised', () {
       final short = _estimate(sleepMinutes: 300);
-      final long = _estimate(sleepMinutes: 540);
+      final neutral = _estimate(sleepMinutes: 408);
+      final long = _estimate(sleepMinutes: 640);
 
-      expect(short.estimate?.score, 50);
-      expect(long.estimate?.score, 61);
-      expect(short.estimate?.sleepComponent, lessThan(100));
-      expect(long.estimate?.sleepComponent, 100);
+      expect(short.estimate!.score, lessThan(neutral.estimate!.score));
+      expect(
+        long.estimate!.score,
+        greaterThanOrEqualTo(neutral.estimate!.score),
+      );
     });
 
-    test('morning check-in adjusts readiness without hiding physiology', () {
-      final neutral = _estimate(checkInTags: {'normal'});
+    test('feeling unwell lowers the score; muscle soreness does not', () {
+      final none = _estimate();
+      final sore = _estimate(checkInTags: {'sore'});
       final unwell = _estimate(checkInTags: {'unwell'});
 
-      expect(neutral.estimate?.subjectiveComponent, 60);
-      expect(unwell.estimate?.subjectiveComponent, 10);
-      expect(neutral.estimate!.score, greaterThan(unwell.estimate!.score));
-      expect(unwell.estimate?.hrvComponent, 50);
-      expect(unwell.estimate?.restingHrComponent, 50);
+      expect(sore.estimate!.score, none.estimate!.score);
+      expect(unwell.estimate!.score, lessThan(none.estimate!.score));
+      expect(unwell.estimate!.contextReasons, ['Feeling unwell']);
+      expect(unwell.estimate!.hrvZ, 0);
+    });
+
+    test('a respiratory or temperature rise lowers the score', () {
+      final none = _estimate();
+      final febrile = _estimate(respiratoryDelta: 1.4, skinTempDelta: 0.7);
+
+      expect(febrile.estimate!.score, lessThan(none.estimate!.score - 15));
+      expect(febrile.estimate!.contextReasons, hasLength(2));
     });
   });
 
@@ -173,8 +192,9 @@ void main() {
       expect(history[7].readiness, isNull);
       expect(history.last.date, DateTime(2026, 10, 24));
       expect(history.last.sleepMinutes, 420);
-      expect(history.last.readiness?.estimate?.score, 61);
-      expect(history.last.readiness?.hrvBaselineNights, 13);
+      expect(history.last.readiness?.estimate, isNotNull);
+      // 28-day window: offsets 1–27 minus the missing night 6.
+      expect(history.last.readiness?.hrvBaselineNights, 26);
     },
   );
 
@@ -227,6 +247,8 @@ RecoveryReadiness _estimate({
   bool currentRestingHrOutsideSleep = false,
   bool historicalRestingHrOutsideSleep = false,
   Set<String> checkInTags = const <String>{},
+  double? respiratoryDelta,
+  double? skinTempDelta,
 }) {
   final today = DateTime.now();
   final now = DateTime(today.year, today.month, today.day, 18);
@@ -291,6 +313,8 @@ RecoveryReadiness _estimate({
     asleepIntervals: [currentInterval],
     sleepWindows: windows,
     checkInTags: checkInTags,
+    respiratoryDelta: respiratoryDelta,
+    skinTempDelta: skinTempDelta,
     now: now,
   );
 }

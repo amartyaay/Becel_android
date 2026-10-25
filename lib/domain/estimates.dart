@@ -8,39 +8,53 @@ class TimedValue {
   final double value;
 }
 
-const sleepDurationMethod =
-    'Sleep duration progress against the adult 7-hour minimum reference. Stages are '
-    'shown for context, not scored because wrist-based stage estimates are '
-    'not precise enough to grade a night.';
+/// Single source of truth for recovery weights, shown verbatim in the app.
+abstract final class RecoveryModel {
+  static const hrvWeight = 0.55;
+  static const restingHrWeight = 0.25;
+  static const sleepWeight = 0.20;
+
+  /// SD of the weighted sum of three roughly independent unit z-scores.
+  static const compositeScale = 0.64;
+
+  /// Score = 100 × Φ(offset + slope × composite z). A typical morning
+  /// (z = 0) reads ~64 %, one SD better ~89 %, one SD worse ~29 %.
+  static const offset = 0.35;
+  static const slope = 0.9;
+
+  static const green = 67;
+  static const red = 33;
+
+  static String get weightsLabel =>
+      'HRV ${(hrvWeight * 100).round()}% · resting HR '
+      '${(restingHrWeight * 100).round()}% · sleep vs need '
+      '${(sleepWeight * 100).round()}%';
+}
 
 const recoveryMethod =
-    'Becel readiness combines four signals: 45% RMSSD HRV, 25% resting heart '
-    'rate, 20% sleep duration in a 7–9 hour band, and 10% morning check-in. '
-    'Without a check-in the first three signals are reweighted to 50/28/22. '
-    'HRV and RHR are compared with the same person’s previous 14 local dates; '
-    'each needs 10 baseline dates. HRV readings must fall inside recorded '
-    'asleep stages. The 0–100 scale is a transparent product heuristic, not a '
-    'validated measure of readiness or performance. Use it only as a '
-    'within-person trend.';
+    'Recovery compares last night with your own 28-day baseline. Overnight '
+    'HRV (ln RMSSD, only readings inside asleep stages) and morning resting '
+    'heart rate become robust z-scores (median and MAD). Sleep is scored '
+    'against tonight-adjusted sleep need, and sleeping longer is never '
+    'penalised. The weighted z-scores (HRV 55%, resting HR 25%, sleep 20%) '
+    'are mapped to 0–100% with a normal curve so a typical morning reads '
+    '~64%. Feeling unwell, stress, a respiratory-rate rise of ≥1 breath/min, '
+    'or skin temperature ≥0.5 °C above baseline lower the score. Muscle '
+    'soreness does not. Scores start after 4 baseline nights and are '
+    'marked provisional until 10.';
 
 const activityMethod =
-    'Becel HR estimate: moderate-equivalent minutes from Fitbit Air heart-rate '
-    'samples over the last 7 local days, compared with a 150-minute adult aerobic '
-    'reference. Adult recommendations also include 2 days of muscle strengthening; '
-    'Becel does not track those sessions. Intensity '
-    'uses age-predicted maximum heart rate and your latest resting reading '
-    '(up to 36 hours old) for all 7 dates. Moderate minutes count once; vigorous '
-    'minutes count twice. This estimates intensity from pulse; it does not '
-    'confirm exercise. Missing wear time can lower the total.';
+    'Moderate-equivalent minutes from Fitbit Air heart rate over the last 7 '
+    'local days. Moderate = 40–59% of heart-rate reserve, vigorous ≥60% '
+    '(ACSM); vigorous minutes count twice toward the 150-minute aerobic '
+    'guideline. Missing wear time can lower the total.';
 
 const activityAerobicReferenceMinutes = 150;
-const recoveryBaselineWindowDays = 14;
-const recoveryMinimumBaselineNights = 10;
+const recoveryBaselineWindowDays = 28;
+const recoveryMinimumBaselineNights = 4;
+const recoveryFullBaselineNights = 10;
 
 /// Shows progress against the seven-hour adult minimum reference.
-///
-/// Seven hours is an evidence-based minimum reference for adults, not a
-/// personalized sleep prescription. Longer sleep is not penalized.
 int? sleepDurationProgressPercent({required int minutes}) {
   if (minutes <= 0) return null;
   return (minutes / 420 * 100).round().clamp(0, 100);
@@ -70,12 +84,21 @@ class AsleepInterval {
       !instant.isBefore(start) && instant.isBefore(end);
 }
 
+enum RecoveryBand { red, yellow, green }
+
+RecoveryBand recoveryBandOf(int score) => score >= RecoveryModel.green
+    ? RecoveryBand.green
+    : score > RecoveryModel.red
+    ? RecoveryBand.yellow
+    : RecoveryBand.red;
+
 class RecoveryEstimate {
   const RecoveryEstimate({
     required this.score,
-    required this.sleepComponent,
-    required this.hrvComponent,
-    required this.restingHrComponent,
+    required this.hrvZ,
+    required this.restingHrZ,
+    required this.sleepZ,
+    required this.contextAdjustment,
     required this.hrvCurrent,
     required this.hrvAt,
     required this.hrvSampleCount,
@@ -86,14 +109,20 @@ class RecoveryEstimate {
     required this.restingHrBaseline,
     required this.hrvBaselineDays,
     required this.restingHrBaselineDays,
-    this.subjectiveComponent,
+    required this.sleepPercentOfNeed,
+    this.contextReasons = const [],
   });
 
   final int score;
-  final int sleepComponent;
-  final int hrvComponent;
-  final int restingHrComponent;
-  final int? subjectiveComponent;
+  final double hrvZ;
+
+  /// Positive = resting HR higher than usual (worse).
+  final double restingHrZ;
+  final double sleepZ;
+
+  /// Composite-z shift from check-in and respiratory/temperature signals.
+  final double contextAdjustment;
+  final List<String> contextReasons;
   final double hrvCurrent;
   final DateTime hrvAt;
   final int hrvSampleCount;
@@ -104,6 +133,25 @@ class RecoveryEstimate {
   final double restingHrBaseline;
   final int hrvBaselineDays;
   final int restingHrBaselineDays;
+  final int sleepPercentOfNeed;
+
+  RecoveryBand get band => recoveryBandOf(score);
+  bool get provisional =>
+      math.min(hrvBaselineDays, restingHrBaselineDays) <
+      recoveryFullBaselineNights;
+
+  /// Signed contribution of each signal to the composite, in z units.
+  double get hrvContribution =>
+      RecoveryModel.hrvWeight * hrvZ / RecoveryModel.compositeScale;
+  double get restingHrContribution =>
+      -RecoveryModel.restingHrWeight *
+      restingHrZ /
+      RecoveryModel.compositeScale;
+  double get sleepContribution =>
+      RecoveryModel.sleepWeight * sleepZ / RecoveryModel.compositeScale;
+
+  double get hrvChangePercent => (hrvCurrent / hrvBaseline - 1) * 100;
+  double get restingHrChange => restingHrCurrent - restingHrBaseline;
 }
 
 class RecoveryReadiness {
@@ -122,8 +170,16 @@ class RecoveryReadiness {
   final int restingHrCurrentSampleCount;
   final int hrvBaselineNights;
   final int restingHrBaselineNights;
+
+  /// Provisional baseline (< 10 nights) or a single current HRV reading.
   final bool limitedSamples;
   final RecoveryEstimate? estimate;
+
+  int get nightsUntilScore => math.max(
+    0,
+    recoveryMinimumBaselineNights -
+        math.min(hrvBaselineNights, restingHrBaselineNights),
+  );
 }
 
 class RecoveryHistoryPoint {
@@ -140,14 +196,15 @@ class RecoveryHistoryPoint {
   int? get sleepMinutes => session?.sleepMinutes;
 }
 
-/// Recalculates the same experimental estimate for each selected sleep date.
-/// Missing sessions or insufficient baseline signals remain gaps in history.
+/// Recalculates recovery for each recent wake date. Missing sessions or
+/// thin baselines remain gaps.
 List<RecoveryHistoryPoint> recoveryHistory({
   required List<TimedValue> hrvSamples,
   required List<TimedValue> restingHrSamples,
   required List<SleepWindow> sleepWindows,
   required DateTime now,
   int days = 14,
+  int sleepNeedMinutes = 480,
 }) {
   if (days <= 0) return const [];
   final today = _localDay(now);
@@ -176,6 +233,7 @@ List<RecoveryHistoryPoint> recoveryHistory({
       hrvSamples: hrvSamples,
       restingHrSamples: restingHrSamples,
       sleepMinutes: session.sleepMinutes,
+      sleepNeedMinutes: sleepNeedMinutes,
       sleepStart: session.start,
       sleepEnd: session.end,
       asleepIntervals: session.asleepIntervals,
@@ -189,7 +247,7 @@ List<RecoveryHistoryPoint> recoveryHistory({
   return points;
 }
 
-/// Estimates recovery from sleep-stage HRV and sleep-date resting-HR readings.
+/// Recovery from sleep-stage HRV, wake-date resting HR, and sleep vs need.
 RecoveryReadiness recoveryReadiness({
   required List<TimedValue> hrvSamples,
   required List<TimedValue> restingHrSamples,
@@ -198,15 +256,15 @@ RecoveryReadiness recoveryReadiness({
   required DateTime? sleepEnd,
   required List<AsleepInterval> asleepIntervals,
   required List<SleepWindow> sleepWindows,
+  int sleepNeedMinutes = 480,
   Set<String> checkInTags = const <String>{},
+  double? respiratoryDelta,
+  double? skinTempDelta,
   DateTime? now,
 }) {
   final reference = now ?? DateTime.now();
-  final sleepProgress = sleepDurationProgressPercent(
-    minutes: sleepMinutes ?? 0,
-  );
   final hasSleepSession =
-      sleepProgress != null && sleepStart != null && sleepEnd != null;
+      (sleepMinutes ?? 0) > 0 && sleepStart != null && sleepEnd != null;
   if (!hasSleepSession) {
     return const RecoveryReadiness(
       hasSleepSession: false,
@@ -238,95 +296,132 @@ RecoveryReadiness recoveryReadiness({
     minValue: 30,
     maxValue: 120,
   );
-  final hrvCurrentSampleCount = hrv.currentSampleCount;
-  final restingHrCurrentSampleCount = restingHr.currentSampleCount;
-  final hrvBaselineNights = hrv.baselineNights;
-  final restingHrBaselineNights = restingHr.baselineNights;
   final limitedSamples =
-      hrvCurrentSampleCount < 2 ||
-      restingHrCurrentSampleCount < 1 ||
-      hrvBaselineNights < recoveryBaselineWindowDays ||
-      restingHrBaselineNights < recoveryBaselineWindowDays;
+      hrv.currentSampleCount < 2 ||
+      restingHr.currentSampleCount < 1 ||
+      hrv.baselineNights < recoveryFullBaselineNights ||
+      restingHr.baselineNights < recoveryFullBaselineNights;
   final hrvCurrent = hrv.current;
   final restingHrCurrent = restingHr.current;
   if (hrvCurrent == null ||
       restingHrCurrent == null ||
-      hrvBaselineNights < recoveryMinimumBaselineNights ||
-      restingHrBaselineNights < recoveryMinimumBaselineNights) {
+      hrv.baselineNights < recoveryMinimumBaselineNights ||
+      restingHr.baselineNights < recoveryMinimumBaselineNights) {
     return RecoveryReadiness(
       hasSleepSession: true,
-      hrvCurrentSampleCount: hrvCurrentSampleCount,
-      restingHrCurrentSampleCount: restingHrCurrentSampleCount,
-      hrvBaselineNights: hrvBaselineNights,
-      restingHrBaselineNights: restingHrBaselineNights,
+      hrvCurrentSampleCount: hrv.currentSampleCount,
+      restingHrCurrentSampleCount: restingHr.currentSampleCount,
+      hrvBaselineNights: hrv.baselineNights,
+      restingHrBaselineNights: restingHr.baselineNights,
       limitedSamples: limitedSamples,
       estimate: null,
     );
   }
 
-  final hrvBaseline = _median(hrv.baseline.map(math.log).toList());
-  final hrvMad = _median(
-    hrv.baseline.map((value) => (math.log(value) - hrvBaseline).abs()).toList(),
-  );
-  final restingHrBaseline = _median(restingHr.baseline);
-  final restingHrMad = _median(
-    restingHr.baseline
-        .map((value) => (value - restingHrBaseline).abs())
-        .toList(),
-  );
+  final logBaseline = hrv.baseline.map(math.log).toList();
+  final hrvMedian = _median(logBaseline);
+  final hrvMad = _median([for (final v in logBaseline) (v - hrvMedian).abs()]);
+  final rhrMedian = _median(restingHr.baseline);
+  final rhrMad = _median([
+    for (final v in restingHr.baseline) (v - rhrMedian).abs(),
+  ]);
 
-  // MAD is robust to isolated noisy nights. Floors avoid a zero denominator
-  // when rounded device values repeat across several days.
+  // MAD is robust to isolated noisy nights; floors stop rounded, repeated
+  // device values from producing a zero denominator.
   final hrvZ = _clamp(
-    (math.log(hrvCurrent) - hrvBaseline) / math.max(0.10, 1.4826 * hrvMad),
-    -2,
-    2,
+    (math.log(hrvCurrent) - hrvMedian) / math.max(0.10, 1.4826 * hrvMad),
+    -3,
+    3,
   );
   final restingHrZ = _clamp(
-    (restingHrCurrent - restingHrBaseline) /
-        math.max(2.0, 1.4826 * restingHrMad),
-    -2,
-    2,
+    (restingHrCurrent - rhrMedian) / math.max(2.0, 1.4826 * rhrMad),
+    -3,
+    3,
   );
-  final hrvScore = (50 + hrvZ * 25).round().clamp(0, 100);
-  final restingHrScore = (50 - restingHrZ * 25).round().clamp(0, 100);
-  final sleepScore = _sleepReadinessScore(sleepMinutes ?? 0);
-  final subjectiveScore = _subjectiveReadinessScore(checkInTags);
-  final hasSubjective = subjectiveScore != null;
-  final score =
-      (hrvScore * (hasSubjective ? 0.45 : 0.50) +
-              restingHrScore * (hasSubjective ? 0.25 : 0.28) +
-              sleepScore * (hasSubjective ? 0.20 : 0.22) +
-              (subjectiveScore ?? 0) * (hasSubjective ? 0.10 : 0.0))
-          .round()
-          .clamp(0, 100);
+  final need = math.max(360, sleepNeedMinutes);
+  final sleepPercent = ((sleepMinutes ?? 0) / need * 100).round();
+  // 85 % of need is neutral; extra sleep helps a little and never hurts.
+  final sleepZ = _clamp((sleepPercent - 85) / 12, -3, 1.5);
 
-  final estimate = RecoveryEstimate(
-    score: score,
-    sleepComponent: sleepScore,
-    hrvComponent: hrvScore,
-    restingHrComponent: restingHrScore,
-    subjectiveComponent: subjectiveScore,
-    hrvCurrent: hrvCurrent,
-    hrvAt: hrv.at,
-    hrvSampleCount: hrv.currentSampleCount,
-    hrvBaseline: math.exp(hrvBaseline),
-    restingHrCurrent: restingHrCurrent,
-    restingHrAt: restingHr.at,
-    restingHrSampleCount: restingHr.currentSampleCount,
-    restingHrBaseline: restingHrBaseline,
-    hrvBaselineDays: hrv.baselineNights,
-    restingHrBaselineDays: restingHr.baselineNights,
-  );
+  var adjustment = 0.0;
+  final reasons = <String>[];
+  if (checkInTags.contains('unwell')) {
+    adjustment -= 0.8;
+    reasons.add('Feeling unwell');
+  } else if (checkInTags.contains('stressed') ||
+      checkInTags.contains('slept_badly')) {
+    adjustment -= 0.3;
+    reasons.add(
+      checkInTags.contains('stressed') ? 'Feeling stressed' : 'Slept badly',
+    );
+  } else if (checkInTags.contains('fresh')) {
+    adjustment += 0.2;
+    reasons.add('Feeling fresh');
+  }
+  if (respiratoryDelta != null && respiratoryDelta >= 1.0) {
+    adjustment -= 0.5;
+    reasons.add(
+      'Respiratory rate +${respiratoryDelta.toStringAsFixed(1)}/min vs baseline',
+    );
+  }
+  if (skinTempDelta != null && skinTempDelta >= 0.5) {
+    adjustment -= 0.5;
+    reasons.add(
+      'Skin temperature +${skinTempDelta.toStringAsFixed(1)} °C vs baseline',
+    );
+  }
+
+  final composite =
+      (RecoveryModel.hrvWeight * hrvZ -
+              RecoveryModel.restingHrWeight * restingHrZ +
+              RecoveryModel.sleepWeight * sleepZ) /
+          RecoveryModel.compositeScale +
+      adjustment;
+  final score =
+      (100 * _normalCdf(RecoveryModel.offset + RecoveryModel.slope * composite))
+          .round()
+          .clamp(1, 99);
+
   return RecoveryReadiness(
     hasSleepSession: true,
-    hrvCurrentSampleCount: hrvCurrentSampleCount,
-    restingHrCurrentSampleCount: restingHrCurrentSampleCount,
-    hrvBaselineNights: hrvBaselineNights,
-    restingHrBaselineNights: restingHrBaselineNights,
+    hrvCurrentSampleCount: hrv.currentSampleCount,
+    restingHrCurrentSampleCount: restingHr.currentSampleCount,
+    hrvBaselineNights: hrv.baselineNights,
+    restingHrBaselineNights: restingHr.baselineNights,
     limitedSamples: limitedSamples,
-    estimate: estimate,
+    estimate: RecoveryEstimate(
+      score: score,
+      hrvZ: hrvZ,
+      restingHrZ: restingHrZ,
+      sleepZ: sleepZ,
+      contextAdjustment: adjustment,
+      contextReasons: reasons,
+      hrvCurrent: hrvCurrent,
+      hrvAt: hrv.at,
+      hrvSampleCount: hrv.currentSampleCount,
+      hrvBaseline: math.exp(hrvMedian),
+      restingHrCurrent: restingHrCurrent,
+      restingHrAt: restingHr.at,
+      restingHrSampleCount: restingHr.currentSampleCount,
+      restingHrBaseline: rhrMedian,
+      hrvBaselineDays: hrv.baselineNights,
+      restingHrBaselineDays: restingHr.baselineNights,
+      sleepPercentOfNeed: sleepPercent.clamp(0, 150),
+    ),
   );
+}
+
+/// Abramowitz–Stegun 7.1.26 approximation of the standard normal CDF.
+double _normalCdf(double x) {
+  final t = 1 / (1 + 0.3275911 * x.abs() / math.sqrt2);
+  final poly =
+      t *
+      (0.254829592 +
+          t *
+              (-0.284496736 +
+                  t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  final erf = 1 - poly * math.exp(-(x * x) / 2);
+  return x >= 0 ? (1 + erf) / 2 : (1 - erf) / 2;
 }
 
 class _CurrentBaseline {
@@ -372,7 +467,6 @@ _CurrentBaseline _currentAndBaselineByAsleepStages(
   );
   final baseline = <double>[];
   for (final windows in windowsByDay.values) {
-    windows.sort((a, b) => b.sleepMinutes.compareTo(a.sleepMinutes));
     final window = windows.first;
     final values = _validSamples(
       samples,
@@ -479,25 +573,6 @@ List<TimedValue> _validSamples(
 DateTime _localDay(DateTime value) {
   final local = value.toLocal();
   return DateTime(local.year, local.month, local.day);
-}
-
-int _sleepReadinessScore(int minutes) {
-  if (minutes >= 420 && minutes <= 540) return 100;
-  if (minutes >= 390 && minutes < 420) return 85;
-  if (minutes > 540 && minutes <= 570) return 85;
-  if (minutes >= 360 && minutes < 390) return 70;
-  if (minutes > 570 && minutes <= 600) return 70;
-  if (minutes >= 300 && minutes < 360) return 50;
-  return 30;
-}
-
-int? _subjectiveReadinessScore(Set<String> tags) {
-  if (tags.isEmpty) return null;
-  if (tags.contains('unwell')) return 10;
-  if (tags.contains('stressed') || tags.contains('slept_badly')) return 35;
-  if (tags.contains('sore')) return 45;
-  if (tags.contains('fresh')) return 100;
-  return 60;
 }
 
 double _median(List<double> values) {

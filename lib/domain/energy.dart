@@ -1,0 +1,281 @@
+import 'dart:math' as math;
+
+import 'estimates.dart';
+import 'profile.dart';
+import 'strength.dart';
+
+/// A five-minute step bucket from Health Connect step records.
+class StepBucket {
+  const StepBucket({required this.start, required this.steps});
+
+  final DateTime start;
+  final int steps;
+}
+
+/// Steps in a 5-minute bucket below this are treated as incidental (arm
+/// swings, typing, fidgeting) unless heart rate confirms movement. Real
+/// walking runs at ~100 steps/min, so even one minute of it clears 120.
+const ambulatoryBucketSteps = 120;
+
+/// Mid-range buckets count only when bucket HR is this far above resting.
+const confirmedBucketSteps = 40;
+const confirmedBucketHrRise = 15.0;
+
+/// Net metabolic cost of level walking, kcal per kg per km (≈0.5; Margaria;
+/// van der Walt & Wyndham). Net = above resting, so it never double-counts RMR.
+const walkingNetKcalPerKgKm = 0.5;
+
+/// Sitting/standing awake costs ~1.15–1.3× resting; Becel adds 15 % of RMR
+/// for awake minutes with no measured movement.
+const awakeAllowance = 0.15;
+
+class DayEnergy {
+  const DayEnergy({
+    required this.date,
+    required this.restingKcal,
+    required this.heartKcal,
+    required this.stepKcal,
+    required this.strengthKcal,
+    required this.awakeKcal,
+    required this.countedSteps,
+    required this.filteredSteps,
+    required this.flexBpm,
+    required this.heartMinutes,
+    required this.minutesElapsed,
+    required this.complete,
+    required this.rmrMethod,
+  });
+
+  final DateTime date;
+  final double restingKcal;
+  final double heartKcal;
+  final double stepKcal;
+  final double strengthKcal;
+  final double awakeKcal;
+  final int countedSteps;
+  final int filteredSteps;
+  final int flexBpm;
+  final int heartMinutes;
+  final int minutesElapsed;
+  final bool complete;
+  final String rmrMethod;
+
+  double get activeKcal => heartKcal + stepKcal + strengthKcal + awakeKcal;
+  double get totalKcal => restingKcal + activeKcal;
+
+  /// Plain ± error budget: RMR equations ~8 %, HR-derived energy ~25 %,
+  /// step energy ~20 %, MET-based lifting ~25 %, awake allowance ~50 %.
+  double get uncertaintyKcal =>
+      0.08 * restingKcal +
+      0.25 * heartKcal +
+      0.20 * stepKcal +
+      0.25 * strengthKcal +
+      0.50 * awakeKcal;
+
+  /// Today only: remaining hours at resting + awake allowance.
+  double projectedTotalKcal(double rmrPerDay) {
+    if (complete) return totalKcal;
+    final remaining = math.max(0, 1440 - minutesElapsed);
+    return totalKcal + remaining * rmrPerDay / 1440 * (1 + awakeAllowance / 2);
+  }
+}
+
+double restingMetabolicRate(BodyProfile profile) {
+  final lean = profile.leanMassKg;
+  if (lean != null) return 370 + 21.6 * lean; // Katch–McArdle
+  final base =
+      10 * profile.weightKg! + 6.25 * profile.heightCm! - 5 * profile.age!;
+  return profile.sex == BiologicalSex.male
+      ? base + 5
+      : base - 161; // Mifflin–St Jeor
+}
+
+String rmrMethodLabel(BodyProfile profile) => profile.leanMassKg != null
+    ? 'Katch–McArdle (lean mass ${profile.leanMassKg!.toStringAsFixed(0)} kg)'
+    : 'Mifflin–St Jeor';
+
+/// The heart-rate point above which pulse tracks energy expenditure
+/// (FLEX-HR, Spurr et al. 1988). Below it, HR is driven by posture,
+/// caffeine, stress, and digestion, and HR equations overestimate.
+int flexHeartRate({required double restingBpm, required int maxBpm}) {
+  final reserve = math.max(20, maxBpm - restingBpm);
+  return math
+      .max(85, math.max(restingBpm + 25, restingBpm + 0.3 * reserve))
+      .round();
+}
+
+/// Keytel et al. (2005) gross energy, kcal/min, without VO₂max.
+double keytelKcalPerMinute(double bpm, BodyProfile profile) {
+  final w = profile.weightKg!;
+  final a = profile.age!.toDouble();
+  final kj = profile.sex == BiologicalSex.male
+      ? -55.0969 + 0.6309 * bpm + 0.1988 * w + 0.2017 * a
+      : -20.4022 + 0.4472 * bpm - 0.1263 * w + 0.074 * a;
+  return math.max(0, kj / 4.184);
+}
+
+/// Per-minute energy fusion for one local date.
+///
+/// Each awake minute takes exactly one active-energy source, in order:
+/// logged strength session (Compendium MET) → HR above FLEX (Keytel net of
+/// RMR) → ambulatory steps (net walking cost) → awake allowance. Sleeping
+/// minutes add nothing above RMR. No minute is counted twice.
+DayEnergy? estimateDayEnergy({
+  required BodyProfile profile,
+  required DateTime date,
+  required DateTime now,
+  required List<TimedValue> cleanedMinutes,
+  required List<StepBucket> stepBuckets,
+  required List<AsleepInterval> sleep,
+  required double restingBpm,
+  required int maxBpm,
+  Iterable<StrengthSession> strengthSessions = const [],
+}) {
+  if (!profile.hasEnergyInputs) return null;
+  final dayStart = DateTime(date.year, date.month, date.day);
+  final dayEnd = DateTime(date.year, date.month, date.day + 1);
+  final end = now.isBefore(dayEnd) ? now : dayEnd;
+  if (!end.isAfter(dayStart)) return null;
+  final minutes = end.difference(dayStart).inMinutes;
+  final rmr = restingMetabolicRate(profile);
+  final rmrPerMinute = rmr / 1440;
+  final flex = flexHeartRate(restingBpm: restingBpm, maxBpm: maxBpm);
+  final weight = profile.weightKg!;
+  final stride =
+      profile.heightCm! /
+      100 *
+      (profile.sex == BiologicalSex.male ? 0.415 : 0.413);
+
+  final startMinute = dayStart.millisecondsSinceEpoch ~/ 60000;
+  final hrByMinute = <int, double>{};
+  for (final sample in cleanedMinutes) {
+    final minute = sample.at.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    if (minute >= 0 && minute < minutes) hrByMinute[minute] = sample.value;
+  }
+
+  final asleep = List<bool>.filled(minutes, false);
+  for (final interval in sleep) {
+    final from = interval.start.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    final to = interval.end.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    for (var m = math.max(0, from); m < math.min(minutes, to); m++) {
+      asleep[m] = true;
+    }
+  }
+
+  final strengthMet = List<double>.filled(minutes, 0);
+  for (final session in strengthSessions) {
+    final from = session.start.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    for (
+      var m = math.max(0, from);
+      m < math.min(minutes, from + session.durationMinutes);
+      m++
+    ) {
+      strengthMet[m] = session.met;
+    }
+  }
+
+  // Step energy per minute, after the phantom-step filter.
+  final stepEnergy = List<double>.filled(minutes, 0);
+  var counted = 0;
+  var filtered = 0;
+  for (final bucket in stepBuckets) {
+    final from = bucket.start.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    if (from < 0 || from >= minutes || bucket.steps <= 0) continue;
+    final to = math.min(minutes, from + 5);
+    var hrSum = 0.0;
+    var hrCount = 0;
+    for (var m = from; m < to; m++) {
+      final hr = hrByMinute[m];
+      if (hr != null) {
+        hrSum += hr;
+        hrCount++;
+      }
+    }
+    final bucketHr = hrCount == 0 ? null : hrSum / hrCount;
+    final ambulatory =
+        bucket.steps >= ambulatoryBucketSteps ||
+        (bucket.steps >= confirmedBucketSteps &&
+            bucketHr != null &&
+            bucketHr >= restingBpm + confirmedBucketHrRise);
+    if (!ambulatory) {
+      filtered += bucket.steps;
+      continue;
+    }
+    counted += bucket.steps;
+    final kcal = bucket.steps * stride / 1000 * weight * walkingNetKcalPerKgKm;
+    for (var m = from; m < to; m++) {
+      stepEnergy[m] += kcal / (to - from);
+    }
+  }
+
+  var heart = 0.0, steps = 0.0, strength = 0.0, awake = 0.0;
+  var heartMinutes = 0;
+  final metKcalPerMinute = 3.5 * weight / 200;
+  for (var m = 0; m < minutes; m++) {
+    if (strengthMet[m] > 0) {
+      strength += (strengthMet[m] - 1) * metKcalPerMinute;
+      continue;
+    }
+    if (asleep[m]) continue;
+    final hr = hrByMinute[m];
+    if (hr != null && hr >= flex) {
+      heart += math.max(0, keytelKcalPerMinute(hr, profile) - rmrPerMinute);
+      heartMinutes++;
+      continue;
+    }
+    if (stepEnergy[m] > 0) {
+      steps += stepEnergy[m];
+      continue;
+    }
+    awake += awakeAllowance * rmrPerMinute;
+  }
+
+  return DayEnergy(
+    date: dayStart,
+    restingKcal: rmrPerMinute * minutes,
+    heartKcal: heart,
+    stepKcal: steps,
+    strengthKcal: strength,
+    awakeKcal: awake,
+    countedSteps: counted,
+    filteredSteps: filtered,
+    flexBpm: flex,
+    heartMinutes: heartMinutes,
+    minutesElapsed: minutes,
+    complete: !now.isBefore(dayEnd),
+    rmrMethod: rmrMethodLabel(profile),
+  );
+}
+
+class EnergyBalance {
+  const EnergyBalance({
+    required this.today,
+    required this.history,
+    required this.rmr,
+    this.deviceTotalToday,
+  });
+
+  final DayEnergy today;
+
+  /// Previous complete days with at least 12 h of HR coverage.
+  final List<DayEnergy> history;
+  final double rmr;
+  final int? deviceTotalToday;
+
+  double get projectedToday => today.projectedTotalKcal(rmr);
+
+  /// Average total expenditure on complete, well-covered days: a practical
+  /// maintenance-intake starting point.
+  double? get maintenanceKcal => history.length < 3
+      ? null
+      : history.fold<double>(0, (s, d) => s + d.totalKcal) / history.length;
+
+  /// Device total minus Becel so far; positive means the device is higher.
+  double? get deviceDelta =>
+      deviceTotalToday == null ? null : deviceTotalToday! - today.totalKcal;
+}
+
+DateTime localDay(DateTime value) {
+  final local = value.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}

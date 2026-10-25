@@ -31,7 +31,7 @@ class ShellScreen extends StatelessWidget {
             NavigationDestination(
               icon: Icon(Icons.bolt_outlined),
               selectedIcon: Icon(Icons.bolt_rounded),
-              label: 'Activity',
+              label: 'Training',
             ),
             NavigationDestination(
               icon: Icon(Icons.bedtime_outlined),
@@ -39,9 +39,9 @@ class ShellScreen extends StatelessWidget {
               label: 'Sleep',
             ),
             NavigationDestination(
-              icon: Icon(Icons.calendar_month_outlined),
-              selectedIcon: Icon(Icons.calendar_month_rounded),
-              label: 'History',
+              icon: Icon(Icons.insights_outlined),
+              selectedIcon: Icon(Icons.insights_rounded),
+              label: 'Trends',
             ),
             NavigationDestination(
               icon: Icon(Icons.tune_outlined),

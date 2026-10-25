@@ -353,7 +353,7 @@ class MainActivity : FlutterFragmentActivity() {
             records.addAll(response.records.filter { isFitbitAirRecord(it.metadata) })
             pageToken = response.pageToken
             pages++
-        } while (!pageToken.isNullOrEmpty() && pages < 20)
+        } while (!pageToken.isNullOrEmpty() && pages < 100)
         return records
     }
 
@@ -371,6 +371,8 @@ class MainActivity : FlutterFragmentActivity() {
         val zone = ZoneId.systemDefault()
         val todayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant()
         val weekStart = LocalDate.now(zone).minusDays(6).atStartOfDay(zone).toInstant()
+        val loadStart = LocalDate.now(zone).minusDays(LOAD_WINDOW_DAYS - 1).atStartOfDay(zone).toInstant()
+        val allSamples = mutableListOf<Pair<Instant, Long>>()
         val trainingSamples = mutableListOf<Pair<Instant, Long>>()
         var activityRestingHrSamples = emptyList<Pair<Instant, Double>>()
         val data = mutableMapOf<String, Any?>(
@@ -379,6 +381,8 @@ class MainActivity : FlutterFragmentActivity() {
             "checkedAt" to now.toString(),
             "series" to emptyList<List<Long>>(),
             "weeklySeries" to emptyList<List<Long>>(),
+            "minuteSeries" to emptyList<List<Long>>(),
+            "stepBuckets" to emptyList<List<Long>>(),
             "restingHrSamples" to emptyList<List<Any>>(),
             "hrvSamples" to emptyList<List<Any>>(),
             "activityEstimate" to null,
@@ -397,7 +401,7 @@ class MainActivity : FlutterFragmentActivity() {
             do {
                 val response = client.readRecords(
                     ReadRecordsRequest<HeartRateRecord>(
-                        timeRangeFilter = TimeRangeFilter.between(weekStart.minusSeconds(120), now),
+                        timeRangeFilter = TimeRangeFilter.between(loadStart.minusSeconds(120), now),
                         pageSize = 1000,
                         pageToken = pageToken,
                         dataOriginFilter = AIR_SOURCE_ORIGINS,
@@ -407,12 +411,28 @@ class MainActivity : FlutterFragmentActivity() {
                     .filter { isFitbitAirRecord(it.metadata) }
                     .forEach { record ->
                         record.samples.forEach { sample ->
-                            trainingSamples.add(sample.time to sample.beatsPerMinute)
+                            allSamples.add(sample.time to sample.beatsPerMinute)
+                            if (sample.time >= weekStart.minusSeconds(120)) {
+                                trainingSamples.add(sample.time to sample.beatsPerMinute)
+                            }
                         }
                     }
                 pageToken = response.pageToken
                 pages++
-            } while (!pageToken.isNullOrEmpty() && pages < 40)
+            } while (!pageToken.isNullOrEmpty() && pages < 400)
+
+            // One-minute medians keep interval peaks that 5-minute means
+            // flatten, while staying small enough for the method channel.
+            val minuteBuckets = sortedMapOf<Long, MutableList<Long>>()
+            allSamples.forEach { (time, bpm) ->
+                if (bpm in 30L..240L) {
+                    minuteBuckets.getOrPut(time.toEpochMilli() / 60_000L) { mutableListOf() }.add(bpm)
+                }
+            }
+            data["minuteSeries"] = minuteBuckets.map { (minute, values) ->
+                values.sort()
+                listOf(minute * 60_000L, values[values.size / 2])
+            }
 
             val today = trainingSamples.filter { it.first >= todayStart }.sortedBy { it.first }
             if (today.isNotEmpty()) {
@@ -481,6 +501,30 @@ class MainActivity : FlutterFragmentActivity() {
                     listOf(record.time.toEpochMilli(), record.heartRateVariabilityMillis)
                 }
             }
+        }
+
+        if (HealthPermission.getReadPermission(StepsRecord::class) in granted) {
+            // Spread each step record evenly across the 5-minute buckets it
+            // overlaps so Flutter can separate walking from incidental steps.
+            val buckets = sortedMapOf<Long, Double>()
+            readAirRecords<StepsRecord>(client, loadStart, now).forEach { record ->
+                val start = record.startTime.toEpochMilli()
+                val end = maxOf(record.endTime.toEpochMilli(), start + 1)
+                val span = (end - start).toDouble()
+                var cursor = start
+                while (cursor < end) {
+                    val bucket = cursor / STEP_BUCKET_MILLIS
+                    val bucketEnd = minOf(end, (bucket + 1) * STEP_BUCKET_MILLIS)
+                    buckets[bucket] = (buckets[bucket] ?: 0.0) +
+                        record.count * (bucketEnd - cursor) / span
+                    cursor = bucketEnd
+                }
+            }
+            data["stepBuckets"] = buckets
+                .filterValues { it >= 0.5 }
+                .map { (bucket, steps) ->
+                    listOf(bucket * STEP_BUCKET_MILLIS, Math.round(steps))
+                }
         }
 
         data["activityEstimate"] = ActivityEstimator.estimate(
@@ -613,6 +657,7 @@ class MainActivity : FlutterFragmentActivity() {
                 var light = 0L
                 var deep = 0L
                 var rem = 0L
+                var unstaged = 0L
                 val asleepIntervals = mutableListOf<List<Long>>()
                 record.stages.forEach { stage ->
                     val minutes = Duration.between(stage.startTime, stage.endTime)
@@ -639,14 +684,29 @@ class MainActivity : FlutterFragmentActivity() {
                                 listOf(stage.startTime.toEpochMilli(), stage.endTime.toEpochMilli()),
                             )
                         }
+                        // Unstaged "sleeping" time is still sleep.
+                        SleepSessionRecord.STAGE_TYPE_SLEEPING -> {
+                            unstaged += minutes
+                            asleepIntervals.add(
+                                listOf(stage.startTime.toEpochMilli(), stage.endTime.toEpochMilli()),
+                            )
+                        }
                         else -> Unit
                     }
+                }
+                if (record.stages.isEmpty()) {
+                    // A session with no stages at all is one unstaged block.
+                    unstaged = Duration.between(record.startTime, record.endTime).toMinutes()
+                    asleepIntervals.add(
+                        listOf(record.startTime.toEpochMilli(), record.endTime.toEpochMilli()),
+                    )
                 }
                 sessions.add(
                     mapOf(
                         "start" to record.startTime.toString(),
                         "end" to record.endTime.toString(),
-                        "minutes" to light + deep + rem,
+                        "minutes" to light + deep + rem + unstaged,
+                        "unstagedMinutes" to unstaged,
                         "asleepIntervals" to asleepIntervals,
                         "awakeMinutes" to awake,
                         "lightMinutes" to light,
@@ -853,13 +913,18 @@ class MainActivity : FlutterFragmentActivity() {
         if (HealthPermission.getReadPermission(RespiratoryRateRecord::class) in granted) {
             val records = readAirRecords<RespiratoryRateRecord>(
                 client,
-                now.minus(Duration.ofDays(7)),
+                now.minus(Duration.ofDays(28)),
                 now,
             )
-            val latest = records.maxByOrNull { it.time }
+            val ordered = records.sortedBy { it.time }
+            val latest = ordered.lastOrNull()
             if (latest != null) {
                 data["respiratoryRate"] = latest.rate
-                data["respiratoryBaseline"] = records.map { it.rate }.average()
+                // Baseline excludes the latest night so a rise is visible.
+                val prior = ordered.dropLast(1)
+                if (prior.size >= 3) {
+                    data["respiratoryBaseline"] = prior.map { it.rate }.sorted()[prior.size / 2]
+                }
             }
         }
 
@@ -976,6 +1041,8 @@ class MainActivity : FlutterFragmentActivity() {
         private const val FITNESS_AGE_KEY = "age"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
         private const val HEART_BUCKET_MILLIS = 5L * 60L * 1000L
+        private const val STEP_BUCKET_MILLIS = 5L * 60L * 1000L
+        private const val LOAD_WINDOW_DAYS = 28L
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
         private const val FITBIT_APP_PACKAGE = "com.fitbit.FitbitMobile"
         private val AIR_SOURCE_PACKAGES = setOf(

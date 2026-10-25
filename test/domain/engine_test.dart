@@ -1,0 +1,335 @@
+import 'package:becel/data/health_connect_service.dart';
+import 'package:becel/domain/coaching.dart';
+import 'package:becel/domain/energy.dart';
+import 'package:becel/domain/estimates.dart';
+import 'package:becel/domain/heart_signal.dart';
+import 'package:becel/domain/profile.dart';
+import 'package:becel/domain/sleep_coach.dart';
+import 'package:becel/domain/strain.dart';
+import 'package:becel/domain/strength.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const athlete = BodyProfile(
+  age: 34,
+  sex: BiologicalSex.male,
+  heightCm: 180,
+  weightKg: 82,
+);
+
+List<TimedValue> minutes(DateTime start, int count, double Function(int) bpm) =>
+    [
+      for (var i = 0; i < count; i++)
+        TimedValue(
+          at: start.add(Duration(minutes: i)),
+          value: bpm(i),
+        ),
+    ];
+
+void main() {
+  group('heart signal', () {
+    test(
+      'Hampel filter removes an isolated 40 bpm spike but keeps intervals',
+      () {
+        final start = DateTime(2026, 10, 25, 9);
+        final samples = minutes(start, 30, (i) => i == 10 ? 150 : 110);
+        final cleaned = cleanHeartRate(samples);
+        expect(cleaned.corrected, 1);
+        expect(cleaned.samples[10].value, 110);
+
+        final intervals = minutes(
+          start,
+          30,
+          (i) => i >= 10 && i < 20 ? 165 : 110,
+        );
+        expect(cleanHeartRate(intervals).corrected, 0);
+      },
+    );
+
+    test('observed sustained max replaces a low age prediction, capped', () {
+      final start = DateTime(2026, 10, 25, 18);
+      final hard = minutes(start, 10, (i) => i >= 4 && i <= 7 ? 191 : 150);
+      final max = personalMaxHeartRate(age: 34, cleanedMinutes: hard)!;
+      expect(max.predictedBpm, 184);
+      expect(max.source, MaxHrSource.observed);
+      expect(max.bpm, 191);
+
+      final tested = personalMaxHeartRate(age: 34, tested: 196)!;
+      expect(tested.source, MaxHrSource.tested);
+      expect(tested.bpm, 196);
+    });
+
+    test('Karvonen zones use heart-rate reserve', () {
+      const zones = HeartZones(restingBpm: 52, maxBpm: 184);
+      expect(zones.bpmAt(0.5), 118);
+      expect(zones.zoneOf(150), 2);
+      expect(zones.zoneOf(100), -1);
+    });
+  });
+
+  group('strain', () {
+    test('maps TRIMP onto a logarithmic 0–21 scale', () {
+      expect(strainFromTrimp(0), 0);
+      expect(strainFromTrimp(100), closeTo(14.0, 0.2));
+      expect(strainFromTrimp(250), closeTo(19.7, 0.2));
+      expect(strainFromTrimp(10000), lessThanOrEqualTo(21));
+      expect(strainFromTrimp(400), lessThan(21));
+      expect(strainFromTrimp(trimpForStrain(12)), closeTo(12, 0.01));
+    });
+
+    test('ambient heart rate below 30% HRR adds no load', () {
+      expect(banisterTrimpPerMinute(0.2, BiologicalSex.male), 0);
+      expect(
+        banisterTrimpPerMinute(0.7, BiologicalSex.male),
+        closeTo(1.72, 0.02),
+      );
+      expect(
+        banisterTrimpPerMinute(0.7, BiologicalSex.female),
+        closeTo(1.94, 0.02),
+      );
+    });
+
+    test('an hour of steady running reads as a hard day', () {
+      final now = DateTime(2026, 10, 25, 20);
+      final run = minutes(DateTime(2026, 10, 25, 18), 60, (_) => 145);
+      final days = dailyStrain(
+        cleanedMinutes: run,
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+      );
+      expect(days.single.strain, inInclusiveRange(12, 16));
+    });
+
+    test('logged lifting adds the load heart rate missed', () {
+      final now = DateTime(2026, 10, 25, 20);
+      final lift = StrengthSession(
+        id: 'a',
+        start: DateTime(2026, 10, 25, 8),
+        durationMinutes: 60,
+        sessionRpe: 8,
+      );
+      final easyHr = minutes(lift.start, 60, (_) => 95);
+      final days = dailyStrain(
+        cleanedMinutes: easyHr,
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+        strengthSessions: [lift],
+      );
+      expect(days.single.strengthTrimp, greaterThan(60));
+      expect(days.single.trimp, closeTo(96, 1));
+    });
+
+    test('ACWR flags a load spike after a quiet month', () {
+      final base = DateTime(2026, 10, 1);
+      final days = [
+        for (var i = 0; i < 28; i++)
+          DayStrain(
+            date: base.add(Duration(days: i)),
+            cardioTrimp: i < 21 ? 40 : 160,
+            strengthTrimp: 0,
+            coverageMinutes: 900,
+            zoneMinutes: List.filled(5, 0),
+            peakBpm: 160,
+          ),
+      ];
+      final load = trainingLoad(days);
+      expect(load.status, LoadStatus.spike);
+      expect(load.acwr, greaterThan(1.5));
+      final target = strainTarget(recovery: 80, load: load);
+      expect(target.high, lessThan(18));
+    });
+  });
+
+  group('energy', () {
+    test('sitting at 75 bpm earns no heart-rate calories (FLEX-HR)', () {
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 12);
+      final sitting = minutes(DateTime(2026, 10, 25, 8), 240, (_) => 75);
+      final day = estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: now,
+        cleanedMinutes: sitting,
+        stepBuckets: const [],
+        sleep: [AsleepInterval(start: date, end: DateTime(2026, 10, 25, 7))],
+        restingBpm: 52,
+        maxBpm: 184,
+      )!;
+      expect(day.flexBpm, 92);
+      expect(day.heartKcal, 0);
+      // Resting 12 h ≈ 905 kcal, plus a small awake allowance.
+      expect(day.totalKcal, lessThan(1000));
+    });
+
+    test('phantom desk steps are filtered; real walking counts', () {
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 12);
+      final buckets = [
+        for (var i = 0; i < 24; i++)
+          StepBucket(
+            start: DateTime(2026, 10, 25, 9).add(Duration(minutes: i * 5)),
+            steps: 35,
+          ),
+        StepBucket(start: DateTime(2026, 10, 25, 11), steps: 520),
+      ];
+      final day = estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: now,
+        cleanedMinutes: minutes(DateTime(2026, 10, 25, 8), 240, (_) => 70),
+        stepBuckets: buckets,
+        sleep: const [],
+        restingBpm: 52,
+        maxBpm: 184,
+      )!;
+      expect(day.filteredSteps, 840);
+      expect(day.countedSteps, 520);
+      expect(day.stepKcal, closeTo(520 * 0.747 / 1000 * 82 * 0.5, 0.5));
+    });
+
+    test('logged lifting uses Compendium METs instead of inflated HR', () {
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 12);
+      final lift = StrengthSession(
+        id: 'a',
+        start: DateTime(2026, 10, 25, 8),
+        durationMinutes: 60,
+        sessionRpe: 8,
+      );
+      final day = estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: now,
+        cleanedMinutes: minutes(lift.start, 60, (_) => 135),
+        stepBuckets: const [],
+        sleep: const [],
+        restingBpm: 52,
+        maxBpm: 184,
+        strengthSessions: [lift],
+      )!;
+      // (6 − 1) MET × 3.5 × 82 / 200 × 60 ≈ 430 kcal, not ~700 from Keytel.
+      expect(day.strengthKcal, closeTo(430.5, 1));
+      expect(day.heartKcal, 0);
+    });
+
+    test('Katch–McArdle is used when body fat is known', () {
+      const lean = BodyProfile(
+        age: 34,
+        sex: BiologicalSex.male,
+        heightCm: 180,
+        weightKg: 82,
+        bodyFatPercent: 12,
+      );
+      expect(restingMetabolicRate(athlete), closeTo(1780, 1));
+      expect(restingMetabolicRate(lean), closeTo(370 + 21.6 * 72.16, 1));
+    });
+  });
+
+  group('sleep coach', () {
+    SleepNight night(DateTime start, DateTime end) => SleepNight(
+      start: start,
+      end: end,
+      minutes: end.difference(start).inMinutes,
+      awakeMinutes: 0,
+      lightMinutes: end.difference(start).inMinutes,
+      deepMinutes: 0,
+      remMinutes: 0,
+      asleepIntervals: [AsleepInterval(start: start, end: end)],
+    );
+
+    test('trims onset logged while heart rate was still awake', () {
+      final start = DateTime(2026, 10, 24, 23);
+      final end = DateTime(2026, 10, 25, 7);
+      final hr = minutes(start, 480, (i) => i < 60 ? 72 : 52);
+      final adjusted = adjustOnset(night(start, end), cleanedMinutes: hr);
+      expect(adjusted.onsetSource, OnsetSource.heartRate);
+      expect(adjusted.trimmedMinutes, inInclusiveRange(55, 65));
+    });
+
+    test('a user-entered onset wins', () {
+      final start = DateTime(2026, 10, 24, 23);
+      final end = DateTime(2026, 10, 25, 7);
+      final adjusted = adjustOnset(
+        night(start, end),
+        cleanedMinutes: const [],
+        userOnset: DateTime(2026, 10, 25, 0, 30),
+      );
+      expect(adjusted.onsetSource, OnsetSource.user);
+      expect(adjusted.asleepMinutes, 390);
+    });
+
+    test('need grows with strain and short nights', () {
+      final now = DateTime(2026, 10, 25, 12);
+      final sessions = [
+        for (var d = 3; d >= 0; d--)
+          night(
+            DateTime(2026, 10, 24 - d, 23),
+            DateTime(2026, 10, 25 - d, d < 3 ? 5 : 7),
+          ),
+      ];
+      final coach = buildSleepCoach(
+        sessions: sessions,
+        cleanedMinutes: const [],
+        now: now,
+        yesterdayStrain: 18,
+      );
+      expect(coach.baselineNeed, 480);
+      expect(coach.strainNeed, 33);
+      expect(coach.debtNeed, 60);
+      expect(coach.performancePercent, lessThan(80));
+      expect(coach.recommendedBedtime, isNotNull);
+    });
+  });
+
+  group('coaching', () {
+    test('body alert needs more than one signal', () {
+      expect(detectBodyAlert(recovery: null, respiratoryDelta: 1.2), isNull);
+      expect(
+        detectBodyAlert(
+          recovery: null,
+          respiratoryDelta: 1.2,
+          skinTempDelta: 0.6,
+        ),
+        isNull,
+      );
+    });
+
+    test('estimated 1RM uses reps in reserve and refuses high reps', () {
+      expect(estimateOneRepMax(loadKg: 100, reps: 5), closeTo(116.7, 0.1));
+      expect(
+        estimateOneRepMax(loadKg: 100, reps: 5, rpe: 8),
+        closeTo(123.3, 0.1),
+      );
+      expect(estimateOneRepMax(loadKg: 60, reps: 15), isNull);
+    });
+
+    test('fractional sets credit synergists at half a set', () {
+      final now = DateTime(2026, 10, 25, 12);
+      final session = StrengthSession(
+        id: 'b',
+        start: DateTime(2026, 10, 24, 8),
+        durationMinutes: 60,
+        sessionRpe: 8,
+        exercises: const [
+          ExerciseEntry(
+            exerciseId: 'bench_press',
+            sets: [
+              StrengthSet(reps: 5, loadKg: 100, rpe: 8),
+              StrengthSet(reps: 5, loadKg: 100, rpe: 8),
+              StrengthSet(reps: 8, loadKg: 60, rpe: 4),
+            ],
+          ),
+        ],
+      );
+      final volume = weeklyMuscleVolume([session], now: now);
+      double sets(Muscle m) => volume.firstWhere((v) => v.muscle == m).sets;
+      expect(sets(Muscle.chest), 2);
+      expect(sets(Muscle.triceps), 1);
+    });
+  });
+}

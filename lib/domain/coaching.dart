@@ -1,645 +1,445 @@
 import 'dart:math' as math;
 
-import '../data/health_connect_service.dart';
+import 'energy.dart';
 import 'estimates.dart';
+import 'sleep_coach.dart';
+import 'strain.dart';
+import 'strength.dart';
 
-/// A personal range for the experimental recovery index.
+/// Several physiological signals moving the wrong way at once.
 ///
-/// The range comes from prior scored mornings only. It is deliberately shown
-/// as a range instead of a percentage so a single morning is not read as
-/// "percent recovered" or as training clearance.
-class RecoveryContext {
-  const RecoveryContext({
-    required this.current,
-    required this.low,
-    required this.high,
-    required this.median,
-    required this.morningsScored,
-    required this.provisional,
-    required this.band,
-    required this.label,
-    required this.detail,
-  });
+/// One signal off is noise; RHR up with HRV down, or with a respiratory or
+/// skin-temperature rise, is a common pattern before illness, after heavy
+/// alcohol, in heat, or with accumulated fatigue. Becel names the signals,
+/// not a cause.
+class BodyAlert {
+  const BodyAlert({required this.signals});
 
-  const RecoveryContext.calibrating(this.detail)
-    : current = null,
-      low = null,
-      high = null,
-      median = null,
-      morningsScored = 0,
-      provisional = true,
-      band = RecoveryBand.unknown,
-      label = 'Calibrating';
+  final List<String> signals;
 
-  final int? current;
-  final int? low;
-  final int? high;
-  final double? median;
-  final int morningsScored;
-  final bool provisional;
-  final RecoveryBand band;
-  final String label;
-  final String detail;
-
-  bool get hasRange => low != null && high != null;
+  String get title => 'Your body is under extra strain';
+  String get detail =>
+      '${signals.join(' · ')}. Common causes: oncoming illness, alcohol, '
+      'heat, travel, or accumulated fatigue. Keep today easy and recheck '
+      'tomorrow.';
 }
 
-enum RecoveryBand { unknown, below, within, above }
+BodyAlert? detectBodyAlert({
+  required RecoveryEstimate? recovery,
+  double? respiratoryDelta,
+  double? skinTempDelta,
+}) {
+  final signals = <String>[];
+  var rhrUp = false;
+  if (recovery != null) {
+    if (recovery.restingHrChange >= 5 || recovery.restingHrZ >= 2) {
+      rhrUp = true;
+      signals.add('Resting HR +${recovery.restingHrChange.round()} bpm');
+    }
+    if (recovery.hrvZ <= -1.5) {
+      signals.add('HRV ${recovery.hrvChangePercent.round()}% vs baseline');
+    }
+  }
+  if (respiratoryDelta != null && respiratoryDelta >= 1.0) {
+    signals.add('Breathing +${respiratoryDelta.toStringAsFixed(1)}/min');
+  }
+  if (skinTempDelta != null && skinTempDelta >= 0.5) {
+    signals.add('Skin temp +${skinTempDelta.toStringAsFixed(1)} °C');
+  }
+  final triggered = (rhrUp && signals.length >= 2) || signals.length >= 3;
+  return triggered ? BodyAlert(signals: signals) : null;
+}
 
-/// Builds the usual range from prior scored mornings.
-///
-/// [history] is expected to include the current date. The current date is
-/// excluded from the baseline so today cannot widen its own comparison band.
-RecoveryContext buildRecoveryContext({
-  required int? currentScore,
-  required List<RecoveryHistoryPoint> history,
+enum PlanTone { push, train, recover, rest }
+
+class DailyPlan {
+  const DailyPlan({
+    required this.tone,
+    required this.headline,
+    required this.session,
+    required this.target,
+    required this.notes,
+  });
+
+  final PlanTone tone;
+  final String headline;
+
+  /// What to do in the gym or on the road today, in one sentence.
+  final String session;
+  final StrainTarget target;
+
+  /// At most three short, specific notes. No filler.
+  final List<String> notes;
+}
+
+DailyPlan buildDailyPlan({
+  required RecoveryEstimate? recovery,
+  required TrainingLoad? load,
+  required SleepCoach sleep,
+  required BodyAlert? alert,
+  required Set<String> checkInTags,
+  required List<MuscleVolume> muscleVolume,
+  required bool logsStrength,
   required DateTime now,
 }) {
-  final today = _localDay(now);
-  final priorScores = <int>[];
-  for (final point in history) {
-    if (!point.date.isBefore(today)) continue;
-    final score = point.readiness?.estimate?.score;
-    if (score != null) priorScores.add(score);
-  }
-  final morningsScored = priorScores.length + (currentScore == null ? 0 : 1);
+  final score = recovery?.score;
+  var target = strainTarget(recovery: score, load: load);
+  final notes = <String>[];
 
-  if (priorScores.length < 3 || currentScore == null) {
-    if (currentScore == null) {
-      return RecoveryContext.calibrating(
-        priorScores.isEmpty
-            ? 'No scored mornings yet'
-            : '${priorScores.length} prior morning'
-                  '${priorScores.length == 1 ? '' : 's'} scored',
+  PlanTone tone;
+  String headline;
+  String session;
+  if (alert != null || checkInTags.contains('unwell')) {
+    tone = PlanTone.rest;
+    headline = 'Back off today';
+    session = 'Walk, mobility, or full rest. Skip intervals and top sets.';
+    target = const StrainTarget(
+      low: 0,
+      high: 8,
+      label: 'Rest',
+      reason: 'Multiple signals suggest your body is fighting something.',
+    );
+  } else if (score == null) {
+    tone = PlanTone.train;
+    headline = 'Train by feel';
+    session =
+        'Recovery is calibrating. Keep hard work to RPE 7–8 until it is ready.';
+  } else if (score >= RecoveryModel.green) {
+    tone = PlanTone.push;
+    headline = 'Green light: go hard';
+    session =
+        'Good day for intervals, a tempo run, or heavy compound lifts near '
+        'RPE 8–9.';
+  } else if (score > RecoveryModel.red) {
+    tone = PlanTone.train;
+    headline = 'Train, but control intensity';
+    session =
+        'Z2 cardio or technique-focused lifting at RPE ≤ 7. Save max efforts.';
+  } else {
+    tone = PlanTone.recover;
+    headline = 'Recovery day';
+    session = 'Z1 walk, easy spin, or mobility. Protect tonight’s sleep.';
+  }
+
+  if (load != null && load.status == LoadStatus.spike) {
+    notes.add(
+      'Load spike: this week is ${((load.acwr! - 1) * 100).round()}% above '
+      'your 4-week base.',
+    );
+  } else if (load?.monotony != null && load!.monotony! > 2) {
+    notes.add(
+      'Training is monotonous (${load.monotony!.toStringAsFixed(1)}). Make '
+      'hard days harder and easy days easier.',
+    );
+  }
+
+  final bedtime = sleep.recommendedBedtime;
+  if (bedtime != null) {
+    final debt = sleep.debtNeed > 0 ? ' incl. ${sleep.debtNeed} min debt' : '';
+    notes.add(
+      'Bed by ${_clock(bedtime)} for ${_duration(sleep.needTonight)} of '
+      'sleep$debt.',
+    );
+  }
+
+  if (logsStrength && tone != PlanTone.rest) {
+    final trained = muscleVolume.where((m) => m.sets > 0).toList();
+    final lagging = [
+      for (final muscle in muscleVolume)
+        if (muscle.muscle != Muscle.core && muscle.sets < 10) muscle,
+    ]..sort((a, b) => a.sets.compareTo(b.sets));
+    if (trained.isNotEmpty && lagging.isNotEmpty) {
+      final names = lagging.take(2).map((m) => m.muscle.label).join(' and ');
+      notes.add(
+        '$names under 10 hard sets this week. Prioritise them next session.',
       );
     }
-    final low = priorScores.isEmpty
-        ? math.max(0, currentScore - 10)
-        : priorScores.reduce(math.min);
-    final high = priorScores.isEmpty
-        ? math.min(100, currentScore + 10)
-        : priorScores.reduce(math.max);
-    return RecoveryContext(
-      current: currentScore,
-      low: low,
-      high: high,
-      median: priorScores.isEmpty
-          ? currentScore.toDouble()
-          : _median(priorScores),
-      morningsScored: morningsScored,
-      provisional: true,
-      band: RecoveryBand.unknown,
-      label: 'Building your usual range',
-      detail: priorScores.length < 3
-          ? '${priorScores.length}/3 prior mornings needed'
-          : 'Provisional range',
-    );
   }
 
-  final sorted = [...priorScores]..sort();
-  final median = _median(sorted);
-  final mad = _median(sorted.map((value) => (value - median).abs()).toList());
-  var low = (median - math.max(6, 1.4826 * mad)).round().clamp(0, 100);
-  var high = (median + math.max(6, 1.4826 * mad)).round().clamp(0, 100);
-  if (high - low < 10) {
-    low = (low - 5).clamp(0, 100);
-    high = (high + 5).clamp(0, 100);
-  }
-
-  final band = currentScore < low
-      ? RecoveryBand.below
-      : currentScore > high
-      ? RecoveryBand.above
-      : RecoveryBand.within;
-  final label = switch (band) {
-    RecoveryBand.below => 'Below your usual range',
-    RecoveryBand.above => 'Above your usual range',
-    RecoveryBand.within => 'Within your usual range',
-    RecoveryBand.unknown => 'Building your usual range',
-  };
-  final provisional = morningsScored < 7;
-
-  return RecoveryContext(
-    current: currentScore,
-    low: low,
-    high: high,
-    median: median,
-    morningsScored: morningsScored,
-    provisional: provisional,
-    band: band,
-    label: label,
-    detail:
-        'Usual $low–$high · $morningsScored morning'
-        '${morningsScored == 1 ? '' : 's'} scored',
+  return DailyPlan(
+    tone: tone,
+    headline: headline,
+    session: session,
+    target: target,
+    notes: notes.take(3).toList(),
   );
 }
 
-/// Sleep duration and timing summary over a rolling window.
-class SleepTrend {
-  const SleepTrend({
-    required this.nights,
-    required this.averageMinutes,
-    required this.averageInBedMinutes,
-    required this.averageBedtimeMinutes,
-    required this.bedtimeSpreadMinutes,
-    required this.previousAverageMinutes,
-  });
+/// What Becel would change next week, chosen from the weakest link.
+class WeeklyFocus {
+  const WeeklyFocus({required this.title, required this.body});
 
-  const SleepTrend.empty()
-    : nights = 0,
-      averageMinutes = null,
-      averageInBedMinutes = null,
-      averageBedtimeMinutes = null,
-      bedtimeSpreadMinutes = null,
-      previousAverageMinutes = null;
-
-  final int nights;
-  final int? averageMinutes;
-  final int? averageInBedMinutes;
-  final int? averageBedtimeMinutes;
-  final int? bedtimeSpreadMinutes;
-  final int? previousAverageMinutes;
-
-  bool get hasData => nights > 0 && averageMinutes != null;
-
-  int? get sleepDeltaMinutes {
-    final current = averageMinutes;
-    final previous = previousAverageMinutes;
-    if (current == null || previous == null) return null;
-    return current - previous;
-  }
-
-  bool get isShort => averageMinutes != null && averageMinutes! < 420;
-  bool get isWithinAdultRange =>
-      averageMinutes != null &&
-      averageMinutes! >= 420 &&
-      averageMinutes! <= 540;
-  bool get isLong => averageMinutes != null && averageMinutes! > 540;
-}
-
-/// Builds a seven-night sleep summary plus the previous week's average.
-///
-/// Only sessions of at least three hours count, so naps do not distort the
-/// weekly average or bedtime spread. The previous-week average is used only
-/// for a descriptive delta; it is never graded.
-SleepTrend buildSleepTrend(
-  List<SleepNight> sessions, {
-  DateTime? now,
-  int windowDays = 7,
-}) {
-  final reference = (now ?? DateTime.now()).toLocal();
-  final currentStart = reference.subtract(Duration(days: windowDays));
-  final previousStart = reference.subtract(Duration(days: windowDays * 2));
-
-  final current = <SleepNight>[];
-  final previous = <SleepNight>[];
-  for (final session in sessions) {
-    if (session.minutes < 180) continue;
-    final end = session.end.toLocal();
-    if (end.isAfter(reference)) continue;
-    if (!end.isBefore(currentStart)) {
-      current.add(session);
-    } else if (!end.isBefore(previousStart)) {
-      previous.add(session);
-    }
-  }
-  if (current.isEmpty) {
-    return SleepTrend(
-      nights: 0,
-      averageMinutes: null,
-      averageInBedMinutes: null,
-      averageBedtimeMinutes: null,
-      bedtimeSpreadMinutes: null,
-      previousAverageMinutes: previous.isEmpty
-          ? null
-          : _average(previous.map((night) => night.minutes)),
-    );
-  }
-
-  current.sort((a, b) => a.end.compareTo(b.end));
-  final bedtimes = current.map((night) => _bedtimeMinute(night.start)).toList();
-  final spread = bedtimes.length < 2
-      ? null
-      : (bedtimes.reduce(math.max) - bedtimes.reduce(math.min)).round();
-
-  return SleepTrend(
-    nights: current.length,
-    averageMinutes: _average(current.map((night) => night.minutes)),
-    averageInBedMinutes: _average(
-      current.map((night) => _minutesBetween(night.start, night.end)),
-    ),
-    averageBedtimeMinutes: _average(bedtimes)?.round(),
-    bedtimeSpreadMinutes: spread,
-    previousAverageMinutes: previous.isEmpty
-        ? null
-        : _average(previous.map((night) => night.minutes)),
-  );
-}
-
-/// A single, rules-based action for the week. No model or cloud service is
-/// involved, and every recommendation explains the evidence behind it.
-class FocusRecommendation {
-  const FocusRecommendation({
-    required this.kind,
-    required this.title,
-    required this.body,
-    required this.why,
-    required this.actionLabel,
-  });
-
-  final FocusKind kind;
   final String title;
   final String body;
-  final String why;
-  final String actionLabel;
 }
 
-enum FocusKind {
-  sleepDuration,
-  strength,
-  sleepRegularity,
-  aerobic,
-  maintain,
-  recover,
-}
-
-FocusRecommendation buildFocusRecommendation({
-  required SleepTrend sleep,
-  required int strengthDays,
-  required ActivityEstimate? activity,
-  int aerobicTarget = activityAerobicReferenceMinutes,
-  Set<String> checkInTags = const <String>{},
-}) {
-  final averageSleep = sleep.averageMinutes;
-  final aerobic = activity?.displayedEquivalentMinutes;
-
-  if (checkInTags.contains('unwell')) {
-    return const FocusRecommendation(
-      kind: FocusKind.recover,
-      title: 'Make today lighter',
-      body:
-          'You logged feeling unwell. Keep movement easy and protect your '
-          'sleep window today. This is not a diagnosis.',
-      why:
-          'How you feel is context Becel cannot measure. If symptoms are '
-          'severe, worsening, or persistent, seek medical advice instead of '
-          'training through them.',
-      actionLabel: 'Open sleep',
-    );
-  }
-
-  if (averageSleep != null && averageSleep < 360) {
-    return FocusRecommendation(
-      kind: FocusKind.sleepDuration,
-      title: 'Protect your sleep window',
-      body:
-          'You averaged ${_duration(averageSleep)} asleep over '
-          '${sleep.nights} night${sleep.nights == 1 ? '' : 's'}. '
-          'Try lights out 20 minutes earlier on three nights this week.',
-      why:
-          'Adults are advised to sleep at least seven hours regularly '
-          '(AASM/Sleep Research Society). Seven hours is a population floor, '
-          'not a personal target, and one short night is normal.',
-      actionLabel: 'Open sleep',
-    );
-  }
-
-  if (strengthDays < 2) {
-    return FocusRecommendation(
-      kind: FocusKind.strength,
-      title: 'Two strength sessions this week',
-      body:
-          'You are at $strengthDays of 2 strength days. Two 20-minute '
-          'sessions count — bodyweight, bands, or weights.',
-      why:
-          'Adult guidance pairs 150 aerobic minutes with muscle-strengthening '
-          'on at least two days each week. Becel’s heart-rate activity '
-          'estimate does not track strength work.',
-      actionLabel: 'Log strength',
-    );
-  }
-
-  if (sleep.bedtimeSpreadMinutes != null && sleep.bedtimeSpreadMinutes! > 90) {
-    return FocusRecommendation(
-      kind: FocusKind.sleepRegularity,
-      title: 'Steady your bedtime',
-      body:
-          'Your bedtime varied by ${_duration(sleep.bedtimeSpreadMinutes!)} '
-          'this week. Pick a 15-minute window for the next three nights.',
-      why:
-          'Regular sleep timing is a behaviour you can control. Becel shows '
-          'stage data for context but does not grade sleep stages.',
-      actionLabel: 'Open sleep',
-    );
-  }
-
-  if (aerobic != null && aerobic < aerobicTarget) {
-    final remaining = aerobicTarget - aerobic;
-    final walks = math.max(1, (remaining / 25).ceil());
-    return FocusRecommendation(
-      kind: FocusKind.aerobic,
-      title: walks == 1 ? 'Add one 25-minute walk' : 'Add two 25-minute walks',
-      body:
-          'You are at $aerobic of $aerobicTarget estimated aerobic minutes. '
-          '$walks brisk 25-minute walk${walks == 1 ? '' : 's'} would close '
-          'the observed gap.',
-      why:
-          '150 minutes is the adult aerobic guideline floor. The estimate '
-          'uses heart rate only, so it can miss strength work, cycling, or '
-          'any activity with an atypical heart response.',
-      actionLabel: 'Open activity',
-    );
-  }
-
-  if (averageSleep != null && averageSleep < 420) {
-    return FocusRecommendation(
-      kind: FocusKind.sleepDuration,
-      title: 'Nudge sleep toward seven hours',
-      body:
-          'You averaged ${_duration(averageSleep)} asleep. A 20-minute '
-          'earlier wind-down on three nights is enough to test the change.',
-      why:
-          'The adult reference is at least seven hours regularly. More than '
-          'nine hours is not penalised, and one night is not a verdict.',
-      actionLabel: 'Open sleep',
-    );
-  }
-
-  return const FocusRecommendation(
-    kind: FocusKind.maintain,
-    title: 'Repeat a week that worked',
-    body:
-        'Sleep, aerobic activity, and strength are all on track. Keep the '
-        'same pattern and review again next week.',
-    why:
-        'Becel recommends one focus at a time. Maintaining a pattern you '
-        'already manage is more useful than adding another target.',
-    actionLabel: 'Review the week',
-  );
-}
-
-/// Counts distinct local dates with a strength session in the rolling window.
-///
-/// A date counts once even when both a synced workout and a manual log exist.
-int strengthDaysInWindow({
-  required Iterable<StrengthCandidate> workouts,
-  required Iterable<DateTime> loggedDays,
-  required DateTime now,
-  int days = 7,
-}) {
-  final reference = now.toLocal();
-  final start = reference.subtract(Duration(days: days));
-  final dates = <String>{};
-  for (final workout in workouts) {
-    if (!isStrengthType(workout.type)) continue;
-    final at = workout.at.toLocal();
-    if (at.isBefore(start) || at.isAfter(reference)) continue;
-    dates.add(_dateKey(at));
-  }
-  for (final day in loggedDays) {
-    final local = day.toLocal();
-    if (local.isBefore(start) || local.isAfter(reference)) continue;
-    dates.add(_dateKey(local));
-  }
-  return dates.length;
-}
-
-class StrengthCandidate {
-  const StrengthCandidate({required this.at, required this.type});
-
-  final DateTime at;
-  final String type;
-}
-
-bool isStrengthType(String type) {
-  final value = type.toLowerCase();
-  return value.contains('strength') ||
-      value.contains('weight') ||
-      value.contains('resistance') ||
-      value.contains('circuit') ||
-      value.contains('crossfit') ||
-      value.contains('powerlifting') ||
-      value.contains('calisthenics') ||
-      value.contains('bodyweight');
-}
-
-/// Descriptive weekly review used by Today, History, and the share sheet.
 class WeeklyReview {
   const WeeklyReview({
-    required this.sleep,
-    required this.strengthDays,
-    required this.aerobicMinutes,
-    required this.aerobicPotentialMinutes,
-    required this.recoveryMornings,
-    required this.stepsTotal,
+    required this.start,
+    required this.end,
+    required this.averageRecovery,
+    required this.recoveryDays,
+    required this.strainByDay,
+    required this.load,
+    required this.averageSleep,
+    required this.sleepConsistency,
+    required this.sleepDebt,
+    required this.strengthSessions,
+    required this.hardSets,
+    required this.adjustedSteps,
+    required this.filteredSteps,
+    required this.averageKcal,
     required this.focus,
   });
 
-  final SleepTrend sleep;
-  final int strengthDays;
-  final int? aerobicMinutes;
-  final int? aerobicPotentialMinutes;
-  final int recoveryMornings;
-  final int? stepsTotal;
-  final FocusRecommendation focus;
+  final DateTime start;
+  final DateTime end;
+  final int? averageRecovery;
+  final int recoveryDays;
+  final List<DayStrain> strainByDay;
+  final TrainingLoad? load;
+  final int? averageSleep;
+  final int? sleepConsistency;
+  final int sleepDebt;
+  final int strengthSessions;
+  final int hardSets;
+  final int? adjustedSteps;
+  final int? filteredSteps;
+  final int? averageKcal;
+  final WeeklyFocus focus;
+
+  double get averageStrain => strainByDay.isEmpty
+      ? 0
+      : strainByDay.fold<double>(0, (s, d) => s + d.strain) /
+            strainByDay.length;
 }
 
 WeeklyReview buildWeeklyReview({
-  required List<SleepNight> sleepSessions,
-  required Iterable<StrengthCandidate> workouts,
-  required Iterable<DateTime> loggedStrengthDays,
-  required ActivityEstimate? activity,
   required List<RecoveryHistoryPoint> recoveryHistory,
-  required List<int?> steps,
-  Set<String> checkInTags = const <String>{},
-  DateTime? now,
+  required List<DayStrain> strainDays,
+  required TrainingLoad? load,
+  required SleepCoach sleep,
+  required List<StrengthSession> strengthSessions,
+  required List<DayEnergy> energyDays,
+  required DateTime now,
 }) {
-  final reference = now ?? DateTime.now();
-  final sleep = buildSleepTrend(sleepSessions, now: reference);
-  final strengthDays = strengthDaysInWindow(
-    workouts: workouts,
-    loggedDays: loggedStrengthDays,
-    now: reference,
-  );
-  final recoveryMornings = recoveryHistory
-      .where((point) => point.readiness?.estimate != null)
-      .length;
-  final stepsValues = steps.whereType<int>().toList();
-  final focus = buildFocusRecommendation(
+  final end = DateTime(now.year, now.month, now.day);
+  final start = end.subtract(const Duration(days: 6));
+  final scores = [
+    for (final point in recoveryHistory)
+      if (!point.date.isBefore(start) && point.readiness?.estimate != null)
+        point.readiness!.estimate!.score,
+  ];
+  final week = [
+    for (final day in strainDays)
+      if (!day.date.isBefore(start)) day,
+  ];
+  final sessions = [
+    for (final session in strengthSessions)
+      if (!session.start.isBefore(start)) session,
+  ];
+  final weekEnergy = [
+    for (final day in energyDays)
+      if (!day.date.isBefore(start)) day,
+  ];
+  final counted = weekEnergy.fold<int>(0, (s, d) => s + d.countedSteps);
+  final filtered = weekEnergy.fold<int>(0, (s, d) => s + d.filteredSteps);
+  final complete = weekEnergy.where((d) => d.complete).toList();
+
+  final averageRecovery = scores.isEmpty
+      ? null
+      : (scores.reduce((a, b) => a + b) / scores.length).round();
+  final focus = _weeklyFocus(
+    averageRecovery: averageRecovery,
+    load: load,
     sleep: sleep,
-    strengthDays: strengthDays,
-    activity: activity,
-    checkInTags: checkInTags,
+    sessions: sessions,
   );
+
   return WeeklyReview(
-    sleep: sleep,
-    strengthDays: strengthDays,
-    aerobicMinutes: activity?.displayedEquivalentMinutes,
-    aerobicPotentialMinutes: activity?.potentialEquivalentMinutes,
-    recoveryMornings: recoveryMornings,
-    stepsTotal: stepsValues.isEmpty
+    start: start,
+    end: end,
+    averageRecovery: averageRecovery,
+    recoveryDays: scores.length,
+    strainByDay: week,
+    load: load,
+    averageSleep: sleep.averageAsleep,
+    sleepConsistency: sleep.consistencyPercent,
+    sleepDebt: sleep.debtMinutes,
+    strengthSessions: sessions.length,
+    hardSets: sessions.fold(0, (s, x) => s + x.hardSets),
+    adjustedSteps: weekEnergy.isEmpty ? null : counted,
+    filteredSteps: weekEnergy.isEmpty ? null : filtered,
+    averageKcal: complete.isEmpty
         ? null
-        : stepsValues.fold<int>(0, (sum, value) => sum + value),
+        : (complete.fold<double>(0, (s, d) => s + d.totalKcal) /
+                  complete.length)
+              .round(),
     focus: focus,
   );
 }
 
-/// Plain-language weekly summary that can be shared without a server.
-String weeklySummaryText({
-  required WeeklyReview review,
-  required DateTime now,
+WeeklyFocus _weeklyFocus({
+  required int? averageRecovery,
+  required TrainingLoad? load,
+  required SleepCoach sleep,
+  required List<StrengthSession> sessions,
 }) {
-  final end = now.toLocal();
-  final start = end.subtract(const Duration(days: 6));
-  final buffer = StringBuffer()
-    ..writeln('Becel weekly summary · ${_shortDate(start)}–${_shortDate(end)}')
-    ..writeln(
-      'Generated on device from Fitbit Air-matched Health Connect records.',
+  final status = load?.status;
+  if (status == LoadStatus.spike || status == LoadStatus.overreaching) {
+    return const WeeklyFocus(
+      title: 'Absorb the load',
+      body:
+          'Acute load is well above your 4-week base. Keep volume, drop '
+          'intensity on two sessions, and let recovery catch up.',
     );
-  if (review.sleep.averageMinutes != null) {
-    final delta = review.sleep.sleepDeltaMinutes;
-    buffer.writeln(
-      'Sleep: ${_duration(review.sleep.averageMinutes!)} average over '
-      '${review.sleep.nights} nights'
-      '${delta == null ? '' : ' (${delta >= 0 ? '+' : '−'}${_duration(delta.abs())} vs prior week)'}.',
-    );
-  } else {
-    buffer.writeln('Sleep: no qualifying sessions this week.');
   }
-  if (review.aerobicMinutes != null) {
-    buffer.writeln(
-      'Aerobic: ${review.aerobicMinutes} of $activityAerobicReferenceMinutes '
-      'estimated moderate-equivalent minutes'
-      '${review.aerobicPotentialMinutes == null ? '' : ' (up to ${review.aerobicPotentialMinutes} with fuller wear)'}.',
+  final average = sleep.averageAsleep;
+  if (average != null && average < sleep.baselineNeed - 45) {
+    return WeeklyFocus(
+      title: 'Close the sleep gap',
+      body:
+          'You averaged ${_duration(average)} against a ${_duration(sleep.baselineNeed)} '
+          'need. Sleep is the cheapest performance gain: move bedtime 30 min '
+          'earlier on training nights.',
     );
-  } else {
-    buffer.writeln('Aerobic: estimate unavailable this week.');
+  }
+  if (sleep.midpointSdMinutes != null && sleep.midpointSdMinutes! > 45) {
+    return WeeklyFocus(
+      title: 'Anchor your sleep timing',
+      body:
+          'Your sleep midpoint moved ±${sleep.midpointSdMinutes} min. Irregular '
+          'timing blunts HRV recovery even when total sleep is fine. Fix wake '
+          'time first.',
+    );
+  }
+  if (averageRecovery != null && averageRecovery < 45) {
+    return const WeeklyFocus(
+      title: 'Recovery is lagging',
+      body:
+          'Average recovery stayed yellow-to-red. Swap one hard session for Z2 '
+          'and keep alcohol and late meals away from training nights.',
+    );
+  }
+  if (status == LoadStatus.detraining) {
+    return const WeeklyFocus(
+      title: 'Room to build',
+      body:
+          'Load is under your recent base and recovery is holding. Add one '
+          'session or 10–15% volume.',
+    );
+  }
+  if (sessions.isEmpty) {
+    return const WeeklyFocus(
+      title: 'Log your lifts',
+      body:
+          'Heart rate under-reads strength work. Logging sets and session RPE '
+          'adds muscular load to strain and tracks your estimated 1RMs.',
+    );
+  }
+  return const WeeklyFocus(
+    title: 'Hold the line',
+    body:
+        'Load, sleep, and recovery are balanced. Repeat the week and progress '
+        'your main lifts by one rep or 2.5 kg.',
+  );
+}
+
+/// Plain-language weekly summary that can be shared without a server.
+String weeklySummaryText(WeeklyReview review) {
+  final buffer = StringBuffer()
+    ..writeln(
+      'Becel week · ${_shortDate(review.start)}–${_shortDate(review.end)}',
+    )
+    ..writeln(
+      'Recovery: ${review.averageRecovery == null ? '—' : '${review.averageRecovery}% avg'} '
+      '(${review.recoveryDays} days)',
+    )
+    ..writeln(
+      'Strain: ${review.averageStrain.toStringAsFixed(1)} avg/day · load '
+      '${review.load?.status.label ?? '—'}'
+      '${review.load?.acwr == null ? '' : ' (ACWR ${review.load!.acwr!.toStringAsFixed(2)})'}',
+    )
+    ..writeln(
+      'Sleep: ${review.averageSleep == null ? '—' : _duration(review.averageSleep!)} avg'
+      '${review.sleepConsistency == null ? '' : ' · ${review.sleepConsistency}% consistent'}',
+    )
+    ..writeln(
+      'Strength: ${review.strengthSessions} sessions · ${review.hardSets} hard sets',
+    );
+  if (review.averageKcal != null) {
+    buffer.writeln('Energy: ~${review.averageKcal} kcal/day (Becel estimate)');
   }
   buffer
-    ..writeln('Strength: ${review.strengthDays} of 2 days.')
-    ..writeln(
-      'Recovery: ${review.recoveryMornings} mornings scored (experimental personal index).',
-    )
     ..writeln()
-    ..writeln('One focus: ${review.focus.title}. ${review.focus.body}')
-    ..writeln()
-    ..writeln('Wellness context only. Not a diagnosis or training clearance.');
+    ..writeln('Focus: ${review.focus.title}. ${review.focus.body}');
   return buffer.toString();
 }
 
-/// CSV export of the values Becel displays, with provenance columns.
-String weeklyCsv({required WeeklyReview review, required DateTime now}) {
+/// CSV of the week's daily values with provenance columns.
+String weeklyCsv({
+  required WeeklyReview review,
+  required List<RecoveryHistoryPoint> recoveryHistory,
+  required List<DayEnergy> energyDays,
+  required DateTime now,
+}) {
   final rows = <List<String>>[
-    ['metric', 'value', 'unit', 'window', 'source', 'note'],
     [
-      'sleep_average',
-      review.sleep.averageMinutes?.toString() ?? '',
-      'minutes_asleep',
-      'last_7_local_days',
-      'Health Connect / Fitbit Air',
-      'Sessions of at least 3 hours only',
+      'date',
+      'recovery_pct',
+      'strain_0_21',
+      'trimp',
+      'strength_trimp',
+      'hr_coverage_min',
+      'sleep_asleep_min',
+      'kcal_total_becel',
+      'steps_counted',
+      'steps_filtered',
     ],
-    [
-      'sleep_in_bed_average',
-      review.sleep.averageInBedMinutes?.toString() ?? '',
-      'minutes_in_bed',
-      'last_7_local_days',
-      'Health Connect / Fitbit Air',
-      'End minus start of selected sessions',
-    ],
-    [
-      'sleep_bedtime_spread',
-      review.sleep.bedtimeSpreadMinutes?.toString() ?? '',
-      'minutes',
-      'last_7_local_days',
-      'Becel calculation',
-      'Largest minus earliest recorded bedtime',
-    ],
-    [
-      'aerobic_observed',
-      review.aerobicMinutes?.toString() ?? '',
-      'moderate_equivalent_minutes',
-      'last_7_local_days',
-      'Becel heart-rate estimate',
-      'Lower bound; missing wear can undercount',
-    ],
-    [
-      'aerobic_potential',
-      review.aerobicPotentialMinutes?.toString() ?? '',
-      'moderate_equivalent_minutes',
-      'last_7_local_days',
-      'Becel heart-rate estimate',
-      'If unmeasured days matched covered days',
-    ],
-    [
-      'strength_days',
-      review.strengthDays.toString(),
-      'days',
-      'last_7_local_days',
-      'Health Connect workouts + user log',
-      'Manual logs stored on device',
-    ],
-    [
-      'recovery_mornings_scored',
-      review.recoveryMornings.toString(),
-      'mornings',
-      'last_14_local_days',
-      'Becel experimental index',
-      'Personal trend, not a readiness score',
-    ],
-    [
-      'steps_total',
-      review.stepsTotal?.toString() ?? '',
-      'steps',
-      'last_7_local_days',
-      'Health Connect / Fitbit Air',
-      'Fitbit Air-matched records only',
-    ],
-    ['exported_at', now.toIso8601String(), 'ISO 8601', '', 'Becel', ''],
   ];
+  for (final day in review.strainByDay) {
+    final key = _dateKey(day.date);
+    RecoveryHistoryPoint? point;
+    for (final p in recoveryHistory) {
+      if (_dateKey(p.date) == key) point = p;
+    }
+    DayEnergy? energy;
+    for (final e in energyDays) {
+      if (_dateKey(e.date) == key) energy = e;
+    }
+    rows.add([
+      key,
+      point?.readiness?.estimate?.score.toString() ?? '',
+      day.hasData ? day.strain.toStringAsFixed(1) : '',
+      day.trimp.toStringAsFixed(1),
+      day.strengthTrimp.toStringAsFixed(1),
+      day.coverageMinutes.round().toString(),
+      point?.sleepMinutes?.toString() ?? '',
+      energy?.totalKcal.round().toString() ?? '',
+      energy?.countedSteps.toString() ?? '',
+      energy?.filteredSteps.toString() ?? '',
+    ]);
+  }
+  rows.add([
+    '# exported ${now.toIso8601String()} · source: Fitbit Air via Health Connect; values computed on device by Becel',
+  ]);
   return rows.map(_csvRow).join('\n');
 }
 
 String _csvRow(List<String> values) =>
     values.map((value) => '"${value.replaceAll('"', '""')}"').join(',');
 
-int? _average(Iterable<int> values) {
-  var total = 0;
-  var count = 0;
-  for (final value in values) {
-    total += value;
-    count++;
-  }
-  return count == 0 ? null : (total / count).round();
-}
-
-int _minutesBetween(DateTime start, DateTime end) =>
-    end.difference(start).inMinutes;
-
-int _bedtimeMinute(DateTime time) {
-  final local = time.toLocal();
-  final minute = local.hour * 60 + local.minute;
-  return local.hour < 12 ? minute + 24 * 60 : minute;
-}
-
-double _median(List<num> values) {
-  if (values.isEmpty) return 0;
-  final sorted = [...values]..sort();
-  final middle = sorted.length ~/ 2;
-  if (sorted.length.isOdd) return sorted[middle].toDouble();
-  return (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-DateTime _localDay(DateTime value) {
-  final local = value.toLocal();
-  return DateTime(local.year, local.month, local.day);
-}
-
 String _dateKey(DateTime value) {
   final local = value.toLocal();
   return '${local.year.toString().padLeft(4, '0')}-'
       '${local.month.toString().padLeft(2, '0')}-'
       '${local.day.toString().padLeft(2, '0')}';
+}
+
+String _clock(DateTime time) {
+  final local = time.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
 }
 
 String _duration(int minutes) {
@@ -668,3 +468,5 @@ String _shortDate(DateTime time) {
   final local = time.toLocal();
   return '${local.day} ${months[local.month - 1]}';
 }
+
+int maxInt(int a, int b) => math.max(a, b);

@@ -203,13 +203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _shareWeek(HealthSnapshot snapshot) async {
     setState(() => _busy = true);
-    final checkIn = _local.log.checkInFor(DateTime.now());
-    final review = snapshot.weeklyReview(
-      loggedStrengthDays: _local.log.strengthDates,
-      checkInTags: checkIn?.tags ?? const <String>{},
-    );
     final shared = await _local.shareText(
-      weeklySummaryText(review: review, now: snapshot.loadedAt),
+      weeklySummaryText(snapshot.performance.weekly),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -226,13 +221,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _exportWeek(HealthSnapshot snapshot) async {
     setState(() => _busy = true);
-    final checkIn = _local.log.checkInFor(DateTime.now());
-    final review = snapshot.weeklyReview(
-      loggedStrengthDays: _local.log.strengthDates,
-      checkInTags: checkIn?.tags ?? const <String>{},
-    );
+    final p = snapshot.performance;
     final path = await _local.exportCsv(
-      weeklyCsv(review: review, now: snapshot.loadedAt),
+      weeklyCsv(
+        review: p.weekly,
+        recoveryHistory: p.recoveryHistory,
+        energyDays: p.energyDays,
+        now: p.now,
+      ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -255,8 +251,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : 'Age $age · add sex, height, and weight';
     }
     final sex = profile.sex == BiologicalSex.female ? 'Female' : 'Male';
+    final extras = [
+      if (profile.hasValidBodyFat) '${profile.bodyFatPercent!.round()}% BF',
+      if (profile.maxHrOverride != null) 'max ${profile.maxHrOverride}',
+    ];
     return 'Age ${profile.age} · $sex · ${profile.heightCm!.round()} cm · '
-        '${profile.weightKg!.round()} kg';
+        '${profile.weightKg!.round()} kg'
+        '${extras.isEmpty ? '' : ' · ${extras.join(' · ')}'}';
   }
 
   Future<void> _editProfile(BodyProfile? current, int? nativeAge) async {
@@ -268,6 +269,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     final weightController = TextEditingController(
       text: current?.weightKg?.round().toString() ?? '',
+    );
+    final bodyFatController = TextEditingController(
+      text: current?.bodyFatPercent?.round().toString() ?? '',
+    );
+    final maxHrController = TextEditingController(
+      text: current?.maxHrOverride?.toString() ?? '',
+    );
+    final sleepNeedController = TextEditingController(
+      text: current?.sleepNeedMinutes == null
+          ? ''
+          : (current!.sleepNeedMinutes! / 60).toStringAsFixed(1),
     );
     var sex = current?.sex;
     var invalid = false;
@@ -343,6 +355,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       suffixText: 'kg',
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'OPTIONAL · MORE ACCURATE',
+                    style: AppType.eyebrow,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: bodyFatController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Body fat',
+                      suffixText: '%',
+                      helperText: 'Uses lean mass for resting calories',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: maxHrController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Tested max heart rate',
+                      suffixText: 'bpm',
+                      helperText: 'From a field or lab test; sets your zones',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: sleepNeedController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Baseline sleep need',
+                      suffixText: 'h',
+                      helperText: 'Default 8 h',
+                    ),
+                  ),
                   if (invalid) ...[
                     const SizedBox(height: 10),
                     const Text(
@@ -364,11 +422,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final age = int.tryParse(ageController.text);
                   final height = double.tryParse(heightController.text);
                   final weight = double.tryParse(weightController.text);
+                  final bodyFat = double.tryParse(bodyFatController.text);
+                  final maxHr = int.tryParse(maxHrController.text);
+                  final sleepHours = double.tryParse(sleepNeedController.text);
                   final profile = BodyProfile(
                     age: age,
                     sex: sex,
                     heightCm: height,
                     weightKg: weight,
+                    bodyFatPercent:
+                        bodyFat != null && bodyFat >= 3 && bodyFat <= 60
+                        ? bodyFat
+                        : null,
+                    maxHrOverride: maxHr != null && maxHr >= 120 && maxHr <= 230
+                        ? maxHr
+                        : null,
+                    sleepNeedMinutes:
+                        sleepHours != null &&
+                            sleepHours >= 6 &&
+                            sleepHours <= 10
+                        ? (sleepHours * 60).round()
+                        : null,
                   );
                   if (!profile.hasEnergyInputs) {
                     updateDialog(() => invalid = true);
@@ -386,6 +460,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ageController.dispose();
     heightController.dispose();
     weightController.dispose();
+    bodyFatController.dispose();
+    maxHrController.dispose();
+    sleepNeedController.dispose();
     if (selected == null || !mounted) return;
     final savedProfile = await _local.saveProfile(selected);
     final savedAge = await HealthConnectService.instance.saveFitnessAge(

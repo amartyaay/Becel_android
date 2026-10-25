@@ -4,12 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/profile.dart';
+import '../domain/strength.dart';
 
 /// Labels for the optional morning check-in.
 const checkInTagLabels = <String, String>{
   'fresh': 'Fresh',
   'normal': 'Normal',
-  'sore': 'Sore',
+  'sore': 'Sore (DOMS)',
   'stressed': 'Stressed',
   'slept_badly': 'Slept badly',
   'unwell': 'Unwell',
@@ -52,13 +53,21 @@ class LocalLog {
   const LocalLog({
     this.checkIns = const [],
     this.strengthDays = const {},
+    this.strengthSessions = const [],
+    this.onsetOverrides = const {},
     this.profile,
   });
 
   static const empty = LocalLog();
 
   final List<CheckIn> checkIns;
+
+  /// Legacy one-tap strength days (no session detail).
   final Set<String> strengthDays;
+  final List<StrengthSession> strengthSessions;
+
+  /// User-corrected sleep onset per wake date (yyyy-mm-dd).
+  final Map<String, DateTime> onsetOverrides;
   final BodyProfile? profile;
 
   CheckIn? checkInFor(DateTime day) {
@@ -83,16 +92,33 @@ class LocalLog {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
+  /// Every date with strength work: legacy days plus logged sessions.
   List<DateTime> get strengthDates => [
     for (final value in strengthDays)
       if (DateTime.tryParse(value) != null) DateTime.parse(value),
+    for (final session in strengthSessions) session.start,
   ];
+
+  LocalLog copyWith({
+    List<CheckIn>? checkIns,
+    Set<String>? strengthDays,
+    List<StrengthSession>? strengthSessions,
+    Map<String, DateTime>? onsetOverrides,
+    BodyProfile? profile,
+  }) => LocalLog(
+    checkIns: checkIns ?? this.checkIns,
+    strengthDays: strengthDays ?? this.strengthDays,
+    strengthSessions: strengthSessions ?? this.strengthSessions,
+    onsetOverrides: onsetOverrides ?? this.onsetOverrides,
+    profile: profile ?? this.profile,
+  );
 }
 
 /// Small local-only store for user-entered context.
 ///
 /// Health records stay in Health Connect. Becel stores only what the user
-/// typed: morning check-ins and manual strength days. Nothing is uploaded.
+/// typed: check-ins, strength sessions, sleep-onset corrections, and the
+/// body profile. Nothing is uploaded.
 class LocalStore extends ChangeNotifier {
   LocalStore._();
 
@@ -118,6 +144,14 @@ class LocalStore extends ChangeNotifier {
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) {
+          final overrides = <String, DateTime>{};
+          final rawOverrides = decoded['onsetOverrides'];
+          if (rawOverrides is Map) {
+            for (final entry in rawOverrides.entries) {
+              final at = DateTime.tryParse('${entry.value}');
+              if (at != null) overrides['${entry.key}'] = at;
+            }
+          }
           _log = LocalLog(
             checkIns: (decoded['checkIns'] as List? ?? const [])
                 .whereType<Map>()
@@ -128,6 +162,17 @@ class LocalStore extends ChangeNotifier {
             strengthDays: (decoded['strengthDays'] as List? ?? const [])
                 .whereType<String>()
                 .toSet(),
+            strengthSessions:
+                (decoded['strengthSessions'] as List? ?? const [])
+                    .whereType<Map>()
+                    .map(
+                      (entry) => StrengthSession.fromJson(
+                        Map<String, dynamic>.from(entry),
+                      ),
+                    )
+                    .toList()
+                  ..sort((a, b) => a.start.compareTo(b.start)),
+            onsetOverrides: overrides,
             profile: decoded['profile'] is Map
                 ? BodyProfile.fromJson(
                     Map<String, dynamic>.from(decoded['profile'] as Map),
@@ -164,37 +209,54 @@ class LocalStore extends ChangeNotifier {
         if (checkIn.date != key) checkIn,
       entry,
     ]..sort((a, b) => a.date.compareTo(b.date));
-    _log = LocalLog(
-      checkIns: updated,
-      strengthDays: _log.strengthDays,
-      profile: _log.profile,
-    );
-    notifyListeners();
-    return _persist();
+    return _commit(_log.copyWith(checkIns: updated));
   }
 
   Future<bool> addStrengthDay(DateTime day) async {
     await ensureLoaded();
     final key = localDateKey(day);
     if (_log.strengthDays.contains(key)) return true;
-    _log = LocalLog(
-      checkIns: _log.checkIns,
-      strengthDays: {..._log.strengthDays, key},
-      profile: _log.profile,
+    return _commit(_log.copyWith(strengthDays: {..._log.strengthDays, key}));
+  }
+
+  /// Inserts or replaces a session with the same id.
+  Future<bool> saveStrengthSession(StrengthSession session) async {
+    await ensureLoaded();
+    final updated = [
+      for (final existing in _log.strengthSessions)
+        if (existing.id != session.id) existing,
+      session,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    return _commit(_log.copyWith(strengthSessions: updated));
+  }
+
+  Future<bool> deleteStrengthSession(String id) async {
+    await ensureLoaded();
+    return _commit(
+      _log.copyWith(
+        strengthSessions: [
+          for (final session in _log.strengthSessions)
+            if (session.id != id) session,
+        ],
+      ),
     );
-    notifyListeners();
-    return _persist();
+  }
+
+  /// Sets or clears (null) a user-corrected sleep onset for a wake date.
+  Future<bool> setOnsetOverride(String wakeDate, DateTime? onset) async {
+    await ensureLoaded();
+    final updated = {..._log.onsetOverrides};
+    if (onset == null) {
+      updated.remove(wakeDate);
+    } else {
+      updated[wakeDate] = onset;
+    }
+    return _commit(_log.copyWith(onsetOverrides: updated));
   }
 
   Future<bool> saveProfile(BodyProfile profile) async {
     await ensureLoaded();
-    _log = LocalLog(
-      checkIns: _log.checkIns,
-      strengthDays: _log.strengthDays,
-      profile: profile,
-    );
-    notifyListeners();
-    return _persist();
+    return _commit(_log.copyWith(profile: profile));
   }
 
   Future<bool> clearLocalData() async {
@@ -233,14 +295,27 @@ class LocalStore extends ChangeNotifier {
     }
   }
 
+  Future<bool> _commit(LocalLog log) {
+    _log = log;
+    notifyListeners();
+    return _persist();
+  }
+
   Future<bool> _persist() async {
     if (!_nativeAvailable) return true;
     try {
       final saved = await _channel.invokeMethod<bool>('write', {
         'json': jsonEncode({
-          'version': 1,
+          'version': 2,
           'checkIns': _log.checkIns.map((entry) => entry.toJson()).toList(),
           'strengthDays': _log.strengthDays.toList()..sort(),
+          'strengthSessions': _log.strengthSessions
+              .map((session) => session.toJson())
+              .toList(),
+          'onsetOverrides': {
+            for (final entry in _log.onsetOverrides.entries)
+              entry.key: entry.value.toIso8601String(),
+          },
           'profile': _log.profile?.toJson(),
         }),
       });

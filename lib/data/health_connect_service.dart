@@ -1,6 +1,7 @@
-import 'package:flutter/services.dart';
+﻿import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
+import '../domain/energy.dart';
 import '../domain/estimates.dart';
 
 class HealthConnectService {
@@ -399,6 +400,8 @@ class HeartDetail {
     this.activityEstimateAge,
     this.restingHrSamples = const [],
     this.hrvSamples = const [],
+    this.minuteSeries = const [],
+    this.stepBuckets = const [],
     this.error,
   });
 
@@ -428,6 +431,11 @@ class HeartDetail {
       activityEstimateAge: _intFrom(activityEstimateMap?['age']),
       restingHrSamples: _timedValuesFrom(map['restingHrSamples']),
       hrvSamples: _timedValuesFrom(map['hrvSamples']),
+      minuteSeries: _timedValuesFrom(map['minuteSeries']),
+      stepBuckets: [
+        for (final sample in _timedValuesFrom(map['stepBuckets']))
+          StepBucket(start: sample.at, steps: sample.value.round()),
+      ],
     );
   }
 
@@ -450,6 +458,12 @@ class HeartDetail {
   final int? activityEstimateAge;
   final List<TimedValue> restingHrSamples;
   final List<TimedValue> hrvSamples;
+
+  /// One-minute median heart rate for the last 28 local days.
+  final List<TimedValue> minuteSeries;
+
+  /// Five-minute step buckets for the last 28 local days.
+  final List<StepBucket> stepBuckets;
   final String? error;
 
   bool get hasAccess => granted.isNotEmpty;
@@ -553,6 +567,7 @@ class SleepNight {
     required this.deepMinutes,
     required this.remMinutes,
     required this.asleepIntervals,
+    this.unstagedMinutes = 0,
   });
 
   factory SleepNight.fromMap(Map<String, dynamic> map) {
@@ -565,8 +580,12 @@ class SleepNight {
       deepMinutes: _intFrom(map['deepMinutes']) ?? 0,
       remMinutes: _intFrom(map['remMinutes']) ?? 0,
       asleepIntervals: _asleepIntervalsFrom(map['asleepIntervals']),
+      unstagedMinutes: _intFrom(map['unstagedMinutes']) ?? 0,
     );
   }
+
+  /// Asleep time the source recorded without a stage label.
+  final int unstagedMinutes;
 
   final DateTime start;
   final DateTime end;

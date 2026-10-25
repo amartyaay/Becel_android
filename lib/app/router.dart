@@ -1,17 +1,16 @@
 import 'package:go_router/go_router.dart';
 
-import '../features/activity/activity_screen.dart';
-import '../features/biology/biology_screen.dart';
 import '../features/data/data_screen.dart';
 import '../features/energy/energy_screen.dart';
-import '../features/health/heart_screen.dart';
+import '../features/health/vitals_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/recovery/recovery_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/shell_screen.dart';
 import '../features/sleep/sleep_screen.dart';
-import '../features/strain/strain_screen.dart';
 import '../features/today/today_screen.dart';
+import '../features/training/strength_screen.dart';
+import '../features/training/training_screen.dart';
 
 GoRouter buildRouter() => GoRouter(
   initialLocation: '/today',
@@ -31,8 +30,8 @@ GoRouter buildRouter() => GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/activity',
-              builder: (context, state) => const ActivityScreen(),
+              path: '/training',
+              builder: (context, state) => const TrainingScreen(),
             ),
           ],
         ),
@@ -66,14 +65,18 @@ GoRouter buildRouter() => GoRouter(
       path: '/recovery',
       builder: (context, state) => const RecoveryScreen(),
     ),
-    GoRoute(path: '/heart', builder: (context, state) => const HeartScreen()),
-    GoRoute(path: '/zones', builder: (context, state) => const StrainScreen()),
-    GoRoute(path: '/strain', redirect: (context, state) => '/zones'),
     GoRoute(path: '/energy', builder: (context, state) => const EnergyScreen()),
     GoRoute(
-      path: '/biology',
-      builder: (context, state) => const BiologyScreen(),
+      path: '/strength',
+      builder: (context, state) => const StrengthScreen(),
     ),
+    GoRoute(path: '/vitals', builder: (context, state) => const VitalsScreen()),
     GoRoute(path: '/data', builder: (context, state) => const DataScreen()),
+    // Older links.
+    GoRoute(path: '/activity', redirect: (context, state) => '/training'),
+    GoRoute(path: '/strain', redirect: (context, state) => '/training'),
+    GoRoute(path: '/heart', redirect: (context, state) => '/vitals'),
+    GoRoute(path: '/zones', redirect: (context, state) => '/vitals'),
+    GoRoute(path: '/biology', redirect: (context, state) => '/vitals'),
   ],
 );
