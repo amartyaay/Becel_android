@@ -30,6 +30,8 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 20 | App took ~10 s to show data → **show old data on open, refresh after**. | Done: last raw Health Connect read cached in app-private file (`readCache`/`writeCache`), shown instantly with "Syncing". |
 | 21 | Strain must not overestimate; recovery too low for some. | Day-strain floor 10 → 20 % HRR + cadence intensity floor (owner quiet day 6.6 → 2.7). Recovery display: typical 58 %, green ≥ 67 % (z ≥ +0.5), red ≤ 33 % (z ≤ −0.75). |
 | 22 | Calories still feel high (2.2k at 8 pm, 5.5k steps); "is the everyday 455 already inside the 81 kcal/h?"; "does a 1 h walk add 81 + walking?" | Answered: Mifflin RMR is lying-still/fasted, so sitting/standing/digestion are extra (Levine 2000); walking minutes get net walking cost *instead of* the allowance; IOM DLW EER for owner ≈ 2,876 sedentary vs Becel ~2,708. PhD evaluator asked to audit (iter 7). |
+| 23 | Load / Vitals cards hidden under the nav bar. | Done: `navClearanceOf(context)` = bar + gap + real system inset + 24 (3-button nav); status-bar backdrop on Today. |
+| 24 | Keep **calories directly under the 3 rings** (owner liked it); once food is logged show net eaten-vs-burned below it ("make the UI good, don't fixate on a slider"). | Done: order = rings → Calories → Energy balance (only with food; centred deficit/surplus meter + eaten/burned/protein) → Steps/Active → Plan → Your day → Load/Vitals. Do not move calories below the plan again. |
 | 15 | "1,668 kcal and strain 4.4 seem high for my day — research it; what does the PhD evaluator say?" | Answered with DLW/Mifflin/WHOOP evidence: total burn is mostly resting metabolism (81 kcal/h for the owner); free-living PAL ≥ 1.4, so the total was if anything low; 4.4 is "light" on WHOOP's scale (member average 11). Evaluator agreed calories were too low and ambient HR padded load. Home now leads with **active** kcal; total/resting shown beneath. |
 
 ### Decisions to keep (with evidence)
@@ -49,7 +51,8 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 4 | `d8343a3`, `4618de6` | 7.4 | Two recovery band systems (ring % vs plan); history vs today need mismatch; cadence-lock exit = normal HR recovery; target ignores ambient strain; strength top-up units; stale method copy; aboveFlexRun too loose; hero "active" includes modelled kcal; learned need double-counts split nights; nav labels clipped; VO₂max category on wide ranges |
 | 5 | `8eeba5a` | 7.6 | "Everyday strain" counted training → yellow day got push target; sleep z fixed at 85 % (steady 7 h sleeper ≈ 43 %); compositeScale ignored HRV/RHR correlation; UTC wake dates; 5-min step buckets; strength RPE constant 6; plan ignores HRV trend; no day timeline; narrow truncation; PAL / onset toggle not surfaced |
 | 6 | `888e39e` | not rated (evaluator hit rate limit) | — |
-| 7 | `2e87dfb` | _awaiting: PhD + UX evaluators_ | — |
+| 7 | `2e87dfb` | PhD **7.9** · UX **7.6** | PhD: cadence floor inflated runs; cached data claimed "just now"; strength RPE constant; 5-min steps; guide wording; no day timeline; missing-sleep kcal inflation. Calorie audit: **no constant changes** (2,708/day vs IOM DLW sedentary 2,876). PhD says realistic ceiling ≈ 9.0 for a screenless read-only band. UX: plan buried, prose left, ALL-CAPS titles, ambiguous nav icons, no timeline, zones 0m contradiction |
+| 8 | `3b82e66` + layout fix | _awaiting re-rate_ | — |
 
 ## Open todos (missed or planned, not done)
 

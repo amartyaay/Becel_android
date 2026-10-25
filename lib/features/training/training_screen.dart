@@ -54,7 +54,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearanceOf(context)),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  navClearanceOf(context),
+                ),
                 children: [
                   const ScreenHeader(
                     eyebrow: 'Strain · load · zones',

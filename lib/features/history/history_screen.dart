@@ -86,7 +86,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearanceOf(context)),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  navClearanceOf(context),
+                ),
                 children: [
                   ScreenHeader(
                     eyebrow: p == null

@@ -103,16 +103,17 @@ void main() {
     expect(find.text('Strain'), findsOneWidget);
     expect(find.text('Sleep'), findsWidgets);
 
-    // The plan sits right under the rings, then the day, then calories.
-    await _scrollTo(tester, find.text('Today’s plan'));
-    await _scrollTo(tester, find.text('Your day'));
+    // Calories sit right under the rings, then food once it is logged.
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
     expect(find.text('kcal so far'), findsOneWidget);
     expect(find.textContaining('by midnight'), findsOneWidget);
-    expect(find.text('Eaten'), findsNothing);
+    await _scrollTo(tester, find.text('Energy balance'));
+    expect(find.textContaining('so far'), findsWidgets);
     await _scrollTo(tester, find.text('Steps'));
     expect(find.text('Active'), findsWidgets);
+    await _scrollTo(tester, find.text('Today’s plan'));
+    await _scrollTo(tester, find.text('Your day'));
     await _scrollTo(tester, find.text('Vitals'));
     expect(tester.takeException(), isNull);
   });

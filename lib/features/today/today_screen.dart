@@ -79,7 +79,12 @@ class _TodayScreenState extends State<TodayScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 4, 16, navClearanceOf(context)),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    4,
+                    16,
+                    navClearanceOf(context),
+                  ),
                   sliver: SliverList.list(
                     children: snapshot == null
                         ? [
@@ -147,11 +152,14 @@ class _TodayScreenState extends State<TodayScreen> {
         _AlertCard(alert: p.alert!),
       ],
       const SizedBox(height: 12),
-      _PlanCard(plan: p.plan, strainNow: p.today?.strain),
-      const SizedBox(height: 12),
-      _DayCard(snapshot: snapshot),
-      const SizedBox(height: 12),
       _BurnCard(snapshot: snapshot, onTap: () => context.push('/energy')),
+      // Appears only once food is logged in Google Health (or any app
+      // sharing nutrition with Health Connect).
+      if ((snapshot.activity?.intakeKcalToday ?? 0) > 0 &&
+          p.energy != null) ...[
+        const SizedBox(height: 12),
+        _BalanceCard(snapshot: snapshot, onTap: () => context.push('/energy')),
+      ],
       const SizedBox(height: 12),
       IntrinsicHeight(
         child: Row(
@@ -163,6 +171,10 @@ class _TodayScreenState extends State<TodayScreen> {
           ],
         ),
       ),
+      const SizedBox(height: 12),
+      _PlanCard(plan: p.plan, strainNow: p.today?.strain),
+      const SizedBox(height: 12),
+      _DayCard(snapshot: snapshot),
       const SizedBox(height: 12),
       IntrinsicHeight(
         child: Row(
@@ -700,6 +712,15 @@ class _BurnCard extends StatelessWidget {
               style: AppType.caption,
             ),
           ],
+          // Without a sleep record every night minute is costed as awake,
+          // which adds ~200 kcal; say so instead of hiding it.
+          if (p.sleep.lastNight == null && p.now.hour >= 6) ...[
+            const SizedBox(height: 8),
+            Text(
+              'No sleep recorded last night · may read high',
+              style: AppType.caption.copyWith(color: AppColors.bandYellow),
+            ),
+          ],
           if (stale) ...[
             const SizedBox(height: 10),
             Text(
@@ -765,6 +786,154 @@ class _BurnTile extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: AppType.caption,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Food eaten vs energy burned so far, as a centred deficit/surplus meter.
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.snapshot, required this.onTap});
+
+  final HealthSnapshot snapshot;
+  final VoidCallback onTap;
+
+  /// The meter's full width on each side of zero.
+  static const _range = 1000.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = snapshot.activity!;
+    final eaten = a.intakeKcalToday!;
+    final burned = snapshot.performance.energy!.today.totalKcal;
+    final net = eaten - burned;
+    final deficit = net < 0;
+    final protein = a.proteinGToday;
+    final weight = snapshot.profile?.weightKg;
+    final proteinTarget = weight == null ? null : (weight * 1.6).round();
+    final fraction = (net.abs() / _range).clamp(0.0, 1.0);
+    final color = deficit ? AppColors.intake : AppColors.burned;
+    return PanelCard(
+      title: 'Energy balance',
+      icon: Icons.restaurant_rounded,
+      accent: AppColors.intake,
+      onTap: onTap,
+      trailing: Tag(
+        '${a.mealsToday} meal${a.mealsToday == 1 ? '' : 's'}',
+        color: AppColors.intake,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    '${deficit ? '−' : '+'}${formatNumber(net.abs().round())}',
+                    style: AppType.numM.copyWith(fontSize: 34),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                deficit ? 'kcal deficit so far' : 'kcal surplus so far',
+                style: AppType.unit,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Centre is energy balance; the fill grows toward deficit (left)
+          // or surplus (right).
+          SizedBox(
+            height: 12,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final half = box.maxWidth / 2;
+                final width = half * fraction;
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceHigher,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: deficit ? half - width : half,
+                      width: width,
+                      top: 0,
+                      bottom: 0,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.horizontal(
+                            left: Radius.circular(deficit ? 6 : 0),
+                            right: Radius.circular(deficit ? 0 : 6),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: half - 1,
+                      width: 2,
+                      top: -2,
+                      bottom: -2,
+                      child: const ColoredBox(color: AppColors.textPrimary),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text('Deficit', style: AppType.caption.copyWith(fontSize: 11)),
+              const Spacer(),
+              Text('Balance', style: AppType.caption.copyWith(fontSize: 11)),
+              const Spacer(),
+              Text('Surplus', style: AppType.caption.copyWith(fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: StatBlock(
+                  label: 'Eaten',
+                  value: formatNumber(eaten.round()),
+                  unit: 'kcal',
+                  delta: 'logged',
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'Burned',
+                  value: formatNumber(burned.round()),
+                  unit: 'kcal',
+                  delta: 'so far',
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'Protein',
+                  value: protein == null ? '—' : protein.round().toString(),
+                  unit: 'g',
+                  delta: proteinTarget == null
+                      ? 'logged'
+                      : 'goal $proteinTarget g',
+                ),
+              ),
+            ],
           ),
         ],
       ),
