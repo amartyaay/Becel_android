@@ -101,15 +101,29 @@ void main() {
     expect(find.text('Strain'), findsOneWidget);
     expect(find.text('Sleep'), findsWidgets);
 
-    await _scrollTo(tester, find.text('Eaten'));
-    expect(find.text('Burned'), findsOneWidget);
-    expect(find.text('1,840'), findsOneWidget);
-    await _scrollTo(tester, find.text('Protein'));
+    await _scrollTo(tester, find.text('Calories burned'));
+    expect(find.textContaining('as of'), findsOneWidget);
+    expect(find.text('BY MIDNIGHT'), findsOneWidget);
+    expect(find.text('Eaten'), findsNothing);
+    await _scrollTo(tester, find.text('Active'));
     expect(find.text('Steps'), findsOneWidget);
-    expect(find.text('142'), findsOneWidget);
     await _scrollTo(tester, find.text('Today’s plan'));
     await _scrollTo(tester, find.text('Vitals'));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Calories burned waits until every input is available', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _localJson = '{"version":3,"profile":{"age":34}}';
+    _installAthlete();
+    await _boot(tester);
+
+    await _scrollTo(tester, find.text('Calories burned'));
+    expect(find.text('Waiting for data'), findsOneWidget);
+    expect(find.textContaining('Needs sex'), findsOneWidget);
+    expect(find.text('BY MIDNIGHT'), findsNothing);
   });
 
   testWidgets('Today has no logging controls (read-only app)', (tester) async {

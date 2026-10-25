@@ -35,7 +35,15 @@ class Performance {
     required this.strengthSessions,
     required this.weekly,
     this.hrvTrend,
+    this.energyMissing = const [],
+    this.energyAsOf,
   });
+
+  /// Inputs still needed before calories burned can be shown.
+  final List<String> energyMissing;
+
+  /// Calories burned today are calculated up to this time (last band sync).
+  final DateTime? energyAsOf;
 
   /// Rolling 7-day HRV against the prior 28 days, when enough nights exist.
   final HrvTrend? hrvTrend;
@@ -229,9 +237,33 @@ Performance buildPerformance({
     now: now,
   );
 
+  // Calories burned are shown only when every input is present, and only up
+  // to the last minute the band actually synced, so the number never runs
+  // ahead of real data.
+  final today0 = _day(now);
+  TimedValue? lastToday;
+  for (final sample in clean.samples.reversed) {
+    if (!sample.at.isAfter(now)) {
+      if (!sample.at.isBefore(today0)) lastToday = sample;
+      break;
+    }
+  }
+  final energyMissing = <String>[
+    if (profile?.age == null) 'age',
+    if (profile?.sex == null) 'sex',
+    if (profile?.weightKg == null) 'weight',
+    if (profile?.heightCm == null) 'height',
+    if (resting == null) 'resting heart rate',
+    if (lastToday == null) 'today’s heart rate',
+  ];
+  final energyAsOf = lastToday?.at.add(const Duration(minutes: 1));
+
   // Energy for the last 7 local dates, today last.
   final energyDays = <DayEnergy>[];
-  if (profile != null && profile.hasEnergyInputs && zones != null) {
+  if (energyMissing.isEmpty &&
+      profile != null &&
+      profile.hasEnergyInputs &&
+      zones != null) {
     final asleep = [
       for (final night in coach.nights) ...night.asleepIntervals,
       // Older nights outside the coach window still mark sleeping minutes.
@@ -258,7 +290,7 @@ Performance buildPerformance({
       final day = estimateDayEnergy(
         profile: profile,
         date: date,
-        now: now,
+        now: offset == 0 && energyAsOf != null ? energyAsOf : now,
         cleanedMinutes: clean.samples,
         stepBuckets: stepBuckets,
         sleep: asleep,
@@ -308,6 +340,8 @@ Performance buildPerformance({
     load: load,
     sleep: coach,
     hrvTrend: trend,
+    energyMissing: energyMissing,
+    energyAsOf: energyAsOf,
     recovery: recovery,
     recoveryHistory: history,
     respiratoryDelta: respiratoryDelta,

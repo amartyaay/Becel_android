@@ -17,10 +17,6 @@ import '../shell/shell_screen.dart';
 /// adults under 60 (Paluch et al., Lancet Public Health 2022).
 const stepGoal = 10000;
 
-/// Protein reference for people who train: 1.6 g/kg/day captures most of
-/// the hypertrophy benefit (Morton et al., BJSM 2018).
-const proteinPerKg = 1.6;
-
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
 
@@ -130,7 +126,7 @@ class _TodayScreenState extends State<TodayScreen> {
         _AlertCard(alert: p.alert!),
       ],
       const SizedBox(height: 12),
-      _FuelCard(snapshot: snapshot, onTap: () => context.push('/energy')),
+      _BurnCard(snapshot: snapshot, onTap: () => context.push('/energy')),
       const SizedBox(height: 12),
       IntrinsicHeight(
         child: Row(
@@ -138,7 +134,7 @@ class _TodayScreenState extends State<TodayScreen> {
           children: [
             Expanded(child: _StepsTile(snapshot: snapshot)),
             const SizedBox(width: 12),
-            Expanded(child: _ProteinTile(snapshot: snapshot)),
+            Expanded(child: _ActiveTile(snapshot: snapshot)),
           ],
         ),
       ),
@@ -511,224 +507,168 @@ class _AlertCard extends StatelessWidget {
   );
 }
 
-/// Calories eaten (Health Connect) against calories burned (Becel).
-class _FuelCard extends StatelessWidget {
-  const _FuelCard({required this.snapshot, required this.onTap});
+/// Calories burned today (Becel's algorithm), shown only when every input
+/// is present and calculated up to the band's last sync.
+class _BurnCard extends StatelessWidget {
+  const _BurnCard({required this.snapshot, required this.onTap});
 
   final HealthSnapshot snapshot;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final energy = snapshot.performance.energy;
-    final activity = snapshot.activity;
-    final eaten = activity?.intakeKcalToday;
-    final burned = energy?.today.totalKcal;
-    final projected = energy?.projectedToday;
-    final balance = eaten == null || projected == null
-        ? null
-        : eaten - projected;
-    final scale = math.max(1.0, [eaten ?? 0, projected ?? 0].reduce(math.max));
+    final p = snapshot.performance;
+    final energy = p.energy;
+    if (energy == null) {
+      final missing = p.energyMissing;
+      final needsSettings = missing.any(
+        (m) => m == 'age' || m == 'sex' || m == 'weight' || m == 'height',
+      );
+      return PanelCard(
+        title: 'Calories burned',
+        icon: Icons.local_fire_department_rounded,
+        accent: AppColors.burned,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Waiting for data', style: AppType.cardTitle),
+            const SizedBox(height: 4),
+            Text(
+              missing.isEmpty
+                  ? 'Calculating…'
+                  : 'Needs ${missing.join(', ')}. Becel shows calories only '
+                        'when every input is available, so the number is never '
+                        'a guess.',
+              style: AppType.note,
+            ),
+            if (needsSettings) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Weight and height are read from Google Health when it shares '
+                'them; age and sex are set once in Settings.',
+                style: AppType.caption,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => openSettings(context),
+                child: const Text('Open settings'),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    final today = energy.today;
+    final asOf = p.energyAsOf;
+    final delta = energy.deviceDelta;
+    final stale = asOf != null && p.now.difference(asOf).inMinutes > 30;
     return PanelCard(
-      title: 'Calories',
+      title: 'Calories burned',
       icon: Icons.local_fire_department_rounded,
       accent: AppColors.burned,
       onTap: onTap,
+      trailing: asOf == null
+          ? null
+          : Tag(
+              'as of ${formatClock(asOf)}',
+              color: stale ? AppColors.bandYellow : AppColors.textTertiary,
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: _FuelNumber(
-                  label: 'Burned',
-                  value: burned,
-                  sub: projected == null
-                      ? 'needs profile'
-                      : '~${formatNumber(projected.round())} by midnight',
-                  color: AppColors.burned,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _FuelNumber(
-                  label: 'Eaten',
-                  value: eaten,
-                  sub: eaten == null
-                      ? activity?.canReadNutrition == true
-                            ? 'nothing logged yet'
-                            : 'allow nutrition access'
-                      : '${activity!.mealsToday} entr${activity.mealsToday == 1 ? 'y' : 'ies'}'
-                            '${activity.intakeSources.isEmpty ? '' : ' · ${activity.intakeSources.first}'}',
-                  color: AppColors.intake,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _FuelBar(
-            label: 'Burn',
-            value: projected ?? 0,
-            done: burned ?? 0,
-            max: scale,
-            color: AppColors.burned,
-          ),
-          const SizedBox(height: 8),
-          _FuelBar(
-            label: 'Food',
-            value: eaten ?? 0,
-            done: eaten ?? 0,
-            max: scale,
-            color: AppColors.intake,
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  balance == null
-                      ? 'Balance shows once food is logged in Google Health.'
-                      : balance < 0
-                      ? '${formatNumber(balance.abs().round())} kcal deficit if you eat nothing more'
-                      : '${formatNumber(balance.round())} kcal surplus vs projected burn',
-                  style: AppType.caption.copyWith(
-                    color: AppColors.textSecondary,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        formatNumber(today.totalKcal.round()),
+                        style: AppType.numXl,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('kcal', style: AppType.unit),
+                    ],
                   ),
                 ),
               ),
-              if (energy?.deviceDelta != null &&
-                  energy!.deviceDelta!.abs() >= 50)
-                Tag(
-                  'Fitbit ${energy.deviceDelta! > 0 ? '+' : '−'}${formatNumber(energy.deviceDelta!.abs().round())}',
-                  color: AppColors.textTertiary,
+              const SizedBox(width: 12),
+              Flexible(
+                child: StatBlock(
+                  label: 'BY MIDNIGHT',
+                  value: '~${formatNumber(energy.projectedToday.round())}',
+                  align: CrossAxisAlignment.end,
                 ),
+              ),
             ],
           ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 10,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: math.max(1, today.restingKcal.round()),
+                    child: Container(
+                      color: AppColors.burned.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    flex: math.max(1, today.activeKcal.round()),
+                    child: Container(color: AppColors.burned),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: StatBlock(
+                  label: 'ACTIVE',
+                  value: formatNumber(today.activeKcal.round()),
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'RESTING',
+                  value: formatNumber(today.restingKcal.round()),
+                ),
+              ),
+              Expanded(
+                child: StatBlock(
+                  label: 'FITBIT SAYS',
+                  value: energy.deviceTotalToday == null
+                      ? '—'
+                      : formatNumber(energy.deviceTotalToday!),
+                  delta: delta == null || delta.abs() < 50
+                      ? null
+                      : '${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())} vs Becel',
+                ),
+              ),
+            ],
+          ),
+          if (stale) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Your band last synced at ${formatClock(asOf)}. Open the Fitbit '
+              'app to sync, then pull down to refresh.',
+              style: AppType.caption.copyWith(color: AppColors.bandYellow),
+            ),
+          ],
         ],
       ),
     );
   }
-}
-
-class _FuelNumber extends StatelessWidget {
-  const _FuelNumber({
-    required this.label,
-    required this.value,
-    required this.sub,
-    required this.color,
-  });
-
-  final String label;
-  final double? value;
-  final String sub;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: AppType.caption.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-      const SizedBox(height: 6),
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value == null ? '—' : formatNumber(value!.round()),
-              style: AppType.numM.copyWith(fontSize: 32),
-            ),
-            const SizedBox(width: 4),
-            const Text('kcal', style: AppType.unit),
-          ],
-        ),
-      ),
-      const SizedBox(height: 2),
-      Text(
-        sub,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppType.caption.copyWith(fontSize: 11.5),
-      ),
-    ],
-  );
-}
-
-class _FuelBar extends StatelessWidget {
-  const _FuelBar({
-    required this.label,
-    required this.value,
-    required this.done,
-    required this.max,
-    required this.color,
-  });
-
-  final String label;
-  final double value;
-  final double done;
-  final double max;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      SizedBox(
-        width: 36,
-        child: Text(label, style: AppType.caption.copyWith(fontSize: 11)),
-      ),
-      Expanded(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            return Stack(
-              children: [
-                Container(
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceHigher,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                // Projected remainder, faint.
-                Container(
-                  width: width * (value / max).clamp(0.0, 1.0),
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.28),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                Container(
-                  width: width * (done / max).clamp(0.0, 1.0),
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    ],
-  );
 }
 
 class _StepsTile extends StatelessWidget {
@@ -790,33 +730,31 @@ class _StepsTile extends StatelessWidget {
   }
 }
 
-class _ProteinTile extends StatelessWidget {
-  const _ProteinTile({required this.snapshot});
+class _ActiveTile extends StatelessWidget {
+  const _ActiveTile({required this.snapshot});
 
   final HealthSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    final protein = snapshot.activity?.proteinGToday;
-    final weight = snapshot.profile?.weightKg;
-    final target = weight == null ? null : (weight * proteinPerKg).round();
+    final today = snapshot.performance.today;
+    final minutes = today?.aerobicEquivalentMinutes.round();
+    const goal = 30; // ~150 moderate-equivalent minutes per week.
     return PanelCard(
-      title: 'Protein',
-      icon: Icons.egg_alt_rounded,
-      accent: AppColors.intake,
-      onTap: () => context.push('/energy'),
+      title: 'Active',
+      icon: Icons.favorite_rounded,
+      accent: AppColors.strain,
+      onTap: () => context.go('/training'),
       child: Row(
         children: [
           SizedBox(
             width: 52,
             height: 52,
             child: CircularProgressIndicator(
-              value: protein == null || target == null
-                  ? 0
-                  : (protein / target).clamp(0.0, 1.0),
+              value: ((minutes ?? 0) / goal).clamp(0.0, 1.0),
               strokeWidth: 6,
               strokeCap: StrokeCap.round,
-              color: AppColors.intake,
+              color: AppColors.strain,
               backgroundColor: AppColors.surfaceHigher,
             ),
           ),
@@ -833,17 +771,17 @@ class _ProteinTile extends StatelessWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        protein == null ? '—' : protein.round().toString(),
+                        minutes == null ? '—' : '$minutes',
                         style: AppType.numM.copyWith(fontSize: 24),
                       ),
                       const SizedBox(width: 2),
-                      const Text('g', style: AppType.unit),
+                      const Text('min', style: AppType.unit),
                     ],
                   ),
                 ),
                 Text(
-                  target == null ? 'needs weight' : 'of ${target}g (1.6 g/kg)',
-                  maxLines: 1,
+                  'of $goal today',
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.caption.copyWith(fontSize: 11.5),
                 ),

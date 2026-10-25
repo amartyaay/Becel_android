@@ -47,21 +47,31 @@ class EnergyScreen extends StatelessWidget {
                     StateCard(
                       icon: Icons.person_outline_rounded,
                       color: AppColors.energy,
-                      title: 'Calories need your profile',
+                      title: 'Waiting for data',
                       body:
-                          'Add age, sex, height, and weight. Body fat % switches '
-                          'resting energy to lean-mass Katch–McArdle, which is '
-                          'more accurate for muscular athletes.',
-                      actionLabel: 'Open profile',
+                          'Calories burned needs '
+                          '${snapshot.performance.energyMissing.isEmpty ? 'a moment' : snapshot.performance.energyMissing.join(', ')}. '
+                          'Weight, height, and body fat come from Google Health; '
+                          'age and sex are set once in Settings.',
+                      actionLabel: 'Open settings',
                       onAction: () => openSettings(context),
                     )
                   else ...[
                     _TodayCard(energy: energy),
                     const SizedBox(height: 12),
-                    _IntakeCard(snapshot: snapshot),
-                    const SizedBox(height: 12),
-                    _BalanceWeekCard(snapshot: snapshot),
-                    const SizedBox(height: 12),
+                    // Food logging is optional: these appear only when some
+                    // app has shared meals with Health Connect.
+                    if (snapshot.activity?.intakeKcalToday != null) ...[
+                      _IntakeCard(snapshot: snapshot),
+                      const SizedBox(height: 12),
+                    ],
+                    if (snapshot.activity?.intakeKcalByDay.any(
+                          (v) => v != null && v > 0,
+                        ) ??
+                        false) ...[
+                      _BalanceWeekCard(snapshot: snapshot),
+                      const SizedBox(height: 12),
+                    ],
                     _DeviceCard(energy: energy),
                     const SizedBox(height: 12),
                     _StepsCard(today: energy.today),
@@ -97,6 +107,7 @@ class _TodayCard extends StatelessWidget {
       ('Walking', t.stepKcal, AppColors.green),
       ('Lifting', t.strengthKcal, AppColors.orange),
       ('Daily living', t.awakeKcal, AppColors.yellow),
+      ('Digestion', t.tefKcal, AppColors.sleep),
     ];
     return PanelCard(
       title: 'TODAY SO FAR',
