@@ -83,7 +83,9 @@ RecoveryContext buildRecoveryContext({
       current: currentScore,
       low: low,
       high: high,
-      median: priorScores.isEmpty ? currentScore.toDouble() : _median(priorScores),
+      median: priorScores.isEmpty
+          ? currentScore.toDouble()
+          : _median(priorScores),
       morningsScored: morningsScored,
       provisional: true,
       band: RecoveryBand.unknown,
@@ -252,7 +254,14 @@ class FocusRecommendation {
   final String actionLabel;
 }
 
-enum FocusKind { sleepDuration, strength, sleepRegularity, aerobic, maintain, recover }
+enum FocusKind {
+  sleepDuration,
+  strength,
+  sleepRegularity,
+  aerobic,
+  maintain,
+  recover,
+}
 
 FocusRecommendation buildFocusRecommendation({
   required SleepTrend sleep,
@@ -310,8 +319,7 @@ FocusRecommendation buildFocusRecommendation({
     );
   }
 
-  if (sleep.bedtimeSpreadMinutes != null &&
-      sleep.bedtimeSpreadMinutes! > 90) {
+  if (sleep.bedtimeSpreadMinutes != null && sleep.bedtimeSpreadMinutes! > 90) {
     return FocusRecommendation(
       kind: FocusKind.sleepRegularity,
       title: 'Steady your bedtime',
@@ -485,7 +493,9 @@ String weeklySummaryText({
   final start = end.subtract(const Duration(days: 6));
   final buffer = StringBuffer()
     ..writeln('Becel weekly summary · ${_shortDate(start)}–${_shortDate(end)}')
-    ..writeln('Generated on device from Fitbit Air-matched Health Connect records.');
+    ..writeln(
+      'Generated on device from Fitbit Air-matched Health Connect records.',
+    );
   if (review.sleep.averageMinutes != null) {
     final delta = review.sleep.sleepDeltaMinutes;
     buffer.writeln(
@@ -507,7 +517,9 @@ String weeklySummaryText({
   }
   buffer
     ..writeln('Strength: ${review.strengthDays} of 2 days.')
-    ..writeln('Recovery: ${review.recoveryMornings} mornings scored (experimental personal index).')
+    ..writeln(
+      'Recovery: ${review.recoveryMornings} mornings scored (experimental personal index).',
+    )
     ..writeln()
     ..writeln('One focus: ${review.focus.title}. ${review.focus.body}')
     ..writeln()
@@ -516,10 +528,7 @@ String weeklySummaryText({
 }
 
 /// CSV export of the values Becel displays, with provenance columns.
-String weeklyCsv({
-  required WeeklyReview review,
-  required DateTime now,
-}) {
+String weeklyCsv({required WeeklyReview review, required DateTime now}) {
   final rows = <List<String>>[
     ['metric', 'value', 'unit', 'window', 'source', 'note'],
     [
@@ -591,9 +600,8 @@ String weeklyCsv({
   return rows.map(_csvRow).join('\n');
 }
 
-String _csvRow(List<String> values) => values
-    .map((value) => '"${value.replaceAll('"', '""')}"')
-    .join(',');
+String _csvRow(List<String> values) =>
+    values.map((value) => '"${value.replaceAll('"', '""')}"').join(',');
 
 int? _average(Iterable<int> values) {
   var total = 0;

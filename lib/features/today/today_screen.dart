@@ -276,7 +276,8 @@ class _TodayScreenState extends State<TodayScreen> {
   String _activityDetail(HealthSnapshot snapshot) {
     final activity = snapshot.activityEstimate;
     if (activity == null) return 'Needs heart-rate coverage';
-    return 'at least · ${activity.usableDays}/7 days with HR';
+    if (activity.usableDays >= 7) return 'heart rate on all 7 days';
+    return 'lower bound \u00b7 ${activity.usableDays}/7 days with HR';
   }
 
   String _activityFootnote(HealthSnapshot snapshot) {
@@ -284,8 +285,12 @@ class _TodayScreenState extends State<TodayScreen> {
     if (activity == null) {
       return 'Add age and allow heart-rate access for a personal estimate';
     }
-    return 'Up to ${activity.potentialEquivalentMinutes} min if every day '
-        'had coverage';
+    if (activity.potentialEquivalentMinutes >
+        activity.displayedEquivalentMinutes) {
+      return 'Up to ${activity.potentialEquivalentMinutes} min if every day '
+          'had coverage';
+    }
+    return 'Heart-rate coverage was available every day this week.';
   }
 }
 
@@ -675,14 +680,15 @@ class _RecoveryCard extends StatelessWidget {
             low: context.low,
             high: context.high,
             color: color,
+            bandLabel: context.provisional ? 'building baseline' : null,
             semanticsLabel:
                 'Recovery ${context.label.toLowerCase()}. Today $current out of '
                 '100. Usual range ${context.low} to ${context.high}.',
           ),
           const SizedBox(height: 10),
           Text(
-            'Built from overnight HRV and resting heart rate. Sleep is shown '
-            'separately, so it is not counted twice.',
+            'Built from overnight HRV, resting heart rate, sleep duration, and '
+            'your morning check-in. Each signal is shown in Recovery detail.',
             style: AppType.caption.copyWith(fontSize: 11.5),
           ),
           const SizedBox(height: 8),

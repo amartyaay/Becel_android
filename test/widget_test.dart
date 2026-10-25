@@ -107,8 +107,8 @@ void main() {
     expect(
       _semanticsLabels(tester),
       contains(
-        'Recovery within your usual range. Today 50 out of 100. '
-        'Usual range 44 to 56.',
+        'Recovery within your usual range. Today 61 out of 100. '
+        'Usual range 55 to 67.',
       ),
     );
 

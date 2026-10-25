@@ -1,3 +1,8 @@
+String formatNumber(int value) => value.toString().replaceAllMapped(
+  RegExp(r'(\d)(?=(\d{3})+$)'),
+  (match) => '${match[1]},',
+);
+
 String formatClock(DateTime time) {
   final local = time.toLocal();
   final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;

@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/coaching.dart';
 import '../domain/estimates.dart';
+import '../domain/metrics.dart';
+import '../domain/profile.dart';
 import 'health_connect_service.dart';
+import 'local_store.dart';
 
 /// One consistent read of every Health Connect surface Becel uses.
 ///
@@ -23,6 +26,10 @@ class HealthSnapshot {
     required this.recoveryContext,
     required this.activityEstimate,
     required this.loadedAt,
+    this.profile,
+    this.energy,
+    this.trainingLoad,
+    this.fitnessAge,
   });
 
   final HealthConnectInspection inspection;
@@ -38,6 +45,10 @@ class HealthSnapshot {
   final RecoveryContext recoveryContext;
   final ActivityEstimate? activityEstimate;
   final DateTime loadedAt;
+  final BodyProfile? profile;
+  final EnergyEstimate? energy;
+  final TrainingLoadEstimate? trainingLoad;
+  final FitnessAgeEstimate? fitnessAge;
 
   bool get isAvailable => inspection.isAvailable;
   bool get hasAccess => inspection.hasAnyPermission;
@@ -136,6 +147,7 @@ class HealthStore extends ChangeNotifier {
   Future<void> _load({required bool force}) async {
     final generation = _generation;
     try {
+      await LocalStore.instance.ensureLoaded();
       final inspection = await _service.inspect();
       HealthSummary? summary;
       HeartDetail? heart;
@@ -162,6 +174,18 @@ class HealthStore extends ChangeNotifier {
       if (generation != _generation) return;
       final age = await _service.readFitnessAge();
       if (generation != _generation) return;
+      final now = DateTime.now();
+      final local = LocalStore.instance.log;
+      final storedProfile = local.profile;
+      final profile = storedProfile == null
+          ? null
+          : BodyProfile(
+              age: storedProfile.age ?? age,
+              sex: storedProfile.sex,
+              heightCm: storedProfile.heightCm,
+              weightKg: storedProfile.weightKg,
+            );
+      final checkIn = local.checkInFor(now);
       final night = sleep?.selectedRecentSession;
       final recoveryStatus = heart == null
           ? null
@@ -174,6 +198,8 @@ class HealthStore extends ChangeNotifier {
               asleepIntervals:
                   night?.asleepIntervals ?? const <AsleepInterval>[],
               sleepWindows: sleep?.sleepWindows ?? const <SleepWindow>[],
+              checkInTags: checkIn?.tags ?? const <String>{},
+              now: now,
             );
       final history = heart == null || sleep == null
           ? const <RecoveryHistoryPoint>[]
@@ -181,9 +207,39 @@ class HealthStore extends ChangeNotifier {
               hrvSamples: heart.hrvSamples,
               restingHrSamples: heart.restingHrSamples,
               sleepWindows: sleep.sleepWindows,
-              now: DateTime.now(),
+              now: now,
             );
-      final now = DateTime.now();
+      final todaySteps = summary?.stepCount;
+      final energy = profile == null
+          ? null
+          : estimateDailyEnergy(
+              profile: profile,
+              todayHeartRate: [
+                for (final sample in heart?.series ?? const <HeartSample>[])
+                  TimedValue(at: sample.at, value: sample.bpm.toDouble()),
+              ],
+              stepCount: todaySteps,
+              now: now,
+              deviceActiveKcal: activity?.caloriesActiveToday,
+              deviceTotalKcal: activity?.caloriesTotalToday,
+            );
+      final trainingLoad = estimateTrainingLoad(
+        weekHeartRate: [
+          for (final sample in heart?.weeklySeries ?? const <HeartSample>[])
+            TimedValue(at: sample.at, value: sample.bpm.toDouble()),
+        ],
+        age: profile?.age ?? age,
+        restingHr: heart?.restingHrBpm?.toDouble(),
+        now: now,
+      );
+      final fitnessAge = profile == null
+          ? null
+          : estimateFitnessAge(
+              profile: profile,
+              vo2Max: body?.vo2Max,
+              restingHrSamples: heart?.restingHrSamples ?? const <TimedValue>[],
+              now: now,
+            );
       final snapshot = HealthSnapshot(
         inspection: inspection,
         summary: summary,
@@ -204,6 +260,10 @@ class HealthStore extends ChangeNotifier {
             ? null
             : _service.activityEstimateFor(heart, age),
         loadedAt: now,
+        profile: profile,
+        energy: energy,
+        trainingLoad: trainingLoad,
+        fitnessAge: fitnessAge,
       );
       if (generation != _generation) return;
       _snapshot = snapshot;

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../domain/profile.dart';
+
 /// Labels for the optional morning check-in.
 const checkInTagLabels = <String, String>{
   'fresh': 'Fresh',
@@ -47,12 +49,17 @@ class CheckIn {
 }
 
 class LocalLog {
-  const LocalLog({this.checkIns = const [], this.strengthDays = const {}});
+  const LocalLog({
+    this.checkIns = const [],
+    this.strengthDays = const {},
+    this.profile,
+  });
 
   static const empty = LocalLog();
 
   final List<CheckIn> checkIns;
   final Set<String> strengthDays;
+  final BodyProfile? profile;
 
   CheckIn? checkInFor(DateTime day) {
     final key = localDateKey(day);
@@ -121,6 +128,11 @@ class LocalStore extends ChangeNotifier {
             strengthDays: (decoded['strengthDays'] as List? ?? const [])
                 .whereType<String>()
                 .toSet(),
+            profile: decoded['profile'] is Map
+                ? BodyProfile.fromJson(
+                    Map<String, dynamic>.from(decoded['profile'] as Map),
+                  )
+                : null,
           );
         }
       }
@@ -152,7 +164,11 @@ class LocalStore extends ChangeNotifier {
         if (checkIn.date != key) checkIn,
       entry,
     ]..sort((a, b) => a.date.compareTo(b.date));
-    _log = LocalLog(checkIns: updated, strengthDays: _log.strengthDays);
+    _log = LocalLog(
+      checkIns: updated,
+      strengthDays: _log.strengthDays,
+      profile: _log.profile,
+    );
     notifyListeners();
     return _persist();
   }
@@ -164,6 +180,18 @@ class LocalStore extends ChangeNotifier {
     _log = LocalLog(
       checkIns: _log.checkIns,
       strengthDays: {..._log.strengthDays, key},
+      profile: _log.profile,
+    );
+    notifyListeners();
+    return _persist();
+  }
+
+  Future<bool> saveProfile(BodyProfile profile) async {
+    await ensureLoaded();
+    _log = LocalLog(
+      checkIns: _log.checkIns,
+      strengthDays: _log.strengthDays,
+      profile: profile,
     );
     notifyListeners();
     return _persist();
@@ -213,6 +241,7 @@ class LocalStore extends ChangeNotifier {
           'version': 1,
           'checkIns': _log.checkIns.map((entry) => entry.toJson()).toList(),
           'strengthDays': _log.strengthDays.toList()..sort(),
+          'profile': _log.profile?.toJson(),
         }),
       });
       return saved ?? false;

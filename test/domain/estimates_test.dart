@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('recoveryReadiness', () {
-    test('neutral personal signals produce a transparent 50-point index', () {
+    test('neutral personal signals produce a transparent 61-point index', () {
       final result = _estimate();
       final estimate = result.estimate!;
 
-      expect(estimate.score, 50);
+      expect(estimate.score, 61);
       expect(estimate.sleepComponent, 100);
       expect(estimate.hrvComponent, 50);
       expect(estimate.restingHrComponent, 50);
@@ -90,14 +90,25 @@ void main() {
       expect(result.limitedSamples, isFalse);
     });
 
-    test('sleep duration anchors the window but does not change the score', () {
+    test('sleep duration contributes to the readiness score', () {
       final short = _estimate(sleepMinutes: 300);
       final long = _estimate(sleepMinutes: 540);
 
       expect(short.estimate?.score, 50);
-      expect(long.estimate?.score, 50);
+      expect(long.estimate?.score, 61);
       expect(short.estimate?.sleepComponent, lessThan(100));
       expect(long.estimate?.sleepComponent, 100);
+    });
+
+    test('morning check-in adjusts readiness without hiding physiology', () {
+      final neutral = _estimate(checkInTags: {'normal'});
+      final unwell = _estimate(checkInTags: {'unwell'});
+
+      expect(neutral.estimate?.subjectiveComponent, 60);
+      expect(unwell.estimate?.subjectiveComponent, 10);
+      expect(neutral.estimate!.score, greaterThan(unwell.estimate!.score));
+      expect(unwell.estimate?.hrvComponent, 50);
+      expect(unwell.estimate?.restingHrComponent, 50);
     });
   });
 
@@ -162,7 +173,7 @@ void main() {
       expect(history[7].readiness, isNull);
       expect(history.last.date, DateTime(2026, 10, 24));
       expect(history.last.sleepMinutes, 420);
-      expect(history.last.readiness?.estimate?.score, 50);
+      expect(history.last.readiness?.estimate?.score, 61);
       expect(history.last.readiness?.hrvBaselineNights, 13);
     },
   );
@@ -215,6 +226,7 @@ RecoveryReadiness _estimate({
   bool currentHrvOutsideSleep = false,
   bool currentRestingHrOutsideSleep = false,
   bool historicalRestingHrOutsideSleep = false,
+  Set<String> checkInTags = const <String>{},
 }) {
   final today = DateTime.now();
   final now = DateTime(today.year, today.month, today.day, 18);
@@ -278,6 +290,7 @@ RecoveryReadiness _estimate({
     sleepEnd: currentEnd,
     asleepIntervals: [currentInterval],
     sleepWindows: windows,
+    checkInTags: checkInTags,
     now: now,
   );
 }

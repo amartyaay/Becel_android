@@ -14,16 +14,14 @@ const sleepDurationMethod =
     'not precise enough to grade a night.';
 
 const recoveryMethod =
-    'Experimental personal trend: 40% sleep-duration progress, 35% RMSSD HRV, and '
-    '25% resting heart rate. HRV readings must fall inside recorded asleep '
-    'stages. Daily resting-HR readings are aligned by local date with the '
-    'selected sleep session. Both signals are compared with their own matched '
-    'values from the previous 14 local dates; each needs 10 baseline dates. '
-    'A yellow label means fewer than 2 current HRV readings, no current daily '
-    'RHR reading, or an incomplete 14-date baseline for '
-    'at least one signal. Its 0-100 mapping and 40/35/25 weights are '
-    'experimental product heuristics, not validated measures of readiness or '
-    'performance. Use this only as a within-person trend.';
+    'Becel readiness combines four signals: 45% RMSSD HRV, 25% resting heart '
+    'rate, 20% sleep duration in a 7–9 hour band, and 10% morning check-in. '
+    'Without a check-in the first three signals are reweighted to 50/28/22. '
+    'HRV and RHR are compared with the same person’s previous 14 local dates; '
+    'each needs 10 baseline dates. HRV readings must fall inside recorded '
+    'asleep stages. The 0–100 scale is a transparent product heuristic, not a '
+    'validated measure of readiness or performance. Use it only as a '
+    'within-person trend.';
 
 const activityMethod =
     'Becel HR estimate: moderate-equivalent minutes from Fitbit Air heart-rate '
@@ -88,12 +86,14 @@ class RecoveryEstimate {
     required this.restingHrBaseline,
     required this.hrvBaselineDays,
     required this.restingHrBaselineDays,
+    this.subjectiveComponent,
   });
 
   final int score;
   final int sleepComponent;
   final int hrvComponent;
   final int restingHrComponent;
+  final int? subjectiveComponent;
   final double hrvCurrent;
   final DateTime hrvAt;
   final int hrvSampleCount;
@@ -198,6 +198,7 @@ RecoveryReadiness recoveryReadiness({
   required DateTime? sleepEnd,
   required List<AsleepInterval> asleepIntervals,
   required List<SleepWindow> sleepWindows,
+  Set<String> checkInTags = const <String>{},
   DateTime? now,
 }) {
   final reference = now ?? DateTime.now();
@@ -289,16 +290,23 @@ RecoveryReadiness recoveryReadiness({
   );
   final hrvScore = (50 + hrvZ * 25).round().clamp(0, 100);
   final restingHrScore = (50 - restingHrZ * 25).round().clamp(0, 100);
-  // Sleep anchors the overnight window and is displayed separately. It is
-  // deliberately not weighted here, so the index reflects autonomic signals
-  // instead of counting a short night twice.
-  final score = (hrvScore * 0.60 + restingHrScore * 0.40).round().clamp(0, 100);
+  final sleepScore = _sleepReadinessScore(sleepMinutes ?? 0);
+  final subjectiveScore = _subjectiveReadinessScore(checkInTags);
+  final hasSubjective = subjectiveScore != null;
+  final score =
+      (hrvScore * (hasSubjective ? 0.45 : 0.50) +
+              restingHrScore * (hasSubjective ? 0.25 : 0.28) +
+              sleepScore * (hasSubjective ? 0.20 : 0.22) +
+              (subjectiveScore ?? 0) * (hasSubjective ? 0.10 : 0.0))
+          .round()
+          .clamp(0, 100);
 
   final estimate = RecoveryEstimate(
     score: score,
-    sleepComponent: sleepProgress,
+    sleepComponent: sleepScore,
     hrvComponent: hrvScore,
     restingHrComponent: restingHrScore,
+    subjectiveComponent: subjectiveScore,
     hrvCurrent: hrvCurrent,
     hrvAt: hrv.at,
     hrvSampleCount: hrv.currentSampleCount,
@@ -471,6 +479,25 @@ List<TimedValue> _validSamples(
 DateTime _localDay(DateTime value) {
   final local = value.toLocal();
   return DateTime(local.year, local.month, local.day);
+}
+
+int _sleepReadinessScore(int minutes) {
+  if (minutes >= 420 && minutes <= 540) return 100;
+  if (minutes >= 390 && minutes < 420) return 85;
+  if (minutes > 540 && minutes <= 570) return 85;
+  if (minutes >= 360 && minutes < 390) return 70;
+  if (minutes > 570 && minutes <= 600) return 70;
+  if (minutes >= 300 && minutes < 360) return 50;
+  return 30;
+}
+
+int? _subjectiveReadinessScore(Set<String> tags) {
+  if (tags.isEmpty) return null;
+  if (tags.contains('unwell')) return 10;
+  if (tags.contains('stressed') || tags.contains('slept_badly')) return 35;
+  if (tags.contains('sore')) return 45;
+  if (tags.contains('fresh')) return 100;
+  return 60;
 }
 
 double _median(List<double> values) {

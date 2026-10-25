@@ -59,8 +59,8 @@ class RecoveryScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'A personal range from overnight HRV and resting heart '
-                    'rate. Sleep sets the window and is not scored twice.',
+                    'A personal range from overnight HRV, resting heart rate, '
+                    'sleep duration, and your morning check-in.',
                     style: AppType.body,
                   ),
                   const SizedBox(height: 16),

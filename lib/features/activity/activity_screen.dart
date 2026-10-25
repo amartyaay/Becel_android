@@ -9,6 +9,7 @@ import '../../data/health_store.dart';
 import '../../data/local_store.dart';
 import '../../domain/coaching.dart';
 import '../../domain/estimates.dart';
+import '../../domain/metrics.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../shell/shell_screen.dart';
@@ -117,6 +118,19 @@ class _ActivityScreenState extends State<ActivityScreen> {
                         estimate: snapshot.activityEstimate!,
                         onZones: () => context.push('/zones'),
                       ),
+                    const SizedBox(height: 12),
+                    _EnergyCard(
+                      energy: snapshot.energy,
+                      profileReady: snapshot.profile?.hasEnergyInputs == true,
+                      onProfile: () => openSettings(context),
+                    ),
+                    const SizedBox(height: 12),
+                    _TrainingLoadCard(
+                      load: snapshot.trainingLoad,
+                      hasAge:
+                          snapshot.profile?.age != null || snapshot.age != null,
+                      onProfile: () => openSettings(context),
+                    ),
                     const SizedBox(height: 12),
                     _StrengthCard(
                       snapshot: snapshot,
@@ -402,20 +416,45 @@ class _AerobicCard extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text('0', style: AppType.caption.copyWith(fontSize: 10)),
-                      const Spacer(),
-                      Text(
-                        '$activityAerobicReferenceMinutes guideline',
-                        style: AppType.caption.copyWith(fontSize: 10),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${scale.round()}',
-                        style: AppType.caption.copyWith(fontSize: 10),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final guideX =
+                          (activityAerobicReferenceMinutes / scale).clamp(
+                            0.0,
+                            1.0,
+                          ) *
+                          width;
+                      return SizedBox(
+                        height: 14,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: 0,
+                              child: Text(
+                                '0',
+                                style: AppType.caption.copyWith(fontSize: 10),
+                              ),
+                            ),
+                            Positioned(
+                              left: (guideX - 28).clamp(0.0, width - 62),
+                              child: Text(
+                                '$activityAerobicReferenceMinutes guide',
+                                style: AppType.caption.copyWith(fontSize: 10),
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              child: Text(
+                                '${scale.round()}',
+                                style: AppType.caption.copyWith(fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -604,6 +643,337 @@ class _ActivityWeek extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _EnergyCard extends StatelessWidget {
+  const _EnergyCard({
+    required this.energy,
+    required this.profileReady,
+    required this.onProfile,
+  });
+
+  final EnergyEstimate? energy;
+  final bool profileReady;
+  final VoidCallback onProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!profileReady) {
+      return StateCard(
+        icon: Icons.person_outline_rounded,
+        color: AppColors.teal,
+        title: 'Add your body profile',
+        body:
+            'Age, sex, height, and weight let Becel estimate resting and '
+            'active energy instead of copying the device total.',
+        actionLabel: 'Add profile',
+        onAction: onProfile,
+      );
+    }
+    final estimate = energy;
+    if (estimate == null) {
+      return const StateCard(
+        icon: Icons.local_fire_department_outlined,
+        color: AppColors.teal,
+        title: 'Energy estimate is waiting for data',
+        body:
+            'Wear Fitbit Air today or add steps so Becel can estimate energy '
+            'from your body profile.',
+      );
+    }
+    return SurfaceCard(
+      color: const Color(0xFF10201C),
+      borderColor: AppColors.teal.withValues(alpha: 0.24),
+      radius: 24,
+      padding: const EdgeInsets.all(17),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.local_fire_department_rounded,
+                color: AppColors.teal,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'ENERGY · BECEL ESTIMATE',
+                  style: AppType.eyebrow.copyWith(
+                    color: AppColors.teal,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              StatusPill(
+                label: estimate.confidence.shortLabel,
+                color: estimate.confidence == MetricConfidence.low
+                    ? AppColors.yellow
+                    : AppColors.teal,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatNumber(estimate.totalKcal),
+                        style: AppType.numXl.copyWith(fontSize: 48),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 5, bottom: 7),
+                        child: Text('KCAL', style: AppType.unit),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Text(
+                'likely ${formatNumber(estimate.lowKcal)}–'
+                '${formatNumber(estimate.highKcal)}',
+                style: AppType.caption.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _EnergyPart(
+                  label: 'Resting',
+                  value: formatNumber(estimate.basalKcal),
+                  unit: 'kcal',
+                ),
+              ),
+              Container(width: 1, height: 34, color: AppColors.border),
+              Expanded(
+                child: _EnergyPart(
+                  label: 'Active',
+                  value: formatNumber(estimate.activeKcal),
+                  unit: 'kcal',
+                ),
+              ),
+              Container(width: 1, height: 34, color: AppColors.border),
+              Expanded(
+                child: _EnergyPart(
+                  label: 'HR cover',
+                  value: (estimate.heartCoverageMinutes / 60).toStringAsFixed(
+                    1,
+                  ),
+                  unit: 'h',
+                ),
+              ),
+            ],
+          ),
+          if (estimate.deviceActiveKcal != null) ...[
+            const SizedBox(height: 12),
+            InfoNote(
+              text:
+                  'Fitbit Air reports ${formatNumber(estimate.deviceActiveKcal!)} '
+                  'active kcal. Becel calculates independently from your '
+                  'profile, pulse, and steps.',
+              textColor: AppColors.textSecondary,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(estimate.method, style: AppType.caption),
+        ],
+      ),
+    );
+  }
+}
+
+class _EnergyPart extends StatelessWidget {
+  const _EnergyPart({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, maxLines: 1, style: AppType.numS.copyWith(fontSize: 18)),
+        const SizedBox(height: 2),
+        Text(
+          '$label · $unit',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption.copyWith(fontSize: 11),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrainingLoadCard extends StatelessWidget {
+  const _TrainingLoadCard({
+    required this.load,
+    required this.hasAge,
+    required this.onProfile,
+  });
+
+  final TrainingLoadEstimate? load;
+  final bool hasAge;
+  final VoidCallback onProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasAge) {
+      return StateCard(
+        icon: Icons.timeline_rounded,
+        color: AppColors.violet,
+        title: 'Training load needs your age',
+        body:
+            'Becel weights heart-rate minutes by intensity using your age and '
+            'resting heart rate.',
+        actionLabel: 'Add profile',
+        onAction: onProfile,
+      );
+    }
+    final estimate = load;
+    if (estimate == null) {
+      return const StateCard(
+        icon: Icons.timeline_rounded,
+        color: AppColors.violet,
+        title: 'Training load is waiting for heart rate',
+        body:
+            'A week of Fitbit Air pulse samples is needed to estimate '
+            'intensity-weighted load.',
+      );
+    }
+    final maximum = estimate.daily.fold<double>(
+      0,
+      (value, day) => math.max(value, day.load),
+    );
+    return SurfaceCard(
+      color: const Color(0xFF17151F),
+      borderColor: AppColors.violet.withValues(alpha: 0.22),
+      radius: 24,
+      padding: const EdgeInsets.all(17),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.timeline_rounded,
+                color: AppColors.violet,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'TRAINING LOAD · 7 DAYS',
+                  style: AppType.eyebrow.copyWith(
+                    color: AppColors.violet,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              StatusPill(
+                label: estimate.confidence.shortLabel,
+                color: estimate.confidence == MetricConfidence.low
+                    ? AppColors.yellow
+                    : AppColors.violet,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        estimate.weeklyLoad.round().toString(),
+                        style: AppType.numXl.copyWith(fontSize: 48),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 5, bottom: 7),
+                        child: Text('TRIMP', style: AppType.unit),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Text(
+                '${estimate.hardDays} hard '
+                '${estimate.hardDays == 1 ? 'day' : 'days'}',
+                style: AppType.caption.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var index = 0; index < estimate.daily.length; index++)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Column(
+                      children: [
+                        Container(
+                          height: maximum <= 0
+                              ? 4
+                              : 6 +
+                                    40 *
+                                        estimate.daily[index].load /
+                                        math.max(1, maximum),
+                          decoration: BoxDecoration(
+                            color: index == estimate.daily.length - 1
+                                ? AppColors.violet
+                                : AppColors.violet.withValues(alpha: 0.38),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          formatDayShort(estimate.daily[index].date),
+                          maxLines: 1,
+                          style: AppType.caption.copyWith(fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${estimate.vigorousMinutes.round()} vigorous minutes · '
+            '${estimate.coverageHours.toStringAsFixed(1)} h heart-rate '
+            'coverage',
+            style: AppType.caption.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          Text(estimate.method, style: AppType.caption),
+        ],
+      ),
     );
   }
 }

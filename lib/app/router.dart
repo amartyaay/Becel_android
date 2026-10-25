@@ -69,10 +69,7 @@ GoRouter buildRouter() => GoRouter(
     GoRoute(path: '/heart', builder: (context, state) => const HeartScreen()),
     GoRoute(path: '/zones', builder: (context, state) => const StrainScreen()),
     GoRoute(path: '/strain', redirect: (context, state) => '/zones'),
-    GoRoute(
-      path: '/energy',
-      builder: (context, state) => const EnergyScreen(),
-    ),
+    GoRoute(path: '/energy', builder: (context, state) => const EnergyScreen()),
     GoRoute(
       path: '/biology',
       builder: (context, state) => const BiologyScreen(),

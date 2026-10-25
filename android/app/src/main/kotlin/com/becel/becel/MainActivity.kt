@@ -378,6 +378,7 @@ class MainActivity : FlutterFragmentActivity() {
             "granted" to granted.toList().sorted(),
             "checkedAt" to now.toString(),
             "series" to emptyList<List<Long>>(),
+            "weeklySeries" to emptyList<List<Long>>(),
             "restingHrSamples" to emptyList<List<Any>>(),
             "hrvSamples" to emptyList<List<Any>>(),
             "activityEstimate" to null,
@@ -434,6 +435,18 @@ class MainActivity : FlutterFragmentActivity() {
                     listOf(bucket * HEART_BUCKET_MILLIS, entry[1] / entry[0])
                 }
 
+            }
+            if (trainingSamples.isNotEmpty()) {
+                val weeklyBuckets = sortedMapOf<Long, LongArray>()
+                trainingSamples.forEach { (time, bpm) ->
+                    val bucket = time.toEpochMilli() / HEART_BUCKET_MILLIS
+                    val entry = weeklyBuckets.getOrPut(bucket) { longArrayOf(0L, 0L) }
+                    entry[0] += 1
+                    entry[1] += bpm
+                }
+                data["weeklySeries"] = weeklyBuckets.map { (bucket, entry) ->
+                    listOf(bucket * HEART_BUCKET_MILLIS, entry[1] / entry[0])
+                }
             }
         }
 

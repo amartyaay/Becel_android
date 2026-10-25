@@ -876,4 +876,3 @@ class StateCard extends StatelessWidget {
     );
   }
 }
-

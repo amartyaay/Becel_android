@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
+import '../../domain/metrics.dart';
 import '../../widgets/kit.dart';
 
 class BiologyScreen extends StatefulWidget {
@@ -75,6 +76,20 @@ class _BiologyScreenState extends State<BiologyScreen> {
                       onAction: () => _store.refresh(force: true),
                     )
                   else ...[
+                    if (snapshot.fitnessAge != null) ...[
+                      _FitnessAgeCard(age: snapshot.fitnessAge!),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      const InfoNote(
+                        text:
+                            'Add age and sex in Settings to see a fitness age. '
+                            'Becel uses Fitbit Air VO₂ max when available and '
+                            'otherwise estimates it from resting heart rate.',
+                        icon: Icons.info_outline_rounded,
+                        color: AppColors.violet,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _BioTile(
                       icon: Icons.bloodtype_rounded,
                       color: AppColors.red,
@@ -160,6 +175,100 @@ class _BiologyScreenState extends State<BiologyScreen> {
   String? _baselineNote(num? baseline, String unit) {
     if (baseline == null) return null;
     return '7-day average ${baseline.toStringAsFixed(1)} $unit';
+  }
+}
+
+class _FitnessAgeCard extends StatelessWidget {
+  const _FitnessAgeCard({required this.age});
+
+  final FitnessAgeEstimate age;
+
+  @override
+  Widget build(BuildContext context) {
+    final delta = age.deltaYears;
+    final deltaLabel = delta == 0
+        ? 'Same as your age'
+        : delta < 0
+        ? '${delta.abs()} years younger'
+        : '$delta years older';
+    return SurfaceCard(
+      color: const Color(0xFF17151F),
+      borderColor: AppColors.violet.withValues(alpha: 0.24),
+      radius: 24,
+      padding: const EdgeInsets.all(17),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome_rounded,
+                color: AppColors.violet,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'FITNESS AGE · REFERENCE',
+                  style: AppType.eyebrow.copyWith(
+                    color: AppColors.violet,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              StatusPill(
+                label: age.confidence.shortLabel,
+                color: age.confidence == MetricConfidence.low
+                    ? AppColors.yellow
+                    : AppColors.violet,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${age.fitnessAge}',
+                        style: AppType.numXl.copyWith(fontSize: 52),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 5, bottom: 7),
+                        child: Text('YEARS', style: AppType.unit),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Text(
+                deltaLabel,
+                style: AppType.caption.copyWith(
+                  color: delta <= 0 ? AppColors.green : AppColors.yellow,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Range ${age.lowAge}–${age.highAge} · VO₂ max '
+            '${age.vo2Max.toStringAsFixed(1)} ml/kg/min'
+            '${age.vo2MaxEstimated ? ' (estimated)' : ''}',
+            style: AppType.caption.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Text(age.method, style: AppType.caption),
+        ],
+      ),
+    );
   }
 }
 

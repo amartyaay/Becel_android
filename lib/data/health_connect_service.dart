@@ -387,6 +387,7 @@ class HeartDetail {
     required this.granted,
     this.checkedAt,
     this.series = const [],
+    this.weeklySeries = const [],
     this.latestBpm,
     this.latestAt,
     this.minBpm,
@@ -402,22 +403,8 @@ class HeartDetail {
   });
 
   factory HeartDetail.fromMap(Map<String, dynamic> map) {
-    final rawSeries = map['series'];
-    final samples = <HeartSample>[];
-    if (rawSeries is List) {
-      for (final entry in rawSeries) {
-        if (entry is! List || entry.length < 2) continue;
-        final millis = _intFrom(entry[0]);
-        final bpm = _intFrom(entry[1]);
-        if (millis == null || bpm == null) continue;
-        samples.add(
-          HeartSample(
-            at: DateTime.fromMillisecondsSinceEpoch(millis),
-            bpm: bpm,
-          ),
-        );
-      }
-    }
+    final samples = _heartSamplesFrom(map['series']);
+    final weeklySamples = _heartSamplesFrom(map['weeklySeries']);
     final rawActivityEstimate = map['activityEstimate'];
     final activityEstimateMap = rawActivityEstimate is Map
         ? Map<String, dynamic>.from(rawActivityEstimate)
@@ -427,6 +414,7 @@ class HeartDetail {
       granted: HealthConnectInspection._stringList(map['granted']),
       checkedAt: map['checkedAt'] as String?,
       series: samples,
+      weeklySeries: weeklySamples,
       latestBpm: _intFrom(map['latestBpm']),
       latestAt: map['latestAt'] as String?,
       minBpm: _intFrom(map['minBpm']),
@@ -450,6 +438,7 @@ class HeartDetail {
   final List<String> granted;
   final String? checkedAt;
   final List<HeartSample> series;
+  final List<HeartSample> weeklySeries;
   final int? latestBpm;
   final String? latestAt;
   final int? minBpm;
@@ -470,6 +459,21 @@ class HeartDetail {
       granted.contains('android.permission.health.READ_RESTING_HEART_RATE');
   bool get canReadHrv =>
       granted.contains('android.permission.health.READ_HEART_RATE_VARIABILITY');
+}
+
+List<HeartSample> _heartSamplesFrom(Object? value) {
+  if (value is! List) return const [];
+  final samples = <HeartSample>[];
+  for (final entry in value) {
+    if (entry is! List || entry.length < 2) continue;
+    final millis = _intFrom(entry[0]);
+    final bpm = _intFrom(entry[1]);
+    if (millis == null || bpm == null) continue;
+    samples.add(
+      HeartSample(at: DateTime.fromMillisecondsSinceEpoch(millis), bpm: bpm),
+    );
+  }
+  return samples;
 }
 
 List<TimedValue> _timedValuesFrom(Object? value) {

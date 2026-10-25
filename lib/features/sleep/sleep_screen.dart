@@ -345,6 +345,7 @@ class _LastNightCard extends StatelessWidget {
                 'REM ${formatDurationMinutes(night.remMinutes)}.',
             child: ExcludeSemantics(
               child: StageBar(
+                showLabels: false,
                 segments: [
                   ChartSegment(
                     label: 'Awake',

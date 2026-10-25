@@ -8,6 +8,7 @@ import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
 import '../../data/local_store.dart';
 import '../../domain/coaching.dart';
+import '../../domain/profile.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../today/check_in_sheet.dart';
@@ -46,10 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
               children: [
-                const ScreenHeader(
-                  eyebrow: 'PREFERENCES',
-                  title: 'Settings',
-                ),
+                const ScreenHeader(eyebrow: 'PREFERENCES', title: 'Settings'),
                 const SizedBox(height: 6),
                 const Text(
                   'Connection, local context, and the data Becel keeps on this '
@@ -79,11 +77,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _SettingsRow(
                       icon: Icons.monitor_heart_rounded,
                       color: AppColors.green,
-                      title: 'Age for heart-rate zones',
-                      subtitle: snapshot?.age == null
-                          ? 'Add age to estimate personal zones'
-                          : 'Age ${snapshot!.age} · stored on this device',
-                      onTap: () => _editAge(snapshot?.age),
+                      title: 'Body profile',
+                      subtitle: _profileSubtitle(
+                        _local.log.profile,
+                        snapshot?.age,
+                      ),
+                      onTap: () =>
+                          _editProfile(_local.log.profile, snapshot?.age),
                     ),
                   ],
                 ),
@@ -128,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.delete_outline_rounded,
                       color: AppColors.red,
                       title: 'Delete local data',
-                      subtitle: 'Check-ins, strength logs, and age',
+                      subtitle: 'Check-ins, strength logs, and body profile',
                       onTap: _confirmDelete,
                     ),
                   ],
@@ -165,10 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           SizedBox(width: 10),
-                          StatusPill(
-                            label: 'PREVIEW',
-                            color: AppColors.yellow,
-                          ),
+                          StatusPill(label: 'PREVIEW', color: AppColors.yellow),
                         ],
                       ),
                     ),
@@ -250,57 +247,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _editAge(int? currentAge) async {
-    final controller = TextEditingController(text: currentAge?.toString() ?? '');
-    final selected = await showDialog<int>(
+  String _profileSubtitle(BodyProfile? profile, int? nativeAge) {
+    final age = profile?.age ?? nativeAge;
+    if (profile == null || !profile.hasEnergyInputs) {
+      return age == null
+          ? 'Add age, sex, height, and weight'
+          : 'Age $age · add sex, height, and weight';
+    }
+    final sex = profile.sex == BiologicalSex.female ? 'Female' : 'Male';
+    return 'Age ${profile.age} · $sex · ${profile.heightCm!.round()} cm · '
+        '${profile.weightKg!.round()} kg';
+  }
+
+  Future<void> _editProfile(BodyProfile? current, int? nativeAge) async {
+    final ageController = TextEditingController(
+      text: (current?.age ?? nativeAge)?.toString() ?? '',
+    );
+    final heightController = TextEditingController(
+      text: current?.heightCm?.round().toString() ?? '',
+    );
+    final weightController = TextEditingController(
+      text: current?.weightKg?.round().toString() ?? '',
+    );
+    var sex = current?.sex;
+    var invalid = false;
+    final selected = await showDialog<BodyProfile>(
       context: context,
       builder: (context) {
-        var invalid = false;
         return StatefulBuilder(
           builder: (context, updateDialog) => AlertDialog(
-            title: const Text('Age for heart-rate zones'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Age sets your predicted maximum heart rate. It stays on '
-                  'this device and is only used for activity intensity.',
-                  style: AppType.note,
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: (_) => updateDialog(() => invalid = false),
-                  decoration: InputDecoration(
-                    labelText: 'Age',
-                    suffixText: 'years',
-                    hintText: '18–100',
-                    errorText: invalid ? 'Enter an age from 18 to 100.' : null,
+            title: const Text('Body profile'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Becel uses age for heart-rate zones, and all four fields '
+                    'for energy and fitness-age estimates. Values stay on this '
+                    'device.',
+                    style: AppType.note,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: ageController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (_) => updateDialog(() => invalid = false),
+                    decoration: const InputDecoration(
+                      labelText: 'Age',
+                      suffixText: 'years',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final option in BiologicalSex.values)
+                        ChoiceChip(
+                          label: Text(
+                            option == BiologicalSex.female ? 'Female' : 'Male',
+                          ),
+                          selected: sex == option,
+                          onSelected: (_) => updateDialog(() => sex = option),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: heightController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    onChanged: (_) => updateDialog(() => invalid = false),
+                    decoration: const InputDecoration(
+                      labelText: 'Height',
+                      suffixText: 'cm',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: weightController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    onChanged: (_) => updateDialog(() => invalid = false),
+                    decoration: const InputDecoration(
+                      labelText: 'Weight',
+                      suffixText: 'kg',
+                    ),
+                  ),
+                  if (invalid) ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Enter age 18–100, height 120–230 cm, and weight '
+                      '30–250 kg.',
+                      style: TextStyle(color: AppColors.red, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(-1),
-                child: const Text('Clear'),
-              ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Cancel'),
               ),
               FilledButton(
                 onPressed: () {
-                  final age = int.tryParse(controller.text);
-                  if (age == null || age < 18 || age > 100) {
+                  final age = int.tryParse(ageController.text);
+                  final height = double.tryParse(heightController.text);
+                  final weight = double.tryParse(weightController.text);
+                  final profile = BodyProfile(
+                    age: age,
+                    sex: sex,
+                    heightCm: height,
+                    weightKg: weight,
+                  );
+                  if (!profile.hasEnergyInputs) {
                     updateDialog(() => invalid = true);
                     return;
                   }
-                  Navigator.of(context).pop(age);
+                  Navigator.of(context).pop(profile);
                 },
                 child: const Text('Save'),
               ),
@@ -309,22 +383,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
-    controller.dispose();
+    ageController.dispose();
+    heightController.dispose();
+    weightController.dispose();
     if (selected == null || !mounted) return;
-    final age = selected < 0 ? null : selected;
-    final saved = await HealthConnectService.instance.saveFitnessAge(age);
+    final savedProfile = await _local.saveProfile(selected);
+    final savedAge = await HealthConnectService.instance.saveFitnessAge(
+      selected.age,
+    );
+    await _health.refresh(force: true);
     if (!mounted) return;
-    if (saved) {
-      await _health.refresh(force: true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(age == null ? 'Age cleared.' : 'Age saved.')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save the activity profile.')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          savedProfile && savedAge
+              ? 'Body profile saved.'
+              : 'Profile saved locally; the activity age could not update.',
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDelete() async {
@@ -333,8 +410,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete local data?'),
         content: const Text(
-          'This removes morning check-ins, manual strength days, and your age '
-          'from this phone. Health Connect records are not touched.',
+          'This removes morning check-ins, manual strength days, and your body '
+          'profile from this phone. Health Connect records are not touched.',
         ),
         actions: [
           TextButton(
@@ -414,9 +491,7 @@ class _ConnectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           IconChip(
-            icon: connected
-                ? Icons.sensors_rounded
-                : Icons.sensors_off_rounded,
+            icon: connected ? Icons.sensors_rounded : Icons.sensors_off_rounded,
             color: color,
             size: 44,
             iconSize: 21,
@@ -461,7 +536,8 @@ class _CheckInList extends StatelessWidget {
         icon: Icons.wb_sunny_outlined,
         color: AppColors.yellow,
         title: 'No check-ins yet',
-        body: 'A morning check-in adds context Becel cannot measure. It stays '
+        body:
+            'A morning check-in adds context Becel cannot measure. It stays '
             'on this phone.',
       );
     }
@@ -601,9 +677,7 @@ class _SettingsRow extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                color: enabled
-                    ? AppColors.textTertiary
-                    : AppColors.border,
+                color: enabled ? AppColors.textTertiary : AppColors.border,
                 size: 20,
               ),
             ],
@@ -920,10 +994,7 @@ class _AirHapticsTesterState extends State<_AirHapticsTester> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: busy ? null : _scan,
-                  icon: const Icon(
-                    Icons.bluetooth_searching_rounded,
-                    size: 17,
-                  ),
+                  icon: const Icon(Icons.bluetooth_searching_rounded, size: 17),
                   label: Text(_selected == null ? 'Select Air' : 'Change band'),
                 ),
               ),

@@ -81,13 +81,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       icon: Icons.link_rounded,
                       color: AppColors.yellow,
                       title: 'Connect your health data',
-                      body: 'Allow Fitbit Air records in Health Connect to '
+                      body:
+                          'Allow Fitbit Air records in Health Connect to '
                           'build a weekly review.',
                       actionLabel: 'Open data sources',
                       onAction: () => context.go('/data'),
                     )
-                  else if (snapshot.error != null &&
-                      !snapshot.hasAnyRecord)
+                  else if (snapshot.error != null && !snapshot.hasAnyRecord)
                     StateCard(
                       icon: Icons.error_outline_rounded,
                       color: AppColors.red,
@@ -101,7 +101,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       icon: Icons.query_stats_rounded,
                       color: AppColors.yellow,
                       title: 'No week to review yet',
-                      body: snapshot.error ??
+                      body:
+                          snapshot.error ??
                           'Records will appear after Fitbit Air shares them '
                               'with Health Connect. Becel needs at least one '
                               'night or activity day to review.',
@@ -250,7 +251,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   String _stepsSummary(HealthSnapshot snapshot) {
-    final values = (snapshot.trends?.steps ?? const []).whereType<int>().toList();
+    final values = (snapshot.trends?.steps ?? const [])
+        .whereType<int>()
+        .toList();
     if (values.isEmpty) return 'No step records this week';
     final total = values.fold<int>(0, (sum, value) => sum + value);
     return '${_formatNumber(total)} steps total · '
@@ -258,7 +261,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   String _heartSummary(HealthSnapshot snapshot) {
-    final values = (snapshot.trends?.hrAvg ?? const []).whereType<int>().toList();
+    final values = (snapshot.trends?.hrAvg ?? const [])
+        .whereType<int>()
+        .toList();
     if (values.isEmpty) return 'No heart-rate records this week';
     final average = (values.reduce((a, b) => a + b) / values.length).round();
     return 'Daily average $average bpm across ${values.length} day'
@@ -401,9 +406,7 @@ class _WeekCard extends StatelessWidget {
                 child: _WeekStat(
                   label: 'STRENGTH',
                   value: '${review.strengthDays} / 2',
-                  note: review.strengthDays >= 2
-                      ? 'Target met'
-                      : 'Days logged',
+                  note: review.strengthDays >= 2 ? 'Target met' : 'Days logged',
                   color: AppColors.violet,
                 ),
               ),
@@ -534,20 +537,22 @@ class _SleepWeekCard extends StatelessWidget {
         icon: Icons.bedtime_off_rounded,
         color: AppColors.blue,
         title: 'No qualifying sleep this week',
-        body: 'Sessions of at least 3 hours appear here. Naps are excluded '
+        body:
+            'Sessions of at least 3 hours appear here. Naps are excluded '
             'from the weekly average.',
       );
     }
     final cutoff = now.subtract(const Duration(days: 7));
-    final recent = sessions
-        .where(
-          (night) =>
-              night.minutes >= 180 &&
-              !night.end.isBefore(cutoff) &&
-              !night.end.isAfter(now),
-        )
-        .toList()
-      ..sort((a, b) => a.end.compareTo(b.end));
+    final recent =
+        sessions
+            .where(
+              (night) =>
+                  night.minutes >= 180 &&
+                  !night.end.isBefore(cutoff) &&
+                  !night.end.isAfter(now),
+            )
+            .toList()
+          ..sort((a, b) => a.end.compareTo(b.end));
     final spread = trend.bedtimeSpreadMinutes;
     return SurfaceCard(
       padding: const EdgeInsets.all(16),
@@ -574,7 +579,11 @@ class _SleepWeekCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '${trend.isWithinAdultRange ? 'Inside' : trend.isShort ? 'Below' : 'Above'} '
+            '${trend.isWithinAdultRange
+                ? 'Inside'
+                : trend.isShort
+                ? 'Below'
+                : 'Above'} '
             'the 7–9h adult range. '
             '${spread == null ? 'Not enough nights for bedtime spread.' : 'Bedtime varied by ${formatDurationMinutes(spread)}.'}',
             style: AppType.caption,
@@ -586,8 +595,12 @@ class _SleepWeekCard extends StatelessWidget {
                   'Sleep by night: ${recent.map((night) => '${formatDayShort(night.end)} ${formatDurationMinutes(night.minutes)}').join(', ')}.',
               child: ExcludeSemantics(
                 child: TrendBars(
-                  values: recent.map((night) => night.minutes.toDouble()).toList(),
-                  labels: recent.map((night) => formatDayShort(night.end)).toList(),
+                  values: recent
+                      .map((night) => night.minutes.toDouble())
+                      .toList(),
+                  labels: recent
+                      .map((night) => formatDayShort(night.end))
+                      .toList(),
                   color: AppColors.blue,
                   valueLabelBuilder: (value) =>
                       formatDurationMinutes(value.round()),
@@ -667,7 +680,9 @@ class _ActivityWeekCard extends StatelessWidget {
               ),
             ),
             Text(
-              review.strengthDays >= 2 ? 'Target met' : 'Add ${2 - review.strengthDays}',
+              review.strengthDays >= 2
+                  ? 'Target met'
+                  : 'Add ${2 - review.strengthDays}',
               style: AppType.caption.copyWith(color: AppColors.violet),
             ),
           ],
@@ -732,7 +747,8 @@ class _RecoveryTrendState extends State<_RecoveryTrend> {
         icon: Icons.battery_charging_full_rounded,
         color: AppColors.teal,
         title: 'Recovery history is building',
-        body: 'A few mornings of HRV and resting heart rate are needed before '
+        body:
+            'A few mornings of HRV and resting heart rate are needed before '
             'date-specific scores appear.',
       );
     }
@@ -760,7 +776,10 @@ class _RecoveryTrendState extends State<_RecoveryTrend> {
               ),
               const SizedBox(width: 10),
               const Expanded(
-                child: Text('Personal recovery range', style: AppType.cardTitle),
+                child: Text(
+                  'Personal recovery range',
+                  style: AppType.cardTitle,
+                ),
               ),
               const StatusPill(label: 'EXPERIMENTAL', color: AppColors.teal),
             ],
@@ -1081,18 +1100,12 @@ class _MetricTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           if (!hasData)
-            const Text(
-              'No records in the last 7 days.',
-              style: AppType.caption,
-            )
+            const Text('No records in the last 7 days.', style: AppType.caption)
           else
             Semantics(
               label:
-                  '$title: ${[
-                    for (var index = 0; index < values.length; index++)
-                      if (values[index] != null)
-                        '${index < labels.length ? labels[index] : 'day ${index + 1}'} ${valueLabelBuilder?.call(values[index]!) ?? values[index]!.round()}',
-                  ].join(', ')}.',
+                  '$title: ${[for (var index = 0; index < values.length; index++)
+                    if (values[index] != null) '${index < labels.length ? labels[index] : 'day ${index + 1}'} ${valueLabelBuilder?.call(values[index]!) ?? values[index]!.round()}'].join(', ')}.',
               child: ExcludeSemantics(
                 child: TrendBars(
                   values: values,

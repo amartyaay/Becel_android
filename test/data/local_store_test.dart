@@ -1,4 +1,5 @@
 import 'package:becel/data/local_store.dart';
+import 'package:becel/domain/profile.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,6 +96,27 @@ void main() {
     expect(cleared, isTrue);
   });
 
+  test('saves and reloads the body profile with local context', () async {
+    final store = LocalStore.instance;
+    const profile = BodyProfile(
+      age: 35,
+      sex: BiologicalSex.female,
+      heightCm: 168,
+      weightKg: 64,
+    );
+
+    expect(await store.saveProfile(profile), isTrue);
+    expect(store.log.profile?.age, 35);
+    expect(store.log.profile?.sex, BiologicalSex.female);
+    expect(stored, contains('"profile"'));
+
+    store.resetForTest();
+    await store.ensureLoaded();
+
+    expect(store.log.profile?.heightCm, 168);
+    expect(store.log.profile?.weightKg, 64);
+    expect(store.log.profile?.hasEnergyInputs, isTrue);
+  });
   test('falls back to session-only data when the channel is missing', () async {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
