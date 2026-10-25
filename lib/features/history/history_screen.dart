@@ -435,20 +435,12 @@ class _PatternsCard extends StatelessWidget {
       accent: AppColors.violet,
       child: rows.isEmpty
           ? const Text(
-              'Patterns appear once you have at least 3 days on each side of a '
-              'comparison (for example, after hard and after easy days).',
+              'Patterns appear after a few more days of data.',
               style: AppType.note,
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ...rows,
-                Text(
-                  'Next-morning recovery averages from your last 14 days. '
-                  'Associations, not proof of cause.',
-                  style: AppType.caption.copyWith(fontSize: 11),
-                ),
-              ],
+              children: [...rows],
             ),
     );
   }

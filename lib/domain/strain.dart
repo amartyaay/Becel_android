@@ -15,11 +15,21 @@ import 'strength.dart';
 const strainScaleK = 130.0;
 const strainMax = 21.0;
 
-/// Load counts from 10 % heart-rate reserve. Below that is rest; above it,
-/// everyday movement (walking, chores, stairs) builds a small baseline the
-/// way WHOOP's day strain does. A 30 % floor, tried first, scored real
-/// walks at zero for users with a higher resting HR.
-const strainFloorHrr = 0.10;
+/// Day strain counts from 20 % heart-rate reserve. ACSM calls everything
+/// under 30 % "very light"; below 20 % is sitting with a slightly raised
+/// pulse (posture, caffeine, digestion), which a 10 % floor counted as
+/// strain all day long. Walking is also credited by cadence (see
+/// [cadenceHrr]), so real walks still register even when wrist HR lags.
+const strainFloorHrr = 0.20;
+
+/// HRR equivalent of walking cadence: ≥ 100 steps/min is moderate (~3 METs,
+/// ≈ 40 % HRR) and ≥ 130 vigorous (~6 METs, ≈ 60 % HRR) (Tudor-Locke et al.,
+/// CADENCE-Adults 2018). Used as a floor for that minute's intensity.
+double cadenceHrr(double stepsPerMinute) => stepsPerMinute >= vigorousCadence
+    ? 0.60
+    : stepsPerMinute >= moderateCadence
+    ? 0.40
+    : 0.0;
 
 /// Session-RPE units to Banister-TRIMP equivalence for resistance work.
 ///
@@ -175,19 +185,21 @@ List<DayStrain> dailyStrain({
     if (gap > 3) continue;
     final bpm = (previous.value + current.value) / 2;
     final hrr = (bpm - restingBpm) / reserve;
-    final load = banisterTrimpPerMinute(hrr, sex) * gap;
+    final spm = cadence[current.at.millisecondsSinceEpoch ~/ 60000] ?? 0;
+    // Brisk walking counts at least at the intensity its cadence implies.
+    final effort = math.max(hrr, cadenceHrr(spm));
+    final load = banisterTrimpPerMinute(effort, sex) * gap;
     cardio[day] = (cardio[day] ?? 0) + load;
-    final trainingLoadPart = trainingTrimpPerMinute(hrr, sex) * gap;
+    final trainingLoadPart = trainingTrimpPerMinute(effort, sex) * gap;
     training[day] = (training[day] ?? 0) + trainingLoadPart;
     // Everyday load: easy minutes only, outside any recorded workout, so
-    // warm-ups, cool-downs, and the 10–30 % part of hard minutes stay out.
-    if (hrr < trainingFloorHrr && !inWorkout(current.at)) {
+    // warm-ups, cool-downs, and the easy part of hard minutes stay out.
+    if (effort < trainingFloorHrr && !inWorkout(current.at)) {
       ambient[day] = (ambient[day] ?? 0) + load;
     }
     perMinute[current.at.millisecondsSinceEpoch ~/ 60000] = load;
     perMinuteTraining[current.at.millisecondsSinceEpoch ~/ 60000] =
         trainingLoadPart;
-    final spm = cadence[current.at.millisecondsSinceEpoch ~/ 60000] ?? 0;
     if (hrr >= 0.6 || spm >= vigorousCadence) {
       vigorous[day] = (vigorous[day] ?? 0) + gap;
     } else if (hrr >= 0.4 || spm >= moderateCadence) {
@@ -479,8 +491,9 @@ class StrainTarget {
   final String reason;
 }
 
-/// Everyday (non-training) strain the target bands assume: strain 5.
-final referenceAmbientTrimp = trimpForStrain(5);
+/// Everyday (non-training) strain the target bands assume: strain 2, a
+/// day of sitting, errands, and easy walking under the 20 % floor.
+final referenceAmbientTrimp = trimpForStrain(2);
 
 /// The user's typical non-training TRIMP: median over the last 28 fully
 /// covered days before today (needs 7). Null when there is too little data.
@@ -505,11 +518,13 @@ StrainTarget strainTarget({
   required TrainingLoad? load,
   double? ambient,
 }) {
+  // Everyday strain 2 + a session: Train ≈ 45–75 min of steady Z2–Z3,
+  // Push ≈ intervals or a long tempo, Recover ≈ an easy walk or spin.
   var (low, high, label) = switch (recovery) {
-    null => (8.0, 13.0, 'Moderate'),
-    >= 67 => (14.0, 18.0, 'Push'),
-    >= 34 => (10.0, 14.0, 'Train'),
-    _ => (4.0, 9.0, 'Recover'),
+    null => (6.0, 10.0, 'Moderate'),
+    >= 67 => (13.0, 17.0, 'Push'),
+    >= 34 => (8.0, 12.0, 'Train'),
+    _ => (2.0, 7.0, 'Recover'),
   };
   var reason = recovery == null
       ? 'Recovery is still calibrating, so the target is moderate.'

@@ -38,6 +38,7 @@ class VitalsScreen extends StatelessWidget {
                     onBack: () => Navigator.of(context).maybePop(),
                     eyebrow: 'Heart · breath · temperature',
                     title: 'Vitals',
+                    trailing: const GuideButton(section: 'vitals'),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null)
@@ -55,14 +56,6 @@ class VitalsScreen extends StatelessWidget {
                     _OvernightCard(snapshot: snapshot),
                     const SizedBox(height: 12),
                     _FitnessCard(fitness: snapshot.cardioFitness),
-                    const SizedBox(height: 12),
-                    const InfoNote(
-                      text:
-                          'Fitbit Air does not write blood oxygen (SpO2) or VO2 '
-                          'max to Health Connect, so Becel does not show them.',
-                      icon: Icons.info_outline_rounded,
-                      color: AppColors.textTertiary,
-                    ),
                   ],
                 ],
               ),
@@ -127,13 +120,6 @@ class _HeartTodayCard extends StatelessWidget {
             color: AppColors.bandRed,
             height: 110,
             emptyLabel: 'No heart rate today yet',
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '5-minute averages for the chart. Strain and calories use cleaned '
-            '1-minute data (${snapshot.performance.clean.corrected} artifact '
-            'minutes removed in 28 days).',
-            style: AppType.caption.copyWith(fontSize: 11),
           ),
         ],
       ),
@@ -213,8 +199,7 @@ class _ZonesCard extends StatelessWidget {
                 if (max.source != MaxHrSource.tested) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Know your true max from a field test? Enter it in Settings > '
-                    'Profile for the most accurate zones and strain.',
+                    'Tested max HR? Add it in Settings.',
                     style: AppType.caption.copyWith(color: AppColors.teal),
                   ),
                 ],
@@ -312,12 +297,6 @@ class _OvernightCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'A breathing rise of 1+/min or skin temp of +0.5 °C lowers recovery and, '
-            'together with resting HR, can trigger the body-strain alert.',
-            style: AppType.caption.copyWith(fontSize: 11),
-          ),
         ],
       ),
     );
@@ -413,17 +392,9 @@ class _FitnessCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   f.category == null
-                      ? 'The range is too wide to place you in a fitness band '
-                            'yet. A tested max HR narrows it.'
+                      ? 'Range too wide to place you in a band yet.'
                       : '${f.category} for your age and sex.',
                   style: AppType.body,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Uth ratio: 15.3 × max HR ÷ resting HR. With an age-predicted '
-                  'max the error roughly doubles, so a tested max HR narrows '
-                  'this range.',
-                  style: AppType.caption.copyWith(fontSize: 11),
                 ),
               ],
             ),

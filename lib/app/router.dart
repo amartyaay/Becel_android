@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/data/data_screen.dart';
 import '../features/energy/energy_screen.dart';
+import '../features/guide/guide_screen.dart';
 import '../features/health/vitals_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/recovery/recovery_screen.dart';
@@ -67,6 +68,11 @@ GoRouter buildRouter() => GoRouter(
     GoRoute(path: '/energy', builder: (context, state) => const EnergyScreen()),
     GoRoute(path: '/vitals', builder: (context, state) => const VitalsScreen()),
     GoRoute(path: '/data', builder: (context, state) => const DataScreen()),
+    GoRoute(
+      path: '/guide',
+      builder: (context, state) =>
+          GuideScreen(initialSection: state.uri.queryParameters['s']),
+    ),
     // Older links.
     GoRoute(path: '/activity', redirect: (context, state) => '/training'),
     GoRoute(path: '/strain', redirect: (context, state) => '/training'),

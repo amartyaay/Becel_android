@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../domain/estimates.dart';
@@ -113,9 +115,59 @@ class HealthStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True while the shown snapshot is the cached copy from the last launch
+  /// and fresh Health Connect data is still loading.
+  bool get showingCached => _showingCached;
+  bool _showingCached = false;
+  bool _restoreTried = false;
+
   Future<void> ensureLoaded() {
     if (_snapshot != null) return Future<void>.value();
+    if (!_restoreTried) {
+      _restoreTried = true;
+      // Show the last read immediately, then refresh underneath it.
+      _restoreCache();
+    }
     return refresh();
+  }
+
+  Future<void> _restoreCache() async {
+    final generation = _generation;
+    try {
+      await LocalStore.instance.ensureLoaded();
+      final text = await LocalStore.instance.readSnapshotCache();
+      if (text == null || text.isEmpty) return;
+      final decoded = await compute(_decodeCache, text);
+      if (decoded == null || generation != _generation || _raw != null) return;
+      Map<String, dynamic> part(String key) =>
+          (decoded[key] as Map?)?.cast<String, dynamic>() ?? const {};
+      final raw = _RawRead(
+        inspection: HealthConnectInspection.fromMap(part('inspect')),
+        summary: HealthSummary.fromMap(part('summary')),
+        heart: HeartDetail.fromMap(part('heart')),
+        sleep: SleepDetail.fromMap(part('sleep')),
+        activity: ActivityDetail.fromMap(part('activity')),
+        body: BodyDetail.fromMap(part('body')),
+        trends: Trends7d.fromMap(part('trends')),
+        age: decoded['age'] as int?,
+      );
+      final snapshot = _compose(raw);
+      // A live read may have finished while the cache was decoding.
+      if (generation != _generation || _raw != null) return;
+      _snapshot = snapshot;
+      _showingCached = true;
+      notifyListeners();
+    } catch (_) {
+      // A missing or outdated cache just means a normal first load.
+    }
+  }
+
+  Future<void> _saveCache(int? age) async {
+    final raw = Map<String, Object?>.from(_service.lastRaw)..['age'] = age;
+    try {
+      final text = await compute(_encodeCache, raw);
+      if (text != null) await LocalStore.instance.writeSnapshotCache(text);
+    } catch (_) {}
   }
 
   Future<void> refresh({bool force = false}) {
@@ -172,7 +224,9 @@ class HealthStore extends ChangeNotifier {
       final snapshot = _compose(raw);
       if (generation != _generation) return;
       _snapshot = snapshot;
+      _showingCached = false;
       _error = snapshot.error;
+      if (snapshot.error == null && snapshot.hasAccess) _saveCache(age);
     } catch (error) {
       if (generation == _generation) _error = error.toString();
     } finally {
@@ -210,6 +264,7 @@ class HealthStore extends ChangeNotifier {
       bodyFatPercent: body?.bodyFatPercent ?? stored?.bodyFatPercent,
       maxHrOverride: stored?.maxHrOverride,
       sleepNeedMinutes: stored?.sleepNeedMinutes,
+      correctSleepOnset: stored?.correctSleepOnset ?? true,
     );
     final performance = buildPerformance(
       heart: raw.heart,
@@ -265,6 +320,24 @@ class HealthStore extends ChangeNotifier {
     _inFlight = null;
     _raw = null;
     _retried = true; // Tests control their own retries.
+    _showingCached = false;
+    _restoreTried = true; // Tests start from live reads only.
+  }
+}
+
+const _cacheVersion = 1;
+
+Map<String, dynamic>? _decodeCache(String text) {
+  final decoded = jsonDecode(text);
+  if (decoded is! Map || decoded['version'] != _cacheVersion) return null;
+  return (decoded['raw'] as Map?)?.cast<String, dynamic>();
+}
+
+String? _encodeCache(Map<String, Object?> raw) {
+  try {
+    return jsonEncode({'version': _cacheVersion, 'raw': raw});
+  } catch (_) {
+    return null; // A value the platform sent that JSON cannot hold.
   }
 }
 

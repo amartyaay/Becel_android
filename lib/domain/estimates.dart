@@ -25,15 +25,29 @@ abstract final class RecoveryModel {
   /// you: chronic short sleep should never read as neutral.
   static const shortSleepPercent = 75;
 
-  /// Score = 100 × Φ(slope × composite z): a typical morning for you
-  /// (z = 0) reads 50 %. The bands are evidence thresholds, so the number,
-  /// colour, word, and training advice can never disagree: green (≥ 67 %)
-  /// is z ≥ +0.5 (clearly better than usual), red (≤ 25 %) is z ≤ −0.75.
-  static const offset = 0.0;
-  static const slope = 0.9;
+  /// Score = 100 × Φ(offset + slope × composite z), with one slope above
+  /// and one below a typical morning, so the familiar WHOOP-style bands line
+  /// up with evidence thresholds:
+  /// - a typical morning for you (z = 0) reads 58 %, mid-yellow, like the
+  ///   ~58 % average WHOOP reports for its members;
+  /// - green (≥ 67 %) needs z ≥ +0.5, clearly better than usual;
+  /// - red (≤ 33 %) needs z ≤ −0.75, clearly worse than usual.
+  /// A single 50 %-centred curve read as "low" to people used to those apps.
+  static const offset = 0.20;
+  static const slopeUp = 0.48;
+  static const slopeDown = 0.86;
+  static const typical = 58;
 
   static const green = 67;
-  static const red = 25;
+  static const red = 33;
+
+  static int scoreFor(double composite) =>
+      (100 *
+              _normalCdf(
+                offset + (composite >= 0 ? slopeUp : slopeDown) * composite,
+              ))
+          .round()
+          .clamp(1, 99);
 
   static String get weightsLabel =>
       'HRV ${(hrvWeight * 100).round()}% · resting HR '
@@ -53,7 +67,8 @@ final recoveryMethod =
     'weighted z-scores (${RecoveryModel.weightsLabel}), scaled for HRV and '
     'resting HR moving together, are '
     'mapped to 0–100% with a normal curve centred on your typical morning, '
-    'which reads 50%. ${RecoveryModel.green}% or more means clearly better '
+    'which reads ${RecoveryModel.typical}%. ${RecoveryModel.green}% or more '
+    'means clearly better '
     'than usual (go hard); ${RecoveryModel.red}% or less means clearly worse '
     '(recover). HRV counts at most +1.5 SD, and not at all when resting HR '
     'is also high. A respiratory-rate rise of 1+ breath/min or skin '
@@ -419,10 +434,7 @@ RecoveryReadiness recoveryReadiness({
               RecoveryModel.sleepWeight * sleepZ) /
           RecoveryModel.compositeScale +
       adjustment;
-  final score =
-      (100 * _normalCdf(RecoveryModel.offset + RecoveryModel.slope * composite))
-          .round()
-          .clamp(1, 99);
+  final score = RecoveryModel.scoreFor(composite);
 
   return RecoveryReadiness(
     hasSleepSession: true,

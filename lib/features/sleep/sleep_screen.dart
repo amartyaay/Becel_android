@@ -46,6 +46,7 @@ class _SleepScreenState extends State<SleepScreen> {
                   const ScreenHeader(
                     eyebrow: 'Need · debt · timing',
                     title: 'Sleep',
+                    trailing: GuideButton(section: 'sleep'),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null || coach == null)
@@ -143,8 +144,7 @@ class _LastNightCard extends StatelessWidget {
     final onsetNote = switch (night.onsetSource) {
       OnsetSource.device => null,
       OnsetSource.heartRate =>
-        'Onset moved ${night.trimmedMinutes} min later: your heart rate was '
-            'still at waking levels.',
+        'Start moved ${night.trimmedMinutes} min later (heart rate was awake)',
       OnsetSource.user =>
         'Onset set by you (${night.trimmedMinutes} min trimmed).',
     };
@@ -227,12 +227,6 @@ class _LastNightCard extends StatelessWidget {
               child: StageBar(segments: stages, height: 16),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Wrist stage estimates agree with lab sleep studies only moderately; '
-            'Becel scores duration and timing, not stages.',
-            style: AppType.caption.copyWith(fontSize: 11),
-          ),
         ],
       ),
     );
@@ -288,13 +282,6 @@ class _TonightCard extends StatelessWidget {
             label: 'Sleep debt (a third repaid)',
             minutes: coach.debtNeed,
             color: AppColors.bandYellow,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Baseline is editable in Settings > Profile. Debt is the last 3 '
-            'nights’ shortfall (${formatDurationMinutes(coach.debtMinutes)}); '
-            'repaying a third a night is realistic.',
-            style: AppType.caption.copyWith(fontSize: 11),
           ),
         ],
       ),
@@ -396,13 +383,6 @@ class _ConsistencyCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Spread is the standard deviation of your sleep midpoint. Under '
-            '±45 min is regular; irregular timing blunts recovery even when '
-            'hours are fine.',
-            style: AppType.caption.copyWith(fontSize: 11),
           ),
         ],
       ),

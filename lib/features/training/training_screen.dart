@@ -59,6 +59,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                   const ScreenHeader(
                     eyebrow: 'Strain · load · zones',
                     title: 'Training',
+                    trailing: GuideButton(section: 'strain'),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null)
@@ -114,14 +115,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
       const SectionHeader(title: 'Workouts', caption: 'LAST 7 DAYS'),
       const SizedBox(height: 8),
       _WorkoutList(snapshot: snapshot),
-      const SizedBox(height: 16),
-      SourceLine(
-        text:
-            'Strain = Banister TRIMP on cleaned minute HR, mapped to 0–21. '
-            '${p.clean.corrected} artifact minute${p.clean.corrected == 1 ? '' : 's'} '
-            'removed in 28 days.',
-        icon: Icons.functions_rounded,
-      ),
     ];
   }
 }
@@ -320,8 +313,7 @@ class _LoadTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Line = your 28-day average day strain '
-            '(${averageStrain?.toStringAsFixed(1) ?? '—'}).',
+            'Line: 28-day average (${averageStrain?.toStringAsFixed(1) ?? '—'})',
             style: AppType.caption.copyWith(fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -584,9 +576,7 @@ class _WorkoutList extends StatelessWidget {
         icon: Icons.fitness_center_rounded,
         color: AppColors.textSecondary,
         title: 'No workouts this week',
-        body:
-            'Workouts recorded by Fitbit Air or logged in Google Health appear '
-            'here with their strain.',
+        body: 'Workouts from Fitbit Air or Google Health appear here.',
       );
     }
     return Column(

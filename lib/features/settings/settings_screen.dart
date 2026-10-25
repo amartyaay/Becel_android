@@ -100,15 +100,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  'Weight, height, and body fat are read from Google Health '
-                  '(or any app sharing with Health Connect). Manual values are '
-                  'only a fallback.',
-                  style: AppType.caption,
-                ),
+              const SizedBox(height: 24),
+              const _GroupLabel('Learn'),
+              _SettingsCard(
+                children: [
+                  _SettingsRow(
+                    icon: Icons.menu_book_rounded,
+                    color: AppColors.sleep,
+                    title: 'How Becel works',
+                    subtitle: 'What each number means and how it is calculated',
+                    onTap: () => context.push('/guide'),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               const _GroupLabel('Your data'),
@@ -183,16 +186,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  'All metrics are calculated on this phone from Health '
-                  'Connect records. They are training and wellness '
-                  'guidance, not medical advice.',
-                  style: AppType.caption,
-                ),
               ),
               if (kDebugMode) ...[
                 const SizedBox(height: 24),

@@ -113,16 +113,17 @@ void main() {
       expect(strainFromTrimp(trimpForStrain(12)), closeTo(12, 0.01));
     });
 
-    test('resting heart rate below 10% HRR adds no load', () {
+    test('heart rate below 20% HRR adds no load', () {
       expect(banisterTrimpPerMinute(0.05, BiologicalSex.male), 0);
-      expect(banisterTrimpPerMinute(0.3, BiologicalSex.male), greaterThan(0.2));
+      expect(banisterTrimpPerMinute(0.19, BiologicalSex.male), 0);
+      expect(banisterTrimpPerMinute(0.3, BiologicalSex.male), greaterThan(0.1));
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.male),
-        closeTo(1.642, 0.005),
+        closeTo(1.530, 0.005),
       );
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.female),
-        closeTo(1.836, 0.005),
+        closeTo(1.698, 0.005),
       );
     });
 
@@ -196,21 +197,26 @@ void main() {
       expect(days.single.trimp, closeTo(96, 1));
     });
 
-    test('everyday HR counts toward day strain but not training load', () {
-      final now = DateTime(2026, 10, 25, 20);
-      // 10 hours at ~20 % HRR: walking around the house, no exercise.
-      final ambient = minutes(DateTime(2026, 10, 25, 9), 600, (_) => 78);
-      final day = dailyStrain(
-        cleanedMinutes: ambient,
-        restingBpm: 52,
-        maxBpm: 184,
-        sex: BiologicalSex.male,
-        now: now,
-        days: 1,
-      ).single;
-      expect(day.strain, greaterThan(1));
-      expect(day.trainingTrimp, 0);
-    });
+    test(
+      'sitting adds no strain; pottering adds some but no training load',
+      () {
+        final now = DateTime(2026, 10, 25, 20);
+        DayStrain dayAt(double bpm) => dailyStrain(
+          cleanedMinutes: minutes(DateTime(2026, 10, 25, 9), 600, (_) => bpm),
+          restingBpm: 52,
+          maxBpm: 184,
+          sex: BiologicalSex.male,
+          now: now,
+          days: 1,
+        ).single;
+        // 10 hours sitting with a slightly raised pulse (~20 % HRR).
+        expect(dayAt(78).strain, 0);
+        // 10 hours on your feet around the house (~27 % HRR).
+        final pottering = dayAt(88);
+        expect(pottering.strain, greaterThan(1));
+        expect(pottering.trainingTrimp, 0);
+      },
+    );
 
     test('strain target adds the session to the user\'s everyday strain', () {
       final reference = strainTarget(
@@ -218,8 +224,8 @@ void main() {
         load: null,
         ambient: referenceAmbientTrimp,
       );
-      expect(reference.low, 10);
-      expect(reference.high, 14);
+      expect(reference.low, 8);
+      expect(reference.high, 12);
 
       // Someone whose ordinary day already reads strain 8 needs a higher
       // band for the same session dose.
@@ -228,9 +234,9 @@ void main() {
         load: null,
         ambient: trimpForStrain(8),
       );
-      expect(active.low, greaterThan(11));
-      expect(active.high, greaterThan(14.5));
-      expect(active.high, lessThan(strainMax));
+      // Shifted up, but never by more than 2 strain.
+      expect(active.low, 10);
+      expect(active.high, 14);
       expect(active.reason, contains('everyday strain'));
     });
 

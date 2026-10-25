@@ -1,4 +1,4 @@
-﻿import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import '../domain/energy.dart';
@@ -11,6 +11,10 @@ class HealthConnectService {
   static const _channel = MethodChannel('com.becel/health_connect');
 
   final dataRevision = ValueNotifier<int>(0);
+
+  /// Raw platform maps from the latest reads, kept so the last data can be
+  /// cached on the phone and shown instantly on the next launch.
+  final lastRaw = <String, Map<String, dynamic>>{};
   HeartDetail? _heartCache;
   DateTime? _heartCacheAt;
   Future<HeartDetail>? _heartRead;
@@ -25,6 +29,7 @@ class HealthConnectService {
   Future<HealthConnectInspection> inspect() async {
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>('inspect');
+      if (result != null) lastRaw['inspect'] = result;
       return HealthConnectInspection.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return HealthConnectInspection.error(error.message ?? error.code);
@@ -53,6 +58,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readSummary',
       );
+      if (result != null) lastRaw['summary'] = result;
       return HealthSummary.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return HealthSummary.error(error.message ?? error.code);
@@ -96,6 +102,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readHeartDetail',
       );
+      if (result != null) lastRaw['heart'] = result;
       return HeartDetail.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return HeartDetail.error(error.message ?? error.code);
@@ -139,6 +146,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readSleepDetail',
       );
+      if (result != null) lastRaw['sleep'] = result;
       return SleepDetail.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return SleepDetail.error(error.message ?? error.code);
@@ -154,6 +162,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readTrends7d',
       );
+      if (result != null) lastRaw['trends'] = result;
       return Trends7d.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return Trends7d.error(error.message ?? error.code);
@@ -169,6 +178,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readActivityDetail',
       );
+      if (result != null) lastRaw['activity'] = result;
       return ActivityDetail.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return ActivityDetail.error(error.message ?? error.code);
@@ -184,6 +194,7 @@ class HealthConnectService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'readBodyDetail',
       );
+      if (result != null) lastRaw['body'] = result;
       return BodyDetail.fromMap(result ?? const {});
     } on PlatformException catch (error) {
       return BodyDetail.error(error.message ?? error.code);

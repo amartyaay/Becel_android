@@ -5,6 +5,7 @@ import 'package:becel/features/shell/shell_screen.dart';
 import 'package:becel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:becel/features/guide/guide_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -271,8 +272,27 @@ void main() {
     await _scrollTo(tester, find.text('Eaten today'));
     expect(find.textContaining('g/kg'), findsWidgets);
     await _scrollTo(tester, find.text('Eaten vs burned · 7 days'));
-    await _scrollTo(tester, find.text('WHY THEY DIFFER'));
-    expect(find.textContaining('heart-rate reserve'), findsWidgets);
+    await _scrollTo(tester, find.text('Becel vs Fitbit'));
+    // Explanations live in the guide, not on the screen.
+    expect(find.textContaining('heart-rate reserve'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('The info button opens the guide at the right section', (
+    tester,
+  ) async {
+    _setPhone(tester);
+    _installAthlete();
+    await _boot(tester);
+    GoRouter.of(tester.element(find.byType(BecelNavBar))).push('/energy');
+    await _settle(tester);
+    final info = find.byTooltip('How this works');
+    expect(info, findsOneWidget);
+    await tester.tap(info, warnIfMissed: true);
+    await _settle(tester);
+    // Opens already scrolled to, and expanded at, the Calories section.
+    expect(find.byType(GuideScreen), findsOneWidget);
+    expect(find.textContaining('Levine 2000'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

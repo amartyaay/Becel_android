@@ -167,10 +167,7 @@ class _TodayScreenState extends State<TodayScreen> {
           icon: Icons.person_outline_rounded,
           color: AppColors.accent,
           title: 'Add age and sex',
-          body:
-              'Health Connect has no age or sex. Add them once in Settings to '
-              'unlock calories burned and personal zones. Weight and height '
-              'are read from Google Health when recorded there.',
+          body: 'Needed for calories burned and your heart-rate zones.',
           actionLabel: 'Open settings',
           onAction: () => openSettings(context),
         ),
@@ -513,20 +510,10 @@ class _BurnCard extends StatelessWidget {
             Text('Waiting for data', style: AppType.cardTitle),
             const SizedBox(height: 4),
             Text(
-              missing.isEmpty
-                  ? 'Calculating…'
-                  : 'Needs ${missing.join(', ')}. Becel shows calories only '
-                        'when every input is available, so the number is never '
-                        'a guess.',
+              missing.isEmpty ? 'Calculating…' : 'Needs ${missing.join(', ')}.',
               style: AppType.note,
             ),
             if (needsSettings) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Weight and height are read from Google Health when it shares '
-                'them; age and sex are set once in Settings.',
-                style: AppType.caption,
-              ),
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: () => openSettings(context),
@@ -675,14 +662,15 @@ class _BurnCard extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Your body burns about $perHour kcal an hour at rest, even asleep, '
-            'so most of any day’s total is not activity. Moving added '
-            '${formatNumber(today.exerciseKcal.round())} today.'
-            '${energy.deviceTotalToday == null ? '' : ' Fitbit: ${formatNumber(energy.deviceTotalToday!)}${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}.'}',
-            style: AppType.caption,
-          ),
+          if (energy.deviceTotalToday != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Fitbit ${formatNumber(energy.deviceTotalToday!)}'
+              '${delta == null || delta.abs() < 50 ? '' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())})'}'
+              ' · resting $perHour kcal/h',
+              style: AppType.caption,
+            ),
+          ],
           if (stale) ...[
             const SizedBox(height: 10),
             Text(

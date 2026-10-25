@@ -104,6 +104,31 @@ class MainActivity : FlutterFragmentActivity() {
                     writeLocalLog(call.argument<String>("json") ?: "{}"),
                 )
                 "clear" -> result.success(clearLocalData())
+                // Last Health Connect read, so the next launch can show it
+                // instantly while fresh data loads. App-private, never shared.
+                "readCache" -> Thread {
+                    val text = try {
+                        File(filesDir, SNAPSHOT_CACHE_FILE)
+                            .takeIf { it.exists() }
+                            ?.readText(Charsets.UTF_8)
+                    } catch (error: Exception) {
+                        null
+                    }
+                    runOnUiThread { result.success(text) }
+                }.start()
+                "writeCache" -> {
+                    val json = call.argument<String>("json") ?: ""
+                    Thread {
+                        val saved = try {
+                            val temp = File(filesDir, "$SNAPSHOT_CACHE_FILE.tmp")
+                            temp.writeText(json, Charsets.UTF_8)
+                            temp.renameTo(File(filesDir, SNAPSHOT_CACHE_FILE))
+                        } catch (error: Exception) {
+                            false
+                        }
+                        runOnUiThread { result.success(saved) }
+                    }.start()
+                }
                 "shareText" -> shareText(
                     call.argument<String>("text") ?: "",
                     result,
@@ -576,6 +601,7 @@ class MainActivity : FlutterFragmentActivity() {
             .edit()
             .clear()
             .commit()
+        File(filesDir, SNAPSHOT_CACHE_FILE).delete()
         return logCleared && profileCleared
     }
 
@@ -1098,6 +1124,7 @@ class MainActivity : FlutterFragmentActivity() {
         private const val LOCAL_CHANNEL = "com.becel/local"
         private const val LOCAL_LOG_PREFS = "becel_local_log"
         private const val LOCAL_LOG_KEY = "log_v1"
+        private const val SNAPSHOT_CACHE_FILE = "last_read_v1.json"
         private const val FITNESS_PROFILE_PREFS = "becel_fitness_profile"
         private const val FITNESS_AGE_KEY = "age"
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"

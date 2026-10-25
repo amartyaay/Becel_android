@@ -71,6 +71,29 @@ class LocalStore extends ChangeNotifier {
     }
   }
 
+  /// The last Health Connect read, cached on this phone only so the app can
+  /// open with data instead of a blank screen.
+  Future<String?> readSnapshotCache() async {
+    try {
+      return await _channel.invokeMethod<String>('readCache');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  Future<bool> writeSnapshotCache(String json) async {
+    try {
+      return await _channel.invokeMethod<bool>('writeCache', {'json': json}) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   Future<bool> shareText(String text) async {
     try {
       return await _channel.invokeMethod<bool>('shareText', {'text': text}) ??

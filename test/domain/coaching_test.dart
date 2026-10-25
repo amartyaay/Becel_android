@@ -61,7 +61,7 @@ void main() {
     test('green recovery means push with a high strain target', () {
       final plan = _plan(recovery: _recovery(82));
       expect(plan.tone, PlanTone.push);
-      expect(plan.target.low, 14);
+      expect(plan.target.low, 13);
       expect(plan.headline, contains('go hard'));
     });
 
@@ -91,12 +91,12 @@ void main() {
         restingHrBaselineDays: 14,
         sleepPercentOfNeed: 90,
       );
-      // One mapping drives both: a typical morning (z 0.1) reads ~54 % and
-      // trains; z 0.6 reads ~70 % and pushes; z -0.8 reads ~24 % and recovers.
-      expect(_plan(recovery: withComposite(54, 0.1)).tone, PlanTone.train);
+      // One mapping drives both: a typical morning (z 0.1) reads ~60 % and
+      // trains; z 0.6 reads ~69 % and pushes; z -0.8 reads ~31 % and recovers.
+      expect(_plan(recovery: withComposite(60, 0.1)).tone, PlanTone.train);
       expect(_plan(recovery: withComposite(66, 0.45)).tone, PlanTone.train);
-      expect(_plan(recovery: withComposite(70, 0.6)).tone, PlanTone.push);
-      expect(_plan(recovery: withComposite(24, -0.8)).tone, PlanTone.recover);
+      expect(_plan(recovery: withComposite(69, 0.6)).tone, PlanTone.push);
+      expect(_plan(recovery: withComposite(31, -0.8)).tone, PlanTone.recover);
     });
 
     test('a suppressed 7-day HRV trend caps a green night at train', () {

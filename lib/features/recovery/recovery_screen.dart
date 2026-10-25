@@ -36,6 +36,7 @@ class RecoveryScreen extends StatelessWidget {
                     onBack: () => Navigator.of(context).maybePop(),
                     eyebrow: 'Readiness to perform',
                     title: 'Recovery',
+                    trailing: const GuideButton(section: 'recovery'),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null)
@@ -61,13 +62,6 @@ class RecoveryScreen extends StatelessWidget {
                     ],
                     _HistoryCard(history: snapshot.recoveryHistory),
                   ],
-                  const SizedBox(height: 12),
-                  PanelCard(
-                    title: 'HOW IT WORKS',
-                    icon: Icons.functions_rounded,
-                    accent: AppColors.textSecondary,
-                    child: Text(recoveryMethod, style: AppType.caption),
-                  ),
                 ],
               ),
             );
@@ -241,12 +235,6 @@ class _ContributorsCard extends StatelessWidget {
                 ),
               ),
           ],
-          const SizedBox(height: 6),
-          Text(
-            'Bars show each signal’s push on the score in standard-deviation '
-            'units against your 28-day baseline (${RecoveryModel.weightsLabel}).',
-            style: AppType.caption.copyWith(fontSize: 11),
-          ),
         ],
       ),
     );
@@ -357,14 +345,12 @@ class _HrvTrendCard extends StatelessWidget {
       HrvTrendState.below => (
         'Below normal',
         AppColors.bandYellow,
-        'A week below range points to accumulated fatigue, poor sleep, or '
-            'illness. Ease intensity until it returns.',
+        'Ease intensity until it returns to range.',
       ),
       HrvTrendState.above => (
         'Above normal',
         AppColors.accent,
-        'Higher than usual. Often good adaptation, but if resting HR is also '
-            'up it can mean overreaching.',
+        'Usually good adaptation.',
       ),
     };
     final nights = trend.nights;
@@ -477,12 +463,6 @@ class _HrvTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(advice, style: AppType.note),
-          const SizedBox(height: 4),
-          Text(
-            'Green band = your 28-day baseline ± the smallest worthwhile change '
-            '(½ SD of ln RMSSD). Filled dots are the 7 nights averaged.',
-            style: AppType.caption.copyWith(fontSize: 11.5),
-          ),
         ],
       ),
     );

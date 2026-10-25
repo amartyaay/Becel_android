@@ -1,6 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../app/theme.dart';
+
+/// Small round ⓘ that opens the matching section of "How Becel works", so
+/// screens show numbers and the explanations live in one place.
+class GuideButton extends StatelessWidget {
+  const GuideButton({super.key, required this.section});
+
+  final String section;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'How this works',
+      child: Material(
+        color: AppColors.surface,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: () => context.push('/guide?s=$section'),
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: AppColors.cardShadow,
+              color: AppColors.surface,
+            ),
+            child: const Icon(
+              Icons.info_outline_rounded,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The standard Becel surface: white, very round, lifted by a soft shadow.
 class SurfaceCard extends StatelessWidget {

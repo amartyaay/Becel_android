@@ -34,6 +34,7 @@ class EnergyScreen extends StatelessWidget {
                     onBack: () => Navigator.of(context).maybePop(),
                     eyebrow: 'Burned today',
                     title: 'Calories',
+                    trailing: const GuideButton(section: 'calories'),
                   ),
                   const SizedBox(height: 16),
                   if (snapshot == null)
@@ -49,10 +50,8 @@ class EnergyScreen extends StatelessWidget {
                       color: AppColors.energy,
                       title: 'Waiting for data',
                       body:
-                          'Calories burned needs '
-                          '${snapshot.performance.energyMissing.isEmpty ? 'a moment' : snapshot.performance.energyMissing.join(', ')}. '
-                          'Weight, height, and body fat come from Google Health; '
-                          'age and sex are set once in Settings.',
+                          'Needs '
+                          '${snapshot.performance.energyMissing.isEmpty ? 'a moment' : snapshot.performance.energyMissing.join(', ')}.',
                       actionLabel: 'Open settings',
                       onAction: () => openSettings(context),
                     )
@@ -80,8 +79,6 @@ class EnergyScreen extends StatelessWidget {
                       days: snapshot.performance.energyDays,
                       maintenance: energy.maintenanceKcal,
                     ),
-                    const SizedBox(height: 12),
-                    const _MethodCard(),
                   ],
                 ],
               ),
@@ -101,16 +98,24 @@ class _TodayCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = energy.today;
+    // Same order and colours as the Today card: rest in grey, modelled
+    // everyday energy in pale orange, measured movement in full orange.
     final parts = [
-      ('Resting', t.restingKcal, const Color(0xFF6E7F76)),
-      ('Cardio (HR)', t.heartKcal, AppColors.bandRed),
-      ('Walking', t.stepKcal, AppColors.green),
-      ('Lifting', t.strengthKcal, AppColors.orange),
-      ('Daily living', t.awakeKcal, AppColors.yellow),
-      ('Digestion', t.tefKcal, AppColors.sleep),
+      (
+        'At rest',
+        t.restingKcal,
+        AppColors.textTertiary.withValues(alpha: 0.45),
+      ),
+      ('Daily living', t.awakeKcal, AppColors.burned.withValues(alpha: 0.4)),
+      ('Digestion', t.tefKcal, AppColors.burned.withValues(alpha: 0.25)),
+      ('Walking', t.stepKcal, AppColors.burned),
+      ('Workouts (heart rate)', t.heartKcal, AppColors.strain),
+      ('Lifting', t.strengthKcal, AppColors.active),
     ];
+    final pal = energy.rmr > 0 ? energy.projectedToday / energy.rmr : null;
+    final palPlausible = pal == null || (pal >= 1.35 && pal <= 2.6);
     return PanelCard(
-      title: 'TODAY SO FAR',
+      title: 'Today so far',
       icon: Icons.local_fire_department_rounded,
       accent: AppColors.energy,
       child: Column(
@@ -148,29 +153,26 @@ class _TodayCard extends StatelessWidget {
               ),
             ],
           ),
-          Text(
-            '~${formatNumber(energy.projectedToday.round())} kcal projected by '
-            'midnight at your current pace.',
-            style: AppType.caption,
-          ),
-          if (energy.rmr > 0) ...[
-            const SizedBox(height: 4),
-            Builder(
-              builder: (context) {
-                final pal = energy.projectedToday / energy.rmr;
-                final plausible = pal >= 1.35 && pal <= 2.6;
-                return Text(
-                  'Activity level (PAL) ${pal.toStringAsFixed(2)}: total ÷ '
-                  'resting. Studies of free-living adults find 1.4 for desk '
-                  'days and up to 2.0+ for very active ones.'
-                  '${plausible ? '' : ' This is outside that range, so check wear time and your profile.'}',
-                  style: AppType.caption.copyWith(
-                    color: plausible ? null : AppColors.bandYellow,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: StatBlock(
+                  label: 'By midnight',
+                  value: '~${formatNumber(energy.projectedToday.round())}',
+                ),
+              ),
+              if (pal != null)
+                Expanded(
+                  child: StatBlock(
+                    label: 'Activity level',
+                    value: pal.toStringAsFixed(2),
+                    delta: palPlausible ? null : 'check wear time',
+                    deltaColor: AppColors.bandYellow,
                   ),
-                );
-              },
-            ),
-          ],
+                ),
+            ],
+          ),
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(7),
@@ -190,27 +192,28 @@ class _TodayCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           for (final part in parts)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: part.$3,
-                      shape: BoxShape.circle,
+            if (part.$2 >= 0.5)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: part.$3,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(part.$1, style: AppType.note)),
-                  Text(
-                    formatNumber(part.$2.round()),
-                    style: AppType.numS.copyWith(fontSize: 14),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(part.$1, style: AppType.note)),
+                    Text(
+                      formatNumber(part.$2.round()),
+                      style: AppType.numS.copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
-            ),
         ],
       ),
     );
@@ -455,11 +458,10 @@ class _BalanceWeekCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             avgBalance == null
-                ? 'Log meals in Google Health to see your average balance.'
+                ? 'No meals logged this week.'
                 : 'Average ${avgBalance < 0 ? 'deficit' : 'surplus'} '
-                      '${formatNumber(avgBalance.abs().round())} kcal/day on '
-                      '${logged.length} logged day${logged.length == 1 ? '' : 's'}. '
-                      'About 7,700 kcal = 1 kg of body mass.',
+                      '${formatNumber(avgBalance.abs().round())} kcal/day · '
+                      '${logged.length} logged day${logged.length == 1 ? '' : 's'}',
             style: AppType.caption,
           ),
         ],
@@ -505,21 +507,8 @@ class _DeviceCard extends StatelessWidget {
     final t = energy.today;
     final device = energy.deviceTotalToday;
     final delta = energy.deviceDelta;
-    final reasons = <String>[
-      'Heart rate counts in full only above '
-          '${(keytelMinHrr * 100).round()}% of your heart-rate reserve. Below '
-          'that (including easy walks), Becel mostly uses your steps: pulse '
-          'there reflects posture, caffeine, and stress more than work.',
-      if (t.filteredSteps > 0)
-        '${formatNumber(t.filteredSteps)} steps looked incidental (arm '
-            'movement, fidgeting) and earned no walking energy.',
-      if (t.strengthKcal > 0)
-        'Lifting is scored with Compendium METs. HR during sets over-reads '
-            'oxygen cost.',
-      'Resting energy: ${t.rmrMethod}.',
-    ];
     return PanelCard(
-      title: 'BECEL VS FITBIT',
+      title: 'Becel vs Fitbit',
       icon: Icons.compare_arrows_rounded,
       accent: AppColors.teal,
       child: Column(
@@ -529,14 +518,14 @@ class _DeviceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'BECEL',
+                  label: 'Becel',
                   value: formatNumber(t.totalKcal.round()),
                   unit: 'kcal',
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'FITBIT',
+                  label: 'Fitbit',
                   value: device == null ? '—' : formatNumber(device),
                   unit: device == null ? null : 'kcal',
                   delta: device == null ? 'not synced yet' : null,
@@ -544,7 +533,7 @@ class _DeviceCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'DIFFERENCE',
+                  label: 'Difference',
                   value: delta == null
                       ? '—'
                       : '${delta >= 0 ? '+' : '−'}${formatNumber(delta.abs().round())}',
@@ -560,28 +549,6 @@ class _DeviceCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Text('WHY THEY DIFFER', style: AppType.eyebrow),
-          const SizedBox(height: 6),
-          for (final reason in reasons)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 3),
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: 13,
-                      color: AppColors.teal,
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(child: Text(reason, style: AppType.caption)),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -597,9 +564,9 @@ class _StepsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = today.countedSteps + today.filteredSteps;
     return PanelCard(
-      title: 'STEPS · PHANTOM FILTER',
+      title: 'Steps',
       icon: Icons.directions_walk_rounded,
-      accent: AppColors.green,
+      accent: AppColors.steps,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -607,13 +574,13 @@ class _StepsCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'WALKING',
+                  label: 'Walking',
                   value: formatNumber(today.countedSteps),
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'INCIDENTAL',
+                  label: 'Incidental',
                   value: formatNumber(today.filteredSteps),
                   deltaColor: AppColors.textTertiary,
                   delta: total == 0
@@ -623,26 +590,20 @@ class _StepsCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'RAW (FITBIT)',
+                  label: 'Fitbit total',
                   value: formatNumber(total),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (total > 0)
+          if (total > 0) ...[
+            const SizedBox(height: 10),
             LinearMeter(
               value: today.countedSteps.toDouble(),
               max: total.toDouble(),
-              color: AppColors.green,
+              color: AppColors.steps,
             ),
-          const SizedBox(height: 6),
-          Text(
-            '5-minute blocks under $ambulatoryBucketSteps steps count only when '
-            'heart rate rises at least ${confirmedBucketHrRise.round()} bpm above '
-            'resting. Desk typing and arm swings rarely do.',
-            style: AppType.caption.copyWith(fontSize: 11),
-          ),
+          ],
         ],
       ),
     );
@@ -658,7 +619,7 @@ class _WeekCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PanelCard(
-      title: 'LAST 7 DAYS',
+      title: 'Last 7 days',
       icon: Icons.bar_chart_rounded,
       accent: AppColors.energy,
       child: Column(
@@ -678,26 +639,12 @@ class _WeekCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             maintenance == null
-                ? 'Maintenance appears after 3 full days with 12 h+ of wear.'
-                : 'Maintenance about ${formatNumber(maintenance!.round())} kcal/day '
-                      '(line). A practical starting intake to hold weight; '
-                      'adjust with your scale trend.',
+                ? 'Maintenance needs 3 full days of wear.'
+                : 'Maintenance ~${formatNumber(maintenance!.round())} kcal/day (line)',
             style: AppType.caption,
           ),
         ],
       ),
     );
   }
-}
-
-class _MethodCard extends StatelessWidget {
-  const _MethodCard();
-
-  @override
-  Widget build(BuildContext context) => PanelCard(
-    title: 'HOW IT’S CALCULATED',
-    icon: Icons.functions_rounded,
-    accent: AppColors.textSecondary,
-    child: Text(energyMethod, style: AppType.caption),
-  );
 }
