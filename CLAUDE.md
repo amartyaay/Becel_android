@@ -23,12 +23,15 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 12 | Calories were **higher than Google Health**, which already overestimates. | Root cause fixed: Keytel was costing easy walks at ~7 kcal/min. |
 | 13 | **Fix the bottom bar** (clipped, inset applied twice). | Replaced Material NavigationBar with custom `BecelNavBar`; verify on device. |
 | 14 | **Create CLAUDE.md**, revisit all prompts, keep a todo list of anything missed. | This file — update it every iteration. |
+| 16 | "The previous calories display was better: show **total**, then the **breakdown below with predictions**." | Done: total so far → "on track for ~X by midnight" → bar + rows (movement, daily living & digestion, resting, predicted rest of day) → Fitbit line. Keep this layout. |
 | 15 | "1,668 kcal and strain 4.4 seem high for my day — research it; what does the PhD evaluator say?" | Answered with DLW/Mifflin/WHOOP evidence: total burn is mostly resting metabolism (81 kcal/h for the owner); free-living PAL ≥ 1.4, so the total was if anything low; 4.4 is "light" on WHOOP's scale (member average 11). Evaluator agreed calories were too low and ambient HR padded load. Home now leads with **active** kcal; total/resting shown beneath. |
 
 ### Decisions to keep (with evidence)
 - **Calories**: target a light ambulatory day near PAL 1.35–1.45 (DLW floor for free-living adults); do NOT tune to undercut Fitbit's total — Fitbit's known error is exercise kcal. Keytel only ≥ 50 % HRR; FLEX–50 % uses max(step cost, ½ Keytel).
 - **Strain**: day strain counts from 10 % HRR (WHOOP-like); training load / ACWR / monotony use effort ≥ 30 % HRR only.
-- **Prescription**: push only when recovery composite z ≥ +0.5; recover at z ≤ −0.75 (the % ring colour follows the same band).
+- **Recovery %**: Φ mapping centred on the user's typical morning (= 50 %). Green ≥ 67 % (z ≥ +0.5) means push; red ≤ 25 % (z ≤ −0.75) means recover. A single band drives the ring, words, plan and history. Method copy is generated from the constants (`recoveryMethod`, `energyMethod`), so never hand-write numbers into it.
+- **Strain target** = everyday strain + a session: the bands shift by the user's median non-training TRIMP (`ambientTrimp`).
+- **Calories card layout** (owner): total first, then the breakdown and the prediction.
 
 ## Evaluator score history (target ≥ 9.0)
 
@@ -37,18 +40,17 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 0 baseline | `eff2c8b` | 4.2 | Keytel at rest inflates kcal; contradictory recovery weights; population coaching; no complaint fixes |
 | 2 | `a71ed31`, `e7a9cfc` | 6.6 | Load used partial day; sleep graded against own debt; rest-day kcal low; strain saturates; cadence lock |
 | 3 | `8083007`…`91cc01c` | 7.1 | Green fires on average mornings; ambient load breaks monotony/ACWR; PAL 1.27 too low; TEF drops with partial food log; cadence filter deletes real starts; active min ignores cadence; sleep-need units mismatch; coverage rule fragile; narrow-screen truncation; no HRV trend card / day timeline |
-| 4 | current | _not yet re-rated_ | — |
+| 4 | `d8343a3`, `4618de6` | 7.4 | Two recovery band systems (ring % vs plan); history vs today need mismatch; cadence-lock exit = normal HR recovery; target ignores ambient strain; strength top-up units; stale method copy; aboveFlexRun too loose; hero "active" includes modelled kcal; learned need double-counts split nights; nav labels clipped; VO₂max category on wide ranges |
+| 5 | `8eeba5a` | _awaiting rating_ | — |
 
 ## Open todos (missed or planned, not done)
 
-- [ ] Re-run the evaluator on iteration 4; record the score above.
-- [ ] Verify on the phone: new nav bar; active-kcal hero; strain/load after the 30 % training floor and 12 h coverage.
-- [ ] HRV 7-day trend (`hrvTrend` in `estimates.dart`) has no UI card yet (Recovery screen) — evaluator iteration 3 asked for it next to the 14-day chart.
+- [ ] Record the evaluator's iteration-5 score above and act on its gaps.
+- [ ] Verify iteration 5 on the phone (it was locked at install): calories card, nav pill labels, recovery at the 50 % centre, strain target band.
 - [ ] Today below-the-fold feels empty vs Bevel: add a day timeline (HR/strain over the day with workout bands) and per-signal sparklines on recovery drivers.
 - [ ] Training: seed the EWMA from days before the iteration start (minor double count with short history).
 - [ ] Sleep-onset correction toggle (`BodyProfile.correctSleepOnset`) has no Settings switch yet.
 - [ ] Today at 360 px / 1.3× text: some captions still truncate (hero captions, vitals labels).
-- [ ] Vitals: suppress the VO₂max category when the range spans 2+ categories.
 - [ ] Training: show artifact / cadence-lock minutes per workout.
 - [ ] Synced strength sessions add no muscular load beyond HR (no RPE available read-only); consider HR-density-scaled top-up.
 - [ ] Calories screen: show PAL (TDEE ÷ RMR) and flag implausible days.
@@ -76,7 +78,7 @@ Phone screenshots: `adb shell screencap -p /sdcard/x.png` then `adb pull` (Power
   - `performance.dart` composes everything into one `Performance` snapshot (single source for all screens).
   - `heart_signal.dart` Hampel + cadence-lock cleaning, personal max HR, Karvonen zones.
   - `strain.dart` Banister TRIMP from 10 % HRR, k = 130 → 0–21; EWMA ACWR through yesterday.
-  - `energy.dart` per-minute calories (one source per minute; Keytel only ≥ 50 % HRR; steps with phantom filter; METs for strength; allowance 0.20; TEF).
+  - `energy.dart` per-minute calories (one source per minute; Keytel only ≥ 50 % HRR; steps with phantom filter; METs for strength; allowance 0.30; TEF 10 % of intake or 8 %).
   - `estimates.dart` recovery % (28-day robust baseline, Φ mapping, `RecoveryModel` weights) + HRV trend.
   - `sleep_coach.dart` need (learned baseline + strain + debt), onset correction, consistency.
   - `coaching.dart` daily plan, body alert, weekly review/CSV.
