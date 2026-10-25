@@ -80,13 +80,18 @@ class DayStrain {
     this.moderateMinutes = 0,
     this.vigorousMinutes = 0,
     double? trainingTrimp,
-  }) : trainingTrimp = trainingTrimp ?? cardioTrimp;
+    double? trainingStrengthTrimp,
+  }) : trainingTrimp = trainingTrimp ?? cardioTrimp,
+       trainingStrengthTrimp = trainingStrengthTrimp ?? strengthTrimp;
 
   /// Load from effort at or above 30 % HRR only (what training-load maths
   /// uses). Day strain ([trimp]) also includes everyday movement.
   final double trainingTrimp;
 
-  double get loadTrimp => trainingTrimp + strengthTrimp;
+  /// Strength top-up measured against [trainingTrimp]'s 30 % floor.
+  final double trainingStrengthTrimp;
+
+  double get loadTrimp => trainingTrimp + trainingStrengthTrimp;
 
   /// Intensity minutes: moderate = 40–59 % HRR or ≥ 100 steps/min,
   /// vigorous = ≥ 60 % HRR or ≥ 130 steps/min.
@@ -142,6 +147,7 @@ List<DayStrain> dailyStrain({
   final moderate = <DateTime, double>{};
   final vigorous = <DateTime, double>{};
   final perMinute = <int, double>{};
+  final perMinuteTraining = <int, double>{};
 
   for (var index = 1; index < cleanedMinutes.length; index++) {
     final previous = cleanedMinutes[index - 1];
@@ -158,9 +164,11 @@ List<DayStrain> dailyStrain({
     final hrr = (bpm - restingBpm) / reserve;
     final load = banisterTrimpPerMinute(hrr, sex) * gap;
     cardio[day] = (cardio[day] ?? 0) + load;
-    training[day] =
-        (training[day] ?? 0) + trainingTrimpPerMinute(hrr, sex) * gap;
+    final trainingLoadPart = trainingTrimpPerMinute(hrr, sex) * gap;
+    training[day] = (training[day] ?? 0) + trainingLoadPart;
     perMinute[current.at.millisecondsSinceEpoch ~/ 60000] = load;
+    perMinuteTraining[current.at.millisecondsSinceEpoch ~/ 60000] =
+        trainingLoadPart;
     final spm = cadence[current.at.millisecondsSinceEpoch ~/ 60000] ?? 0;
     if (hrr >= 0.6 || spm >= vigorousCadence) {
       vigorous[day] = (vigorous[day] ?? 0) + gap;
@@ -176,18 +184,25 @@ List<DayStrain> dailyStrain({
     }
   }
 
-  // Strength sessions: add whatever sRPE load the heart rate missed.
+  // Strength sessions: add whatever sRPE load the heart rate missed. Day
+  // strain and training load count HR from different floors, so each tops
+  // up against what its own floor captured.
   final strength = <DateTime, double>{};
+  final strengthTraining = <DateTime, double>{};
   for (final session in strengthSessions) {
     final day = _localDay(session.start);
     if (day.isBefore(first) || session.start.isAfter(now)) continue;
     var captured = 0.0;
+    var capturedTraining = 0.0;
     final startMinute = session.start.millisecondsSinceEpoch ~/ 60000;
     for (var m = 0; m < session.durationMinutes; m++) {
       captured += perMinute[startMinute + m] ?? 0;
+      capturedTraining += perMinuteTraining[startMinute + m] ?? 0;
     }
     final expected = session.srpeLoad * srpeToTrimp;
     strength[day] = (strength[day] ?? 0) + math.max(0, expected - captured);
+    strengthTraining[day] =
+        (strengthTraining[day] ?? 0) + math.max(0, expected - capturedTraining);
   }
 
   return [
@@ -199,6 +214,7 @@ List<DayStrain> dailyStrain({
           cardioTrimp: cardio[date] ?? 0,
           trainingTrimp: training[date] ?? 0,
           strengthTrimp: strength[date] ?? 0,
+          trainingStrengthTrimp: strengthTraining[date] ?? 0,
           coverageMinutes: coverage[date] ?? 0,
           zoneMinutes: zones[date] ?? List<double>.filled(5, 0),
           peakBpm: peaks[date],
@@ -444,9 +460,31 @@ class StrainTarget {
   final String reason;
 }
 
+/// Everyday (non-training) strain the target bands assume: strain 5.
+final referenceAmbientTrimp = trimpForStrain(5);
+
+/// The user's typical non-training TRIMP: median over the last 28 fully
+/// covered days before today (needs 7). Null when there is too little data.
+double? ambientTrimp(List<DayStrain> days, {required DateTime today}) {
+  final day = _localDay(today);
+  final values = [
+    for (final d in days)
+      if (d.date.isBefore(day) &&
+          !d.date.isBefore(day.subtract(const Duration(days: 28))) &&
+          d.coverageMinutes >= loadCoverageMinutes)
+        math.max(0.0, d.cardioTrimp - d.trainingTrimp),
+  ]..sort();
+  if (values.length < 7) return null;
+  final mid = values.length ~/ 2;
+  return values.length.isOdd
+      ? values[mid]
+      : (values[mid - 1] + values[mid]) / 2;
+}
+
 StrainTarget strainTarget({
   required int? recovery,
   required TrainingLoad? load,
+  double? ambient,
 }) {
   var (low, high, label) = switch (recovery) {
     null => (8.0, 13.0, 'Moderate'),
@@ -472,6 +510,24 @@ StrainTarget strainTarget({
       recovery >= 34) {
     high = math.min(strainMax - 1, high + 1);
     reason = '$reason You have room to build: load is below your base.';
+  }
+  // The bands are "everyday strain 5 + a session". Day strain includes
+  // everyday movement, so shift them on the TRIMP scale by how much more or
+  // less the user moves outside training; the session dose stays the same.
+  if (ambient != null) {
+    final shift = ambient - referenceAmbientTrimp;
+    double adjust(double strain) => strainFromTrimp(
+      math.max(0, trimpForStrain(strain) + shift),
+    ).clamp(0.0, strainMax - 0.5);
+    final newLow = (adjust(low) * 2).round() / 2;
+    final newHigh = math.max(newLow + 2, (adjust(high) * 2).round() / 2);
+    if ((newLow - low).abs() >= 0.5 || (newHigh - high).abs() >= 0.5) {
+      reason =
+          '$reason Adjusted for your everyday strain of '
+          '${strainFromTrimp(ambient).toStringAsFixed(1)}.';
+    }
+    low = newLow;
+    high = newHigh;
   }
   return StrainTarget(low: low, high: high, label: label, reason: reason);
 }

@@ -221,18 +221,30 @@ SleepCoach buildSleepCoach({
   // permanent "debt".
   // Learn in the same units as debt (onset-corrected minutes), and skip
   // rebound nights that follow a short night (< 6 h), which overstate need.
-  // Newest first, so element i + 1 is the night before element i.
-  final newestFirst = [...sessions]..sort((a, b) => b.end.compareTo(a.end));
+  // One main sleep per wake date (the longest), so a split night is not
+  // counted twice. Newest first, so element i + 1 is the night before i.
+  final longestPerDate = <String, SleepNight>{};
+  for (final session in sessions) {
+    if (session.minutes < 180 ||
+        !session.end.isAfter(now.subtract(const Duration(days: 28))) ||
+        session.end.isAfter(now)) {
+      continue;
+    }
+    final key = sleepKey(session);
+    final existing = longestPerDate[key];
+    if (existing == null || session.minutes > existing.minutes) {
+      longestPerDate[key] = session;
+    }
+  }
+  final newestFirst = longestPerDate.values.toList()
+    ..sort((a, b) => b.end.compareTo(a.end));
   final recentMains = [
     for (final session in newestFirst)
-      if (session.minutes >= 180 &&
-          session.end.isAfter(now.subtract(const Duration(days: 28))) &&
-          !session.end.isAfter(now))
-        adjustOnset(
-          session,
-          cleanedMinutes: correctOnset ? cleanedMinutes : const [],
-          hardBpm: hardBpm,
-        ).asleepMinutes,
+      adjustOnset(
+        session,
+        cleanedMinutes: correctOnset ? cleanedMinutes : const [],
+        hardBpm: hardBpm,
+      ).asleepMinutes,
   ];
   final learnFrom = <double>[
     for (var i = 0; i < recentMains.length; i++)

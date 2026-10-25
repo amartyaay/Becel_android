@@ -80,6 +80,7 @@ DailyPlan buildDailyPlan({
   required List<MuscleVolume> muscleVolume,
   required bool logsStrength,
   required DateTime now,
+  double? ambientTrimp,
 }) {
   final score = recovery?.score;
   final trainingBand = recovery?.trainingBand;
@@ -90,7 +91,11 @@ DailyPlan buildDailyPlan({
     RecoveryBand.red => 20,
     null => null,
   };
-  var target = strainTarget(recovery: bandScore, load: load);
+  var target = strainTarget(
+    recovery: bandScore,
+    load: load,
+    ambient: ambientTrimp,
+  );
   final notes = <String>[];
 
   PlanTone tone;

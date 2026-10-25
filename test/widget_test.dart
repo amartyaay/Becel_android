@@ -104,7 +104,8 @@ void main() {
 
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
-    expect(find.text('Total so far'), findsOneWidget);
+    expect(find.text('kcal so far'), findsOneWidget);
+    expect(find.textContaining('by midnight'), findsOneWidget);
     expect(find.text('Eaten'), findsNothing);
     await _scrollTo(tester, find.text('Steps'));
     expect(find.text('Active'), findsWidgets);
@@ -124,7 +125,7 @@ void main() {
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.text('Waiting for data'), findsOneWidget);
     expect(find.textContaining('Needs sex'), findsOneWidget);
-    expect(find.text('Total so far'), findsNothing);
+    expect(find.text('kcal so far'), findsNothing);
   });
 
   testWidgets('Today has no logging controls (read-only app)', (tester) async {

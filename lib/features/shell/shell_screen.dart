@@ -66,20 +66,34 @@ class BecelNavBar extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          for (var i = 0; i < ShellScreen.items.length; i++)
-            Expanded(
-              flex: i == selected ? 2 : 1,
-              child: _NavItem(
-                icon: ShellScreen.items[i].$1,
-                selectedIcon: ShellScreen.items[i].$2,
-                label: ShellScreen.items[i].$3,
-                selected: i == selected,
-                onTap: () => onSelect(i),
-              ),
-            ),
-        ],
+      // The selected pill takes its natural width so its label is never
+      // clipped; icon-only tabs share what is left. Label scaling is capped
+      // so very large text settings cannot squeeze the icons out.
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.2,
+        child: Row(
+          children: [
+            for (var i = 0; i < ShellScreen.items.length; i++)
+              if (i == selected)
+                _NavItem(
+                  icon: ShellScreen.items[i].$1,
+                  selectedIcon: ShellScreen.items[i].$2,
+                  label: ShellScreen.items[i].$3,
+                  selected: true,
+                  onTap: () => onSelect(i),
+                )
+              else
+                Expanded(
+                  child: _NavItem(
+                    icon: ShellScreen.items[i].$1,
+                    selectedIcon: ShellScreen.items[i].$2,
+                    label: ShellScreen.items[i].$3,
+                    selected: false,
+                    onTap: () => onSelect(i),
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -132,18 +146,15 @@ class _NavItem extends StatelessWidget {
                   ),
                   if (selected) ...[
                     const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.fade,
-                        softWrap: false,
-                        style: const TextStyle(
-                          fontFamily: AppType.family,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontFamily: AppType.family,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
                   ],

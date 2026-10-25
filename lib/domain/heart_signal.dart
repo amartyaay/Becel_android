@@ -77,9 +77,9 @@ CleanHeartRate cleanHeartRate(
 /// typically for 5–20 minutes, which a short Hampel window cannot catch. A
 /// lock needs all three: HR jumps ≥ 25 bpm within ~2 minutes, then tracks
 /// step cadence (±5) for at least five minutes, then falls ≥ 20 bpm within
-/// a minute when the lock breaks. Real efforts (run starts, intervals) can
-/// jump and can sit near cadence, but they recover gradually, so they are
-/// kept. Flagged minutes are dropped, never replaced.
+/// a minute while cadence carries on. Real efforts (run starts, intervals)
+/// can jump and sit near cadence, but when they end the steps end too, so
+/// they are kept. Flagged minutes are dropped, never replaced.
 CleanHeartRate excludeCadenceLock(
   CleanHeartRate input,
   List<StepBucket> steps, {
@@ -119,11 +119,26 @@ CleanHeartRate excludeCadenceLock(
       if ((samples[end].value - spm).abs() > tolerance) break;
       end++;
     }
-    // A real effort ends gradually (HR recovery takes minutes); a sensor
-    // lock ends with an instant fall back to the true rate.
+    // A sensor lock ends with an instant fall to the true rate while the
+    // person keeps moving. Stopping a real effort also drops HR fast (1-min
+    // HR recovery is often 20–40 bpm), but cadence stops with it, so the
+    // exit minute must keep ≥ 90 % of the bout's cadence.
+    double? boutCadence;
+    if (end > index) {
+      var sum = 0.0;
+      for (var j = index; j < end; j++) {
+        sum += cadence[samples[j].at.millisecondsSinceEpoch ~/ 60000] ?? 0;
+      }
+      boutCadence = sum / (end - index);
+    }
+    final exitCadence = end < samples.length
+        ? cadence[samples[end].at.millisecondsSinceEpoch ~/ 60000]
+        : null;
     final abruptExit =
         end < samples.length &&
-        end > index &&
+        boutCadence != null &&
+        exitCadence != null &&
+        exitCadence >= 0.9 * boutCadence &&
         samples[end].at.difference(samples[end - 1].at).inMinutes <= 2 &&
         samples[end - 1].value - samples[end].value >= exitDropBpm;
     if (end - index >= minMinutes && abruptExit) {

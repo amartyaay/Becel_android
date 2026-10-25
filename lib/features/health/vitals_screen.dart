@@ -412,7 +412,10 @@ class _FitnessCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${f.category} for your age and sex (point estimate ${f.vo2Max.toStringAsFixed(1)}).',
+                  f.category == null
+                      ? 'The range is too wide to place you in a fitness band '
+                            'yet. A tested max HR narrows it.'
+                      : '${f.category} for your age and sex.',
                   style: AppType.body,
                 ),
                 const SizedBox(height: 6),

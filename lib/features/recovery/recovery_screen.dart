@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
@@ -53,10 +55,14 @@ class RecoveryScreen extends StatelessWidget {
                   ],
                   if (snapshot != null) ...[
                     const SizedBox(height: 12),
+                    if (snapshot.performance.hrvTrend != null) ...[
+                      _HrvTrendCard(trend: snapshot.performance.hrvTrend!),
+                      const SizedBox(height: 12),
+                    ],
                     _HistoryCard(history: snapshot.recoveryHistory),
                   ],
                   const SizedBox(height: 12),
-                  const PanelCard(
+                  PanelCard(
                     title: 'HOW IT WORKS',
                     icon: Icons.functions_rounded,
                     accent: AppColors.textSecondary,
@@ -327,6 +333,156 @@ class _Contributor extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(detail, style: AppType.caption.copyWith(fontSize: 11.5)),
+        ],
+      ),
+    );
+  }
+}
+
+/// 7-day rolling HRV against your normal range (baseline ± smallest
+/// worthwhile change). Coaches read this trend before any single morning.
+class _HrvTrendCard extends StatelessWidget {
+  const _HrvTrendCard({required this.trend});
+
+  final HrvTrend trend;
+
+  @override
+  Widget build(BuildContext context) {
+    final (word, color, advice) = switch (trend.state) {
+      HrvTrendState.within => (
+        'Within normal',
+        AppColors.bandGreen,
+        'Your autonomic balance is stable. Train as planned.',
+      ),
+      HrvTrendState.below => (
+        'Below normal',
+        AppColors.bandYellow,
+        'A week below range points to accumulated fatigue, poor sleep, or '
+            'illness. Ease intensity until it returns.',
+      ),
+      HrvTrendState.above => (
+        'Above normal',
+        AppColors.accent,
+        'Higher than usual. Often good adaptation, but if resting HR is also '
+            'up it can mean overreaching.',
+      ),
+    };
+    final nights = trend.nights;
+    final values = [
+      for (final n in nights) n.ln == null ? null : math.exp(n.ln!),
+    ];
+    // Zoomed axis (not from zero), so marks are dots, never bars.
+    final present = values.whereType<double>().toList();
+    final maxMs = [trend.highMs, ...present].reduce(math.max) * 1.08;
+    final minMs = [trend.lowMs, ...present].reduce(math.min) * 0.92;
+    return PanelCard(
+      title: 'HRV trend · 7 days',
+      icon: Icons.monitor_heart_rounded,
+      accent: AppColors.sleep,
+      trailing: Tag(word, color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(trend.rollingMs.round().toString(), style: AppType.numM),
+              const SizedBox(width: 4),
+              const Text('ms 7-day average', style: AppType.unit),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Normal range ${trend.lowMs.round()}–${trend.highMs.round()} ms',
+            style: AppType.caption,
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 80,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                double y(double ms) =>
+                    80 - ((ms - minMs) / (maxMs - minMs)).clamp(0.0, 1.0) * 80;
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: y(trend.highMs),
+                      height: y(trend.lowMs) - y(trend.highMs),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.tint(AppColors.bandGreen, 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        for (var i = 0; i < values.length; i++)
+                          Expanded(
+                            child: values[i] == null
+                                ? const SizedBox(height: 80)
+                                : SizedBox(
+                                    height: 80,
+                                    child: Stack(
+                                      children: [
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          top: y(values[i]!) - 5,
+                                          child: Center(
+                                            child: Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: i >= values.length - 7
+                                                    ? AppColors.sleep
+                                                    : AppColors.surface,
+                                                border: Border.all(
+                                                  color: AppColors.sleep,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (var i = 0; i < nights.length; i++)
+                Expanded(
+                  child: Text(
+                    i.isEven || i == nights.length - 1
+                        ? formatDayShort(nights[i].date)[0]
+                        : '',
+                    textAlign: TextAlign.center,
+                    style: AppType.caption.copyWith(fontSize: 10.5),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(advice, style: AppType.note),
+          const SizedBox(height: 4),
+          Text(
+            'Green band = your 28-day baseline ± the smallest worthwhile change '
+            '(½ SD of ln RMSSD). Filled dots are the 7 nights averaged.',
+            style: AppType.caption.copyWith(fontSize: 11.5),
+          ),
         ],
       ),
     );

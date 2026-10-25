@@ -601,11 +601,13 @@ class _WorkoutList extends StatelessWidget {
     final t = type.toLowerCase();
     if (t.contains('run')) return Icons.directions_run_rounded;
     if (t.contains('walk')) return Icons.directions_walk_rounded;
-    if (t.contains('cycl') || t.contains('bik'))
+    if (t.contains('cycl') || t.contains('bik')) {
       return Icons.directions_bike_rounded;
+    }
     if (t.contains('swim')) return Icons.pool_rounded;
-    if (t.contains('strength') || t.contains('weight'))
+    if (t.contains('strength') || t.contains('weight')) {
       return Icons.fitness_center_rounded;
+    }
     if (t.contains('yoga')) return Icons.self_improvement_rounded;
     return Icons.sports_rounded;
   }

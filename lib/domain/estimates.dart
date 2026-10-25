@@ -17,13 +17,15 @@ abstract final class RecoveryModel {
   /// SD of the weighted sum of three roughly independent unit z-scores.
   static const compositeScale = 0.64;
 
-  /// Score = 100 × Φ(offset + slope × composite z). A typical morning
-  /// (z = 0) reads ~64 %, one SD better ~89 %, one SD worse ~29 %.
-  static const offset = 0.35;
+  /// Score = 100 × Φ(slope × composite z): a typical morning for you
+  /// (z = 0) reads 50 %. The bands are evidence thresholds, so the number,
+  /// colour, word, and training advice can never disagree: green (≥ 67 %)
+  /// is z ≥ +0.5 (clearly better than usual), red (≤ 25 %) is z ≤ −0.75.
+  static const offset = 0.0;
   static const slope = 0.9;
 
   static const green = 67;
-  static const red = 33;
+  static const red = 25;
 
   static String get weightsLabel =>
       'HRV ${(hrvWeight * 100).round()}% · resting HR '
@@ -31,17 +33,22 @@ abstract final class RecoveryModel {
       '${(sleepWeight * 100).round()}%';
 }
 
-const recoveryMethod =
+/// Built from [RecoveryModel] so the explanation can never drift from the
+/// arithmetic.
+final recoveryMethod =
     'Recovery compares last night with your own 28-day baseline. Overnight '
     'HRV (ln RMSSD, only readings inside asleep stages) and morning resting '
     'heart rate become robust z-scores (median and MAD). Sleep is scored '
-    'against the need going into last night, and sleeping longer is never '
-    'penalised. The weighted z-scores (HRV 55%, resting HR 25%, sleep 20%) '
-    'are mapped to 0–100% with a normal curve so a typical morning reads '
-    'about 64%. HRV counts at most +1.5 SD, and not at all when resting HR '
+    'against the need going into that night, and sleeping longer is never '
+    'penalised. The weighted z-scores (${RecoveryModel.weightsLabel}) are '
+    'mapped to 0–100% with a normal curve centred on your typical morning, '
+    'which reads 50%. ${RecoveryModel.green}% or more means clearly better '
+    'than usual (go hard); ${RecoveryModel.red}% or less means clearly worse '
+    '(recover). HRV counts at most +1.5 SD, and not at all when resting HR '
     'is also high. A respiratory-rate rise of 1+ breath/min or skin '
     'temperature 0.5 °C+ above baseline lowers the score. Scores start '
-    'after 4 baseline nights and are marked provisional until 10.';
+    'after $recoveryMinimumBaselineNights baseline nights and are marked '
+    'provisional until $recoveryFullBaselineNights.';
 
 const activityMethod =
     'Moderate-equivalent minutes from Fitbit Air heart rate over the last 7 '
@@ -124,21 +131,12 @@ class RecoveryEstimate {
   /// Composite-z shift from check-in and respiratory/temperature signals.
   final double contextAdjustment;
 
-  /// Weighted composite in SD units (0 = a typical morning for you). The
-  /// training prescription uses this, not the % band: a 67 % "green" only
-  /// needs z ≈ +0.1, which is too weak a signal to tell someone to go hard.
+  /// Weighted composite in SD units (0 = a typical morning for you).
   final double? composite;
 
-  /// Prescription band: push only on a clearly better-than-usual morning
-  /// (z ≥ +0.5, ~31 % of days), recover at z ≤ −0.75. Falls back to the
-  /// % band when the composite is unknown.
-  RecoveryBand get trainingBand {
-    final z = composite;
-    if (z == null) return band;
-    if (z >= 0.5) return RecoveryBand.green;
-    if (z <= -0.75) return RecoveryBand.red;
-    return RecoveryBand.yellow;
-  }
+  /// Prescription band. Since the % scale is centred on your typical
+  /// morning, this is the same as [band]: one mapping everywhere.
+  RecoveryBand get trainingBand => band;
 
   final List<String> contextReasons;
   final double hrvCurrent;
@@ -223,6 +221,7 @@ List<RecoveryHistoryPoint> recoveryHistory({
   required DateTime now,
   int days = 14,
   int sleepNeedMinutes = 480,
+  int Function(DateTime date)? sleepNeedFor,
 }) {
   if (days <= 0) return const [];
   final today = _localDay(now);
@@ -251,7 +250,7 @@ List<RecoveryHistoryPoint> recoveryHistory({
       hrvSamples: hrvSamples,
       restingHrSamples: restingHrSamples,
       sleepMinutes: session.sleepMinutes,
-      sleepNeedMinutes: sleepNeedMinutes,
+      sleepNeedMinutes: sleepNeedFor?.call(date) ?? sleepNeedMinutes,
       sleepStart: session.start,
       sleepEnd: session.end,
       asleepIntervals: session.asleepIntervals,

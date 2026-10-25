@@ -541,6 +541,41 @@ class _BurnCard extends StatelessWidget {
     final asOf = p.energyAsOf;
     final delta = energy.deviceDelta;
     final stale = asOf != null && p.now.difference(asOf).inMinutes > 30;
+    final projected = math.max(energy.projectedToday, today.totalKcal);
+    final effort = today.heartKcal + today.strengthKcal;
+    final parts = [
+      (
+        label: 'Movement',
+        detail:
+            'walking ${formatNumber(today.stepKcal.round())} · effort '
+            '${formatNumber(effort.round())}',
+        kcal: today.exerciseKcal,
+        color: AppColors.burned,
+        predicted: false,
+      ),
+      (
+        label: 'Daily living & digestion',
+        detail: null,
+        kcal: today.livingKcal,
+        color: AppColors.burned.withValues(alpha: 0.55),
+        predicted: false,
+      ),
+      (
+        label: 'Resting',
+        detail: '${formatNumber((energy.rmr / 24).round())} an hour',
+        kcal: today.restingKcal,
+        color: AppColors.burned.withValues(alpha: 0.3),
+        predicted: false,
+      ),
+      if (projected - today.totalKcal >= 1)
+        (
+          label: 'Rest of day',
+          detail: 'predicted, mostly resting',
+          kcal: projected - today.totalKcal,
+          color: AppColors.burned.withValues(alpha: 0.1),
+          predicted: true,
+        ),
+    ];
     return PanelCard(
       title: 'Calories burned',
       icon: Icons.local_fire_department_rounded,
@@ -567,11 +602,11 @@ class _BurnCard extends StatelessWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        formatNumber(today.activeKcal.round()),
+                        formatNumber(today.totalKcal.round()),
                         style: AppType.numXl,
                       ),
                       const SizedBox(width: 6),
-                      const Text('active kcal', style: AppType.unit),
+                      const Text('kcal so far', style: AppType.unit),
                     ],
                   ),
                 ),
@@ -580,63 +615,45 @@ class _BurnCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Movement, daily living, and digestion. Your body also burns '
-            '${formatNumber((energy.rmr / 24).round())} kcal an hour just '
-            'staying alive.',
-            style: AppType.caption,
+            'On track for ~${formatNumber(projected.round())} by midnight',
+            style: AppType.note,
           ),
           const SizedBox(height: 14),
+          // So far (solid shades) then the predicted rest of the day (pale).
           ClipRRect(
             borderRadius: BorderRadius.circular(99),
             child: SizedBox(
               height: 10,
               child: Row(
                 children: [
-                  Expanded(
-                    flex: math.max(1, today.activeKcal.round()),
-                    child: Container(color: AppColors.burned),
-                  ),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    flex: math.max(1, today.restingKcal.round()),
-                    child: Container(
-                      color: AppColors.burned.withValues(alpha: 0.25),
+                  for (final (i, part) in parts.indexed) ...[
+                    if (i > 0) const SizedBox(width: 2),
+                    Expanded(
+                      flex: math.max(1, part.kcal.round()),
+                      child: Container(color: part.color),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: StatBlock(
-                  label: 'Total so far',
-                  value: formatNumber(today.totalKcal.round()),
-                  delta:
-                      '~${formatNumber(energy.projectedToday.round())} full day',
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: 'Resting',
-                  value: formatNumber(today.restingKcal.round()),
-                ),
-              ),
-              Expanded(
-                child: StatBlock(
-                  label: 'Fitbit total',
-                  value: energy.deviceTotalToday == null
-                      ? '—'
-                      : formatNumber(energy.deviceTotalToday!),
-                  delta: delta == null || delta.abs() < 50
-                      ? null
-                      : '${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())} vs Becel',
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 12),
+          for (final part in parts)
+            _BurnRow(
+              color: part.color,
+              label: part.label,
+              detail: part.detail,
+              kcal: part.kcal,
+              predicted: part.predicted,
+            ),
+          if (energy.deviceTotalToday != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Fitbit says ${formatNumber(energy.deviceTotalToday!)} so far'
+              '${delta == null || delta.abs() < 50 ? ', in line with Becel.' : ' (${delta > 0 ? '+' : '−'}${formatNumber(delta.abs().round())} vs Becel).'}',
+              style: AppType.caption,
+            ),
+          ],
           if (stale) ...[
             const SizedBox(height: 10),
             Text(
@@ -645,6 +662,68 @@ class _BurnCard extends StatelessWidget {
               style: AppType.caption.copyWith(color: AppColors.bandYellow),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BurnRow extends StatelessWidget {
+  const _BurnRow({
+    required this.color,
+    required this.label,
+    required this.detail,
+    required this.kcal,
+    required this.predicted,
+  });
+
+  final Color color;
+  final String label;
+  final String? detail;
+  final double kcal;
+  final bool predicted;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueStyle = AppType.body.copyWith(
+      fontWeight: FontWeight.w700,
+      color: predicted ? AppColors.textTertiary : AppColors.textPrimary,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: predicted
+                  ? Border.all(color: AppColors.burned.withValues(alpha: 0.5))
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                text: label,
+                style: AppType.body,
+                children: [
+                  if (detail != null)
+                    TextSpan(text: '  $detail', style: AppType.caption),
+                ],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${predicted ? '+' : ''}${formatNumber(kcal.round())}',
+            style: valueStyle,
+          ),
         ],
       ),
     );

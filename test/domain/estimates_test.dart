@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('recoveryReadiness', () {
-    test('a typical morning maps to the low-to-mid 60s', () {
+    test('a typical morning reads 50 %, the middle of the scale', () {
       final result = _estimate(sleepMinutes: 408);
       final estimate = result.estimate!;
 
@@ -12,7 +12,7 @@ void main() {
       expect(estimate.sleepPercentOfNeed, 85);
       expect(estimate.hrvZ, 0);
       expect(estimate.restingHrZ, 0);
-      expect(estimate.score, 64);
+      expect(estimate.score, 50);
       expect(estimate.band, RecoveryBand.yellow);
       expect(estimate.hrvBaselineDays, 10);
       expect(estimate.provisional, isFalse);

@@ -24,7 +24,8 @@ void main() {
     expect(predicted.vo2Max, closeTo(54.1, 0.1));
     expect(predicted.high - predicted.low, closeTo(54.1 * 0.4, 0.2));
     expect(predicted.confidence, MetricConfidence.low);
-    expect(predicted.category, 'Superior');
+    // 43–65 spans Good to Superior: too wide to name a band.
+    expect(predicted.category, isNull);
 
     final tested = estimateCardioFitness(
       profile: male,

@@ -45,6 +45,43 @@ void main() {
       },
     );
 
+    test('cadence lock is dropped only when steps carry on past the fall', () {
+      final start = DateTime(2026, 10, 25, 9);
+      List<StepBucket> buckets(int Function(int minute) spm) => [
+        for (var m = 0; m < 30; m += 5)
+          StepBucket(
+            start: start.add(Duration(minutes: m)),
+            steps: spm(m) * 5,
+          ),
+      ];
+
+      // Walking at 115 spm throughout; HR locks onto cadence for 10 minutes,
+      // then snaps back to the true 80 bpm while the walk continues.
+      final locked = excludeCadenceLock(
+        CleanHeartRate(
+          samples: minutes(start, 30, (i) => i >= 10 && i < 20 ? 115 : 80),
+          corrected: 0,
+        ),
+        buckets((_) => 115),
+      );
+      expect(locked.cadenceLocked, 10);
+
+      // A real 160 spm run: HR falls 25 bpm in the first minute after
+      // stopping, but cadence stops too, so the effort is kept.
+      final run = excludeCadenceLock(
+        CleanHeartRate(
+          samples: minutes(
+            start,
+            30,
+            (i) => i < 10 ? 100 : (i < 20 ? 160 : 135 - (i - 20) * 2.0),
+          ),
+          corrected: 0,
+        ),
+        buckets((m) => m >= 10 && m < 20 ? 160 : 0),
+      );
+      expect(run.cadenceLocked, 0);
+    });
+
     test('observed sustained max replaces a low age prediction, capped', () {
       final start = DateTime(2026, 10, 25, 18);
       final hard = minutes(start, 10, (i) => i >= 4 && i <= 7 ? 191 : 150);
@@ -141,6 +178,28 @@ void main() {
       expect(day.trainingTrimp, 0);
     });
 
+    test('strain target adds the session to the user\'s everyday strain', () {
+      final reference = strainTarget(
+        recovery: 50,
+        load: null,
+        ambient: referenceAmbientTrimp,
+      );
+      expect(reference.low, 10);
+      expect(reference.high, 14);
+
+      // Someone whose ordinary day already reads strain 8 needs a higher
+      // band for the same session dose.
+      final active = strainTarget(
+        recovery: 50,
+        load: null,
+        ambient: trimpForStrain(8),
+      );
+      expect(active.low, greaterThan(11));
+      expect(active.high, greaterThan(14.5));
+      expect(active.high, lessThan(strainMax));
+      expect(active.reason, contains('everyday strain'));
+    });
+
     test('brisk walking cadence counts as moderate even at low HRR', () {
       final now = DateTime(2026, 10, 25, 20);
       final start = DateTime(2026, 10, 25, 12);
@@ -153,10 +212,7 @@ void main() {
         days: 1,
         stepBuckets: [
           for (var i = 0; i < 6; i++)
-            StepBucket(
-              start: start.add(Duration(minutes: i * 5)),
-              steps: 550,
-            ),
+            StepBucket(start: start.add(Duration(minutes: i * 5)), steps: 550),
         ],
       ).single;
       // 30 intervals; the last falls just after the final step bucket.
@@ -200,10 +256,32 @@ void main() {
         maxBpm: 184,
       )!;
       expect(day.flexBpm, 92);
-      expect(day.heartKcal, 0);
       // Resting 12 h ≈ 905 kcal, plus a small awake allowance.
       expect(day.heartKcal, 0);
       expect(day.totalKcal, lessThan(1150));
+    });
+
+    test('a step-free bout must be clearly above FLEX to earn HR energy', () {
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 12);
+      DayEnergy dayWith(double bpm) => estimateDayEnergy(
+        profile: athlete,
+        date: date,
+        now: now,
+        cleanedMinutes: [
+          ...minutes(DateTime(2026, 10, 25, 8), 60, (_) => 70),
+          ...minutes(DateTime(2026, 10, 25, 9), 40, (_) => bpm),
+          ...minutes(DateTime(2026, 10, 25, 9, 40), 60, (_) => 70),
+        ],
+        stepBuckets: const [],
+        sleep: [AsleepInterval(start: date, end: DateTime(2026, 10, 25, 7))],
+        restingBpm: 52,
+        maxBpm: 184,
+      )!;
+      // A stressful meeting just over FLEX (92): no exercise energy.
+      expect(dayWith(97).heartKcal, 0);
+      // Forty minutes on an unlogged bike at FLEX + 23: damped HR counts.
+      expect(dayWith(115).heartKcal, greaterThan(40));
     });
 
     test('an easy walk is costed from steps, not inflated by Keytel', () {

@@ -67,7 +67,7 @@ void main() {
       expect(_plan(recovery: _recovery(25)).target.high, lessThanOrEqualTo(9));
     });
 
-    test('push needs clear evidence, not just a 67 % reading', () {
+    test('the percentage and the prescription agree', () {
       RecoveryEstimate withComposite(int score, double z) => RecoveryEstimate(
         score: score,
         hrvZ: 0,
@@ -87,9 +87,12 @@ void main() {
         restingHrBaselineDays: 14,
         sleepPercentOfNeed: 90,
       );
-      expect(_plan(recovery: withComposite(67, 0.1)).tone, PlanTone.train);
-      expect(_plan(recovery: withComposite(80, 0.6)).tone, PlanTone.push);
-      expect(_plan(recovery: withComposite(25, -0.8)).tone, PlanTone.recover);
+      // One mapping drives both: a typical morning (z 0.1) reads ~54 % and
+      // trains; z 0.6 reads ~70 % and pushes; z -0.8 reads ~24 % and recovers.
+      expect(_plan(recovery: withComposite(54, 0.1)).tone, PlanTone.train);
+      expect(_plan(recovery: withComposite(66, 0.45)).tone, PlanTone.train);
+      expect(_plan(recovery: withComposite(70, 0.6)).tone, PlanTone.push);
+      expect(_plan(recovery: withComposite(24, -0.8)).tone, PlanTone.recover);
     });
 
     test('a body alert overrides a green score', () {

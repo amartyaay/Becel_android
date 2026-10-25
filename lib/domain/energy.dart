@@ -41,6 +41,32 @@ const tefFractionOfIntake = 0.10;
 /// which only chair-bound subjects reach.
 const tefFractionOfExpenditure = 0.08;
 
+/// Keytel's equation is used in full only at or above this heart-rate
+/// reserve, the range it was derived in.
+const keytelMinHrr = 0.5;
+
+/// Between FLEX-HR and [keytelMinHrr], Keytel overstates cost roughly twice
+/// over, so it counts at this fraction.
+const easyHrKeytelFraction = 0.5;
+
+String _pct(double fraction) => '${(fraction * 100).round()}%';
+
+/// Built from the constants above so the explanation never drifts from the
+/// arithmetic.
+final energyMethod =
+    'Each minute gets exactly one source, so nothing is double counted: '
+    'a strength workout (Compendium METs scaled to your resting rate), '
+    'then heart rate at ${_pct(keytelMinHrr)}+ of heart-rate reserve '
+    '(Keytel 2005, net of resting), then walking steps '
+    '($walkingNetKcalPerKgKm kcal/kg/km net). Between your FLEX-HR point and '
+    '${_pct(keytelMinHrr)}, the larger of step cost and '
+    '${_pct(easyHrKeytelFraction)} of Keytel is used, because HR equations '
+    'overstate easy effort about twice over. Awake time without movement '
+    'adds ${_pct(awakeAllowance)} of resting; sleep adds nothing. Digestion '
+    'adds ${_pct(tefFractionOfIntake)} of food logged, or '
+    '${_pct(tefFractionOfExpenditure)} of the day when less is logged. '
+    'Spikes and cadence-locked heart rate are removed first.';
+
 class DayEnergy {
   const DayEnergy({
     required this.date,
@@ -98,6 +124,13 @@ class DayEnergy {
               (1 - tefFractionOfExpenditure);
 
   double get activeKcal => _movementKcal + tefKcal;
+
+  /// Energy from measured movement only (exercise HR, walking, workouts),
+  /// excluding the daily-living allowance and digestion, which are modelled.
+  double get exerciseKcal => heartKcal + stepKcal + strengthKcal;
+
+  /// Modelled, not measured: awake allowance plus digestion.
+  double get livingKcal => awakeKcal + tefKcal;
   double get totalKcal => restingKcal + activeKcal;
 
   /// Physical activity level (TDEE ÷ RMR), complete days only. Healthy
@@ -264,22 +297,42 @@ DayEnergy? estimateDayEnergy({
     }
   }
 
-  // Length of the consecutive run of minutes at or above FLEX, so a
-  // sustained bout can be told apart from a one-minute blip.
-  final aboveFlexRun = List<int>.filled(minutes, 0);
+  // Sustained step-free bouts above FLEX (unlogged cycling, rowing) earn
+  // damped HR energy. Sitting through stress or caffeine can also hold HR
+  // just over FLEX, so a bout must last 10+ minutes, average ≥ FLEX + 10,
+  // and either sit within 20 minutes of real walking (getting to the bike
+  // or machine) or average ≥ FLEX + 20.
+  final sustainedBout = List<bool>.filled(minutes, false);
+  bool walkedNear(int from, int to) {
+    for (
+      var j = math.max(0, from - 20);
+      j <= math.min(minutes - 1, to + 20);
+      j++
+    ) {
+      if (stepEnergy[j] > 0) return true;
+    }
+    return false;
+  }
+
   for (var m = 0; m < minutes; m++) {
     final hr = hrByMinute[m];
     if (hr == null || hr < flex) continue;
-    var start = m;
-    while (start > 0 && (hrByMinute[start - 1] ?? 0) >= flex) {
-      start--;
-    }
     var end = m;
+    var sum = hr;
     while (end < minutes - 1 && (hrByMinute[end + 1] ?? 0) >= flex) {
       end++;
+      sum += hrByMinute[end]!;
     }
-    for (var j = start; j <= end; j++) {
-      aboveFlexRun[j] = end - start + 1;
+    final length = end - m + 1;
+    final mean = sum / length;
+    final qualifies =
+        length >= 10 &&
+        mean >= flex + 10 &&
+        (mean >= flex + 20 || walkedNear(m, end));
+    if (qualifies) {
+      for (var j = m; j <= end; j++) {
+        sustainedBout[j] = true;
+      }
     }
     m = end;
   }
@@ -304,7 +357,7 @@ DayEnergy? estimateDayEnergy({
         0.0,
         keytelKcalPerMinute(hr, profile) - rmrPerMinute,
       );
-      if (hrr >= 0.5) {
+      if (hrr >= keytelMinHrr) {
         // Real exercise: Keytel was derived in this range.
         lastHardMinute = m;
         heart += keytelNet;
@@ -315,19 +368,17 @@ DayEnergy? estimateDayEnergy({
       // overstates cost roughly twice over, so it is damped to half. With
       // steps, the larger of step cost and damped HR is used (stairs and
       // hills cost more than level walking). Without steps, damped HR counts
-      // inside a workout, just after a hard bout, or in a sustained bout of
-      // 10+ minutes above FLEX (unlogged cycling or rowing); isolated
-      // minutes fall through to the daily-living allowance.
-      final damped = keytelNet * 0.5;
+      // inside a workout, just after a hard bout, or in a sustained bout
+      // (see above); other minutes fall through to the daily-living
+      // allowance.
+      final damped = keytelNet * easyHrKeytelFraction;
       if (stepEnergy[m] > 0) {
         if (damped > stepEnergy[m]) {
           heart += damped;
           heartMinutes++;
           continue;
         }
-      } else if (inWorkout[m] ||
-          m - lastHardMinute <= 10 ||
-          aboveFlexRun[m] >= 10) {
+      } else if (inWorkout[m] || m - lastHardMinute <= 10 || sustainedBout[m]) {
         heart += damped;
         heartMinutes++;
         continue;

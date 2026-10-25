@@ -37,7 +37,10 @@ class CardioFitness {
   final double low;
   final double high;
   final MaxHrSource maxHrSource;
-  final String category;
+
+  /// Age/sex fitness band for the whole range: one band, two adjacent bands
+  /// ("Fair to Good"), or null when the range is too wide to call.
+  final String? category;
 
   MetricConfidence get confidence => maxHrSource == MaxHrSource.predicted
       ? MetricConfidence.low
@@ -53,24 +56,35 @@ CardioFitness? estimateCardioFitness({
   final vo2 = 15.3 * maxHr.bpm / restingBpm;
   if (vo2 < 15 || vo2 > 90) return null;
   final error = maxHr.source == MaxHrSource.predicted ? 0.20 : 0.10;
+  final low = vo2 * (1 - error);
+  final high = vo2 * (1 + error);
+  final from = _band(low, profile);
+  final to = _band(high, profile);
   return CardioFitness(
     vo2Max: vo2,
-    low: vo2 * (1 - error),
-    high: vo2 * (1 + error),
+    low: low,
+    high: high,
     maxHrSource: maxHr.source,
-    category: _category(vo2, profile),
+    category: from == to
+        ? _bandNames[from]
+        : to - from == 1
+        ? '${_bandNames[from]} to ${_bandNames[to].toLowerCase()}'
+        : null,
   );
 }
 
+const _bandNames = ['Below average', 'Fair', 'Good', 'Excellent', 'Superior'];
+
 /// Coarse ACSM-style bands for adults 30–39; shifts ~3 ml/kg/min per decade.
-String _category(double vo2, BodyProfile? profile) {
+/// Returns an index into [_bandNames].
+int _band(double vo2, BodyProfile? profile) {
   final age = profile?.age ?? 35;
   final female = profile?.sex == BiologicalSex.female;
   final shift = (age - 35) / 10 * 3 + (female ? 7 : 0);
   final adjusted = vo2 + math.max(-12, math.min(12, shift));
-  if (adjusted >= 52) return 'Superior';
-  if (adjusted >= 46) return 'Excellent';
-  if (adjusted >= 41) return 'Good';
-  if (adjusted >= 36) return 'Fair';
-  return 'Below average';
+  if (adjusted >= 52) return 4;
+  if (adjusted >= 46) return 3;
+  if (adjusted >= 41) return 2;
+  if (adjusted >= 36) return 1;
+  return 0;
 }

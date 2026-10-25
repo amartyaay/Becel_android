@@ -207,6 +207,38 @@ Performance buildPerformance({
           skinTempDelta: skinTempDelta,
           now: now,
         );
+  // Each past night is graded against the need going into it (baseline plus
+  // a third of the three earlier nights' shortfall, capped at 60 min), and
+  // today uses exactly the ring's need, so today's bar equals the ring.
+  final longestByWakeDate = <DateTime, SleepWindow>{};
+  for (final window in adjustedWindows) {
+    final day = DateTime(window.end.year, window.end.month, window.end.day);
+    final existing = longestByWakeDate[day];
+    if (existing == null || window.sleepMinutes > existing.sleepMinutes) {
+      longestByWakeDate[day] = window;
+    }
+  }
+  final todayDate = DateTime(now.year, now.month, now.day);
+  int needGoingInto(DateTime date) {
+    if (date == todayDate && coach.lastNight != null) {
+      return coach.needLastNight;
+    }
+    final earlier = [
+      for (final entry in longestByWakeDate.entries)
+        if (entry.key.isBefore(date) &&
+            !entry.key.isBefore(date.subtract(const Duration(days: 7))))
+          entry,
+    ]..sort((a, b) => a.key.compareTo(b.key));
+    final lastThree = earlier.length <= 3
+        ? earlier
+        : earlier.sublist(earlier.length - 3);
+    final shortfall = lastThree.fold<int>(
+      0,
+      (sum, e) => sum + math.max(0, coach.baselineNeed - e.value.sleepMinutes),
+    );
+    return coach.baselineNeed + math.min(60, (shortfall / 3).round());
+  }
+
   final history = heart == null || sleep == null
       ? const <RecoveryHistoryPoint>[]
       : recoveryHistory(
@@ -215,6 +247,7 @@ Performance buildPerformance({
           sleepWindows: adjustedWindows,
           now: now,
           sleepNeedMinutes: coach.baselineNeed,
+          sleepNeedFor: needGoingInto,
         );
   final trend = heart == null
       ? null
@@ -237,6 +270,7 @@ Performance buildPerformance({
     muscleVolume: muscleVolume,
     logsStrength: strengthSessions.isNotEmpty,
     now: now,
+    ambientTrimp: ambientTrimp(strainDays, today: now),
   );
 
   // Calories burned are shown only when every input is present, and only up
