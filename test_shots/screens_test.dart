@@ -39,6 +39,12 @@ Future<void> loadFonts() async {
     inter.addFont(Future.value(ByteData.view(bytes.buffer)));
   }
   await inter.load();
+  final nunito = FontLoader('Nunito');
+  for (final weight in [600, 700, 800]) {
+    final bytes = File('assets/fonts/Nunito-$weight.ttf').readAsBytesSync();
+    nunito.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await nunito.load();
   final icons = FontLoader('MaterialIcons')
     ..addFont(
       Future.value(

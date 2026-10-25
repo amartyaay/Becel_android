@@ -197,7 +197,7 @@ class _TodayStrainCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'TIME IN ZONES TODAY',
+            'Time in zones today',
             style: AppType.eyebrow.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 8),

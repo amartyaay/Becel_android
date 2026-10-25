@@ -32,7 +32,7 @@ class EnergyScreen extends StatelessWidget {
                 children: [
                   ScreenHeader(
                     onBack: () => Navigator.of(context).maybePop(),
-                    eyebrow: 'BURN · HONEST NUMBERS',
+                    eyebrow: 'Burned today',
                     title: 'Calories',
                   ),
                   const SizedBox(height: 16),
@@ -237,7 +237,17 @@ class _IntakeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(formatNumber(kcal.round()), style: AppType.numXl),
+                    Flexible(
+                      flex: 3,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.bottomLeft,
+                        child: Text(
+                          formatNumber(kcal.round()),
+                          style: AppType.numXl,
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     const Text('kcal', style: AppType.unit),
                     const SizedBox(width: 12),
@@ -670,12 +680,15 @@ class _MethodCard extends StatelessWidget {
     accent: AppColors.textSecondary,
     child: Text(
       'Each minute gets exactly one source, so nothing is double counted: '
-      'logged lift (MET), then heart rate above FLEX-HR (Keytel 2005, net of '
-      'resting), then walking steps (0.5 kcal/kg/km net), then a 15% daily-living '
-      'allowance when awake. Sleep adds nothing above resting. HR artifacts '
-      'are removed first with a Hampel filter. Wrist devices typically '
-      'overestimate exercise energy by 20–40%; this design errs low on '
-      'purpose. Thermic effect of food is not included.',
+      'a strength workout (Compendium METs scaled to your resting rate), '
+      'then heart rate above your FLEX-HR point (Keytel 2005, net of '
+      'resting; between FLEX and 50% heart-rate reserve only with movement '
+      'or right after hard effort), then walking steps (0.5 kcal/kg/km net), '
+      'then a 30% daily-living allowance when awake. Sleep adds nothing above '
+      'resting. Digestion adds 10% of food logged, or about 8% of the day '
+      'when none is. Spikes and cadence-locked heart rate are removed first. '
+      'Wrist devices often overstate exercise energy by 20–40%; this design '
+      'avoids that without under-fuelling rest days.',
       style: AppType.caption,
     ),
   );

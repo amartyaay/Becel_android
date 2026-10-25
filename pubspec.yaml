@@ -73,6 +73,16 @@ flutter:
           weight: 700
         - asset: assets/fonts/Inter-800.ttf
           weight: 800
+    # Nunito (SIL OFL 1.1, see assets/fonts/Nunito-OFL.txt): rounded
+    # numerals for scores and stats.
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-600.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-700.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-800.ttf
+          weight: 800
 
   # To add assets to your application, add an assets section, like this:
   # assets:

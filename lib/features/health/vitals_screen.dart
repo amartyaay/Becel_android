@@ -36,7 +36,7 @@ class VitalsScreen extends StatelessWidget {
                 children: [
                   ScreenHeader(
                     onBack: () => Navigator.of(context).maybePop(),
-                    eyebrow: 'HEART · BREATH · TEMPERATURE',
+                    eyebrow: 'Heart · breath · temperature',
                     title: 'Vitals',
                   ),
                   const SizedBox(height: 16),

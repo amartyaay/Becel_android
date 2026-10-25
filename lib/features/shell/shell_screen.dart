@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,28 +23,42 @@ class ShellScreen extends StatelessWidget {
       extendBody: true,
       body: navigationShell,
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottomInset * 0.4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              height: 68,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceHigh.withValues(alpha: 0.82),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: AppColors.hairline),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 12 + bottomInset * 0.4),
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(35),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F1B2340),
+                blurRadius: 30,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(35),
+            child: NavigationBarTheme(
+              data: NavigationBarThemeData(
+                labelTextStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontFamily: AppType.family,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: states.contains(WidgetState.selected)
+                        ? AppColors.textPrimary
+                        : AppColors.textTertiary,
+                  ),
+                ),
               ),
               child: NavigationBar(
-                height: 68,
+                height: 70,
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
-                indicatorColor: AppColors.accent.withValues(alpha: 0.16),
-                indicatorShape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                labelBehavior:
-                    NavigationDestinationLabelBehavior.onlyShowSelected,
+                indicatorColor: AppColors.ink,
+                indicatorShape: const StadiumBorder(),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
                 selectedIndex: navigationShell.currentIndex,
                 onDestinationSelected: (index) => navigationShell.goBranch(
                   index,
@@ -56,7 +68,7 @@ class ShellScreen extends StatelessWidget {
                   for (final item in _items)
                     NavigationDestination(
                       icon: Icon(item.$1, color: AppColors.textTertiary),
-                      selectedIcon: Icon(item.$2, color: AppColors.accent),
+                      selectedIcon: Icon(item.$2, color: Colors.white),
                       label: item.$3,
                     ),
                 ],
@@ -72,4 +84,4 @@ class ShellScreen extends StatelessWidget {
 void openSettings(BuildContext context) => context.go('/settings');
 
 /// Bottom padding every tab's scroll view needs to clear the floating bar.
-const navClearance = 104.0;
+const navClearance = 108.0;

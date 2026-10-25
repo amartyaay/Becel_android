@@ -300,171 +300,150 @@ class _RecoveryHero extends StatelessWidget {
     final waiting = p.recovery.nightsUntilScore;
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.hairline),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: AppColors.cardShadow,
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color.alphaBlend(
-              color.withValues(alpha: 0.10),
-              AppColors.surfaceHigh,
-            ),
-            AppColors.surface,
-          ],
+          colors: [AppColors.tint(color, 0.16), AppColors.surface],
+          stops: const [0.0, 0.75],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: onRecovery,
-            customBorder: const CircleBorder(),
-            child: Glow(
-              color: color,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: MetricRing(
-                  fraction: score == null ? null : score / 100,
-                  color: color,
-                  value: score == null ? '—' : '$score',
-                  unit: score == null ? null : '%',
-                  label: 'Recovery',
-                  size: 176,
-                  stroke: 14,
-                  semanticsLabel: score == null
-                      ? 'Recovery calibrating'
-                      : 'Recovery $score percent, ${recoveryWord(score)}',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Tag(
-            score == null
-                ? waiting > 0
-                      ? 'Calibrating · $waiting more night${waiting == 1 ? '' : 's'}'
-                      : 'Needs last night’s sleep'
-                : recovery!.provisional
-                ? '${recoveryWord(score)} · provisional'
-                : recoveryWord(score),
-            color: color,
-          ),
-          const SizedBox(height: 18),
-          Row(
+      padding: const EdgeInsets.fromLTRB(12, 22, 12, 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final big = (constraints.maxWidth * 0.38).clamp(110.0, 150.0);
+          final small = (constraints.maxWidth * 0.25).clamp(78.0, 100.0);
+          return Column(
             children: [
-              Expanded(
-                child: _MiniMetric(
-                  color: AppColors.strain,
-                  label: 'Strain',
-                  value: strain == null ? '—' : strain.toStringAsFixed(1),
-                  suffix: '/21',
-                  fraction: strain == null ? null : strain / strainMax,
-                  detail: 'target ${target.low.round()}–${target.high.round()}',
-                  onTap: onStrain,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: _HeroRing(
+                      onTap: onStrain,
+                      ring: MetricRing(
+                        size: small,
+                        stroke: 9,
+                        fraction: strain == null ? null : strain / strainMax,
+                        color: AppColors.strain,
+                        value: strain == null ? '—' : strain.toStringAsFixed(1),
+                        label: 'Strain',
+                        bandFrom: target.low / strainMax,
+                        bandTo: target.high / strainMax,
+                        semanticsLabel: strain == null
+                            ? 'Strain unavailable'
+                            : 'Strain ${strain.toStringAsFixed(1)} of 21, '
+                                  'target ${target.low.round()} to '
+                                  '${target.high.round()}',
+                      ),
+                      caption: strain == null
+                          ? 'needs HR'
+                          : 'target ${target.low.round()}–${target.high.round()}',
+                    ),
+                  ),
+                  _HeroRing(
+                    onTap: onRecovery,
+                    ring: Glow(
+                      color: color,
+                      radius: 0.7,
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: MetricRing(
+                          size: big,
+                          stroke: 13,
+                          fraction: score == null ? null : score / 100,
+                          color: color,
+                          value: score == null ? '—' : '$score',
+                          unit: score == null ? null : '%',
+                          label: 'Recovery',
+                          semanticsLabel: score == null
+                              ? 'Recovery calibrating'
+                              : 'Recovery $score percent, '
+                                    '${recoveryWord(score)}',
+                        ),
+                      ),
+                    ),
+                    caption: null,
+                  ),
+                  Expanded(
+                    child: _HeroRing(
+                      onTap: onSleep,
+                      ring: MetricRing(
+                        size: small,
+                        stroke: 9,
+                        fraction: sleepPct == null ? null : sleepPct / 100,
+                        color: AppColors.sleep,
+                        value: sleepPct == null ? '—' : '$sleepPct',
+                        unit: sleepPct == null ? null : '%',
+                        label: 'Sleep',
+                        semanticsLabel: sleepPct == null
+                            ? 'Sleep performance unavailable'
+                            : 'Sleep performance $sleepPct percent of need',
+                      ),
+                      caption: p.sleep.lastNight == null
+                          ? 'no main sleep'
+                          : formatDurationMinutes(
+                              p.sleep.lastNight!.asleepMinutes,
+                            ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _MiniMetric(
-                  color: AppColors.sleep,
-                  label: 'Sleep',
-                  value: sleepPct == null ? '—' : '$sleepPct',
-                  suffix: '%',
-                  fraction: sleepPct == null ? null : sleepPct / 100,
-                  detail: p.sleep.lastNight == null
-                      ? 'no main sleep'
-                      : '${formatDurationMinutes(p.sleep.lastNight!.asleepMinutes)} of '
-                            '${formatDurationMinutes(p.sleep.baselineNeed + p.sleep.debtNeed)}',
-                  onTap: onSleep,
-                ),
+              const SizedBox(height: 14),
+              Tag(
+                score == null
+                    ? waiting > 0
+                          ? 'Calibrating · $waiting more night${waiting == 1 ? '' : 's'}'
+                          : 'Needs last night’s sleep'
+                    : recovery!.provisional
+                    ? '${recoveryWord(score)} · provisional'
+                    : recoveryWord(score),
+                color: color,
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-class _MiniMetric extends StatelessWidget {
-  const _MiniMetric({
-    required this.color,
-    required this.label,
-    required this.value,
-    required this.suffix,
-    required this.fraction,
-    required this.detail,
+class _HeroRing extends StatelessWidget {
+  const _HeroRing({
     required this.onTap,
+    required this.ring,
+    required this.caption,
   });
 
-  final Color color;
-  final String label;
-  final String value;
-  final String suffix;
-  final double? fraction;
-  final String detail;
   final VoidCallback onTap;
+  final Widget ring;
+  final String? caption;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.bg.withValues(alpha: 0.45),
-    borderRadius: BorderRadius.circular(20),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: CircularProgressIndicator(
-                value: (fraction ?? 0).clamp(0.0, 1.0),
-                strokeWidth: 5,
-                strokeCap: StrokeCap.round,
-                color: color,
-                backgroundColor: AppColors.surfaceHigher,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppType.caption.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(value, style: AppType.numS.copyWith(fontSize: 20)),
-                        Text(
-                          suffix,
-                          style: AppType.unit.copyWith(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.caption.copyWith(fontSize: 11),
-                  ),
-                ],
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(24),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ring,
+          if (caption != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              caption!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.caption.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
               ),
             ),
           ],
-        ),
+        ],
       ),
     ),
   );
@@ -716,7 +695,7 @@ class _StepsTile extends StatelessWidget {
                 Text(
                   walking == null || raw == null || raw - walking < 100
                       ? 'of ${formatNumber(stepGoal)}'
-                      : '${formatNumber(walking)} real walking',
+                      : '${formatNumber(walking)} walking',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.caption.copyWith(fontSize: 11.5),

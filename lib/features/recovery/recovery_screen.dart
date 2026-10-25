@@ -32,7 +32,7 @@ class RecoveryScreen extends StatelessWidget {
                 children: [
                   ScreenHeader(
                     onBack: () => Navigator.of(context).maybePop(),
-                    eyebrow: 'READINESS TO PERFORM',
+                    eyebrow: 'Readiness to perform',
                     title: 'Recovery',
                   ),
                   const SizedBox(height: 16),

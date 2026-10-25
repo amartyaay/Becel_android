@@ -439,8 +439,9 @@ String _dateKey(DateTime value) {
 
 String _clock(DateTime time) {
   final local = time.toLocal();
-  return '${local.hour.toString().padLeft(2, '0')}:'
-      '${local.minute.toString().padLeft(2, '0')}';
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final suffix = local.hour < 12 ? 'AM' : 'PM';
+  return '$hour:${local.minute.toString().padLeft(2, '0')} $suffix';
 }
 
 String _duration(int minutes) {

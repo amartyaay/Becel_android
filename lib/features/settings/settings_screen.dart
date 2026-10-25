@@ -762,12 +762,12 @@ class _BrandMark extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFD9FA83), Color(0xFF91BD49)],
+          colors: [AppColors.strain, AppColors.sleep],
         ),
       ),
       child: const Icon(
         Icons.monitor_heart_rounded,
-        color: Color(0xFF14200B),
+        color: Colors.white,
         size: 22,
       ),
     );

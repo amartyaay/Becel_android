@@ -44,7 +44,7 @@ class _SleepScreenState extends State<SleepScreen> {
                 padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
                 children: [
                   const ScreenHeader(
-                    eyebrow: 'NEED · DEBT · TIMING',
+                    eyebrow: 'Need · debt · timing',
                     title: 'Sleep',
                   ),
                   const SizedBox(height: 16),
@@ -175,7 +175,7 @@ class _LastNightCard extends StatelessWidget {
                       style: AppType.numM,
                     ),
                     Text(
-                      'asleep of ${formatDurationMinutes(coach.baselineNeed + coach.debtNeed)} needed',
+                      'asleep of ${formatDurationMinutes(coach.needLastNight)} needed',
                       style: AppType.caption,
                     ),
                     const SizedBox(height: 10),

@@ -1,38 +1,43 @@
 import 'package:flutter/material.dart';
 
-/// Becel design tokens.
+/// Becel design tokens: light-first, soft and vivid.
 ///
-/// Dark-first: a cool near-black canvas with four tonal surface steps and
-/// hairline borders for depth (no grey drop shadows). Metric identity hues
-/// were validated as a set for colour-vision deficiency against the card
-/// surface (OKLab ΔE ≥ 8 adjacent; the on-screen trios pass all-pairs).
+/// An off-white canvas with white cards lifted by soft tinted shadows (no
+/// hairline borders), very round corners, and saturated metric hues used
+/// for rings and charts. The identity hues were validated as a set for
+/// colour-vision deficiency on the white card surface (all six pass the
+/// adjacent checks at ≥ 3:1; the on-screen trios pass all-pairs).
 abstract final class AppColors {
-  // Surfaces, darkest to lightest.
-  static const bg = Color(0xFF0A0B0E);
-  static const surface = Color(0xFF111318);
-  static const surfaceHigh = Color(0xFF171A20);
-  static const surfaceHigher = Color(0xFF20242C);
-  static const border = Color(0xFF242932);
-  static const hairline = Color(0x14FFFFFF);
+  // Surfaces.
+  static const bg = Color(0xFFF3F4F8);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceHigh = Color(0xFFFFFFFF);
 
-  static const textPrimary = Color(0xFFF4F5F7);
-  static const textSecondary = Color(0xFFA7ADB9);
-  static const textTertiary = Color(0xFF7A8190);
+  /// Tracks, empty bars, input fills.
+  static const surfaceHigher = Color(0xFFEDEFF4);
+  static const border = Color(0xFFE5E7EE);
+  static const hairline = Color(0x0F101828);
 
-  /// Interactive accent: links, selected navigation, primary buttons.
-  static const accent = Color(0xFF5B93FF);
+  static const textPrimary = Color(0xFF0E1116);
+  static const textSecondary = Color(0xFF4A5160);
+  static const textTertiary = Color(0xFF6B7282);
+
+  /// Primary actions are ink-black pills; links use the steps blue.
+  static const ink = Color(0xFF0E1116);
+  static const accent = Color(0xFF1A8FE8);
 
   // Metric identities (fixed; never reused for status).
-  static const strain = Color(0xFFE8632A);
-  static const sleep = Color(0xFF8573EE);
-  static const burned = Color(0xFFC08400);
-  static const intake = Color(0xFF13A374);
-  static const steps = Color(0xFF3D80F2);
+  static const strain = Color(0xFFF2601E);
+  static const sleep = Color(0xFF6E56F0);
+  static const burned = Color(0xFFCC7600);
+  static const steps = Color(0xFF1A8FE8);
+  static const active = Color(0xFFE8457A);
+  static const intake = Color(0xFF14A06E);
 
-  // Status (reserved: only when the colour means good / caution / bad, and
-  // always paired with a word).
-  static const bandGreen = Color(0xFF17B26A);
-  static const bandYellow = Color(0xFFF5B100);
+  // Status: only when the colour means good / caution / bad, always with a
+  // word beside it.
+  static const bandGreen = Color(0xFF10A35A);
+  static const bandYellow = Color(0xFFE29A00);
   static const bandRed = Color(0xFFE5484D);
 
   // Short aliases used across screens.
@@ -46,43 +51,55 @@ abstract final class AppColors {
   static const recovery = bandGreen;
   static const energy = burned;
   static const strainBlue = strain;
+
+  /// Soft, cool-tinted elevation for cards (never grey or black).
+  static const cardShadow = [
+    BoxShadow(color: Color(0x0D1B2340), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x0A1B2340), blurRadius: 3, offset: Offset(0, 1)),
+  ];
+
+  /// A pale wash of a metric colour for chips and backgrounds.
+  static Color tint(Color color, [double amount = 0.12]) =>
+      Color.alphaBlend(color.withValues(alpha: amount), surface);
 }
 
-/// Type scale: Inter, four working sizes plus display numerals. Labels stay
-/// quiet so values carry the hierarchy.
+/// Type scale. Inter for text; Nunito (rounded) for numerals, which gives
+/// scores a friendly, Bevel-like character. Labels stay quiet so values
+/// carry the hierarchy.
 abstract final class AppType {
   static const family = 'Inter';
+  static const numerals = 'Nunito';
 
-  /// Inter's bundled Latin subset lacks some maths symbols (≤, ≈, ⅓).
+  /// Bundled subsets lack a few maths symbols (≤, ≈, ⅓).
   static const fallback = ['Roboto', 'sans-serif'];
 
   static const eyebrow = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
-    fontSize: 11.5,
+    fontSize: 12,
     height: 1.2,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
   );
 
   static const screenTitle = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
-    fontSize: 30,
+    fontSize: 32,
     height: 1.1,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -1.0,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -1.2,
   );
 
   static const sectionTitle = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: FontWeight.w700,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   );
 
   static const cardTitle = TextStyle(
@@ -90,8 +107,8 @@ abstract final class AppType {
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
     fontSize: 16,
-    fontWeight: FontWeight.w600,
-    letterSpacing: -0.2,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.3,
   );
 
   static const rowTitle = TextStyle(
@@ -100,14 +117,14 @@ abstract final class AppType {
     color: AppColors.textPrimary,
     fontSize: 14.5,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.1,
+    letterSpacing: -0.15,
   );
 
   static const body = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textSecondary,
-    fontSize: 14,
+    fontSize: 14.5,
     height: 1.5,
   );
 
@@ -115,7 +132,7 @@ abstract final class AppType {
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textSecondary,
-    fontSize: 13,
+    fontSize: 13.5,
     height: 1.45,
   );
 
@@ -123,38 +140,37 @@ abstract final class AppType {
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
-    fontSize: 12,
+    fontSize: 12.5,
     height: 1.4,
   );
 
-  /// Hero numerals: proportional figures read tighter at display sizes.
   static const numXl = TextStyle(
-    fontFamily: family,
+    fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
-    fontSize: 48,
+    fontSize: 52,
     height: 1.0,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -2.0,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -1.5,
   );
 
   static const numM = TextStyle(
-    fontFamily: family,
+    fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
-    fontSize: 26,
+    fontSize: 28,
     height: 1.05,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.9,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.6,
   );
 
   static const numS = TextStyle(
-    fontFamily: family,
+    fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
-    fontSize: 17,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.4,
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.2,
   );
 
   static const unit = TextStyle(
@@ -162,14 +178,14 @@ abstract final class AppType {
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
     fontSize: 13,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w600,
   );
 
   static const footer = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
-    fontSize: 11.5,
+    fontSize: 12,
     height: 1.4,
     fontWeight: FontWeight.w500,
   );
@@ -177,17 +193,16 @@ abstract final class AppType {
   static const pill = TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
-    fontSize: 11.5,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
   );
 }
 
-ThemeData buildDarkTheme() {
-  const colorScheme = ColorScheme.dark(
-    primary: AppColors.accent,
+ThemeData buildLightTheme() {
+  const colorScheme = ColorScheme.light(
+    primary: AppColors.ink,
     onPrimary: Colors.white,
-    secondary: AppColors.intake,
+    secondary: AppColors.accent,
     onSecondary: Colors.white,
     surface: AppColors.surface,
     onSurface: AppColors.textPrimary,
@@ -195,11 +210,16 @@ ThemeData buildDarkTheme() {
     error: AppColors.bandRed,
     onError: Colors.white,
   );
+  const buttonText = TextStyle(
+    fontFamily: AppType.family,
+    fontSize: 14.5,
+    fontWeight: FontWeight.w700,
+  );
 
   return ThemeData(
     useMaterial3: true,
     fontFamily: AppType.family,
-    brightness: Brightness.dark,
+    brightness: Brightness.light,
     scaffoldBackgroundColor: AppColors.bg,
     colorScheme: colorScheme,
     splashFactory: InkSparkle.splashFactory,
@@ -207,7 +227,7 @@ ThemeData buildDarkTheme() {
       color: AppColors.surface,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: AppColors.bg,
@@ -218,45 +238,33 @@ ThemeData buildDarkTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.accent,
+        backgroundColor: AppColors.ink,
         foregroundColor: Colors.white,
         disabledBackgroundColor: AppColors.surfaceHigher,
         disabledForegroundColor: AppColors.textTertiary,
-        textStyle: const TextStyle(
-          fontFamily: AppType.family,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: buttonText,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+        shape: const StadiumBorder(),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.textPrimary,
-        backgroundColor: AppColors.surfaceHigh,
-        side: const BorderSide(color: AppColors.border),
-        textStyle: const TextStyle(
-          fontFamily: AppType.family,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppColors.surfaceHigher,
+        side: BorderSide.none,
+        textStyle: buttonText,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        shape: const StadiumBorder(),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.accent,
-        textStyle: const TextStyle(
-          fontFamily: AppType.family,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        textStyle: buttonText,
       ),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: AppColors.accent,
+      color: AppColors.ink,
       linearTrackColor: AppColors.surfaceHigher,
       circularTrackColor: AppColors.surfaceHigher,
     ),
@@ -266,19 +274,20 @@ ThemeData buildDarkTheme() {
       space: 1,
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: AppColors.surfaceHigher,
+      backgroundColor: AppColors.ink,
       contentTextStyle: const TextStyle(
         fontFamily: AppType.family,
-        color: AppColors.textPrimary,
+        color: Colors.white,
         fontSize: 13.5,
+        fontWeight: FontWeight.w500,
       ),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       showDragHandle: true,
       dragHandleColor: AppColors.border,
@@ -288,33 +297,37 @@ ThemeData buildDarkTheme() {
       textColor: AppColors.textPrimary,
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: AppColors.surfaceHigh,
-      selectedColor: AppColors.accent.withValues(alpha: 0.18),
-      side: const BorderSide(color: AppColors.border),
+      backgroundColor: AppColors.surfaceHigher,
+      selectedColor: AppColors.ink,
+      side: BorderSide.none,
       labelStyle: const TextStyle(fontFamily: AppType.family, fontSize: 13),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: const StadiumBorder(),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surfaceHigher,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.accent),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.surfaceHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+    ),
+    timePickerTheme: const TimePickerThemeData(
+      backgroundColor: AppColors.surface,
     ),
   );
 }

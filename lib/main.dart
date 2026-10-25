@@ -9,9 +9,10 @@ void main() {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF101713),
-      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: AppColors.bg,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
   runApp(const BecelApp());
@@ -32,7 +33,7 @@ class _BecelAppState extends State<BecelApp> {
     return MaterialApp.router(
       title: 'Becel',
       debugShowCheckedModeBanner: false,
-      theme: buildDarkTheme(),
+      theme: buildLightTheme(),
       routerConfig: _router,
     );
   }

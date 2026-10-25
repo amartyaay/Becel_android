@@ -103,10 +103,10 @@ void main() {
 
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
-    expect(find.text('BY MIDNIGHT'), findsOneWidget);
+    expect(find.text('By midnight'), findsOneWidget);
     expect(find.text('Eaten'), findsNothing);
-    await _scrollTo(tester, find.text('Active'));
-    expect(find.text('Steps'), findsOneWidget);
+    await _scrollTo(tester, find.text('Steps'));
+    expect(find.text('Active'), findsWidgets);
     await _scrollTo(tester, find.text('Today’s plan'));
     await _scrollTo(tester, find.text('Vitals'));
     expect(tester.takeException(), isNull);
@@ -123,7 +123,7 @@ void main() {
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.text('Waiting for data'), findsOneWidget);
     expect(find.textContaining('Needs sex'), findsOneWidget);
-    expect(find.text('BY MIDNIGHT'), findsNothing);
+    expect(find.text('By midnight'), findsNothing);
   });
 
   testWidgets('Today has no logging controls (read-only app)', (tester) async {
@@ -187,7 +187,7 @@ void main() {
     await _boot(tester);
     await _openTab(tester, 'Training');
 
-    expect(find.text('TIME IN ZONES TODAY'), findsOneWidget);
+    expect(find.text('Time in zones today'), findsOneWidget);
     await _scrollTo(tester, find.text('Training load'));
     expect(find.textContaining('ACWR'), findsOneWidget);
     await _scrollTo(tester, find.text('Heart-rate zones · 7 days'));
@@ -207,7 +207,7 @@ void main() {
     expect(find.text('Last night'), findsOneWidget);
     expect(find.text('I fell asleep later'), findsNothing);
     await _scrollTo(tester, find.text('Tonight'));
-    expect(find.text('IN BED BY'), findsOneWidget);
+    expect(find.text('In bed by'), findsOneWidget);
     await _scrollTo(tester, find.text('Consistency · 7 nights'));
     expect(tester.takeException(), isNull);
   });

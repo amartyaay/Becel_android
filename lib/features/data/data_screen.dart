@@ -102,7 +102,7 @@ class _DataScreenState extends State<DataScreen> {
             children: [
               ScreenHeader(
                 onBack: () => Navigator.of(context).maybePop(),
-                eyebrow: 'YOUR INFORMATION',
+                eyebrow: 'Your information',
                 title: 'Data sources',
                 trailing: _loading
                     ? const SizedBox(
@@ -334,13 +334,19 @@ class _ConnectionHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1C2922), Color(0xFF121B17)],
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: AppColors.cardShadow,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.tint(
+              hasAccess ? AppColors.green : AppColors.accent,
+              0.14,
+            ),
+            AppColors.surface,
+          ],
         ),
-        border: Border.all(color: AppColors.green.withValues(alpha: 0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,7 +459,7 @@ class _ConnectionHero extends StatelessWidget {
                       height: 15,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF18210D),
+                        color: Colors.white,
                       ),
                     )
                   : Icon(

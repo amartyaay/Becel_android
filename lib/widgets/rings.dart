@@ -139,13 +139,14 @@ class _RingPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final arc = rect.deflate(stroke / 2 + 1);
     const start = -math.pi / 2;
+    // Pastel track in the ring's own hue.
     canvas.drawArc(
       arc,
       0,
       math.pi * 2,
       false,
       Paint()
-        ..color = AppColors.surfaceHigher
+        ..color = AppColors.tint(color, 0.16)
         ..style = PaintingStyle.stroke
         ..strokeWidth = stroke,
     );
@@ -164,22 +165,39 @@ class _RingPainter extends CustomPainter {
     }
     final value = fraction;
     if (value == null || value <= 0) return;
+    final sweep = math.max(0.02, value) * math.pi * 2;
+    // Gradient runs along the filled arc: light at the start, full colour
+    // at the head, like a comet.
+    final light = Color.lerp(color, Colors.white, 0.45)!;
     canvas.drawArc(
       arc,
       start,
-      math.max(0.02, value) * math.pi * 2,
+      sweep,
       false,
       Paint()
         ..shader = SweepGradient(
           startAngle: 0,
-          endAngle: math.pi * 2,
+          endAngle: math.max(0.01, sweep),
           transform: const GradientRotation(-math.pi / 2),
-          colors: [color.withValues(alpha: 0.65), color],
+          colors: [light, color],
         ).createShader(rect)
         ..style = PaintingStyle.stroke
         ..strokeWidth = stroke
         ..strokeCap = StrokeCap.round,
     );
+    // A bright head with a soft halo marks "now".
+    final angle = start + sweep;
+    final radius = arc.width / 2;
+    final head =
+        rect.center + Offset(math.cos(angle), math.sin(angle)) * radius;
+    canvas.drawCircle(
+      head,
+      stroke * 0.9,
+      Paint()
+        ..color = color.withValues(alpha: 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawCircle(head, stroke * 0.32, Paint()..color = Colors.white);
   }
 
   @override
@@ -418,10 +436,12 @@ class StatBlock extends StatelessWidget {
       crossAxisAlignment: align,
       children: [
         Text(
-          label,
-          style: AppType.eyebrow.copyWith(fontSize: 10, letterSpacing: 0.8),
+          _sentenceCase(label),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.eyebrow.copyWith(fontSize: 12),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Row(
@@ -429,7 +449,7 @@ class StatBlock extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(value, style: AppType.numS.copyWith(fontSize: 20)),
+              Text(value, style: AppType.numS.copyWith(fontSize: 21)),
               if (unit != null) ...[
                 const SizedBox(width: 3),
                 Text(unit!, style: AppType.unit.copyWith(fontSize: 11.5)),
@@ -465,7 +485,7 @@ class PanelCard extends StatelessWidget {
     this.accent = AppColors.green,
     this.trailing,
     this.onTap,
-    this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 16),
+    this.padding = const EdgeInsets.fromLTRB(18, 16, 18, 18),
   });
 
   final Widget child;
@@ -488,24 +508,18 @@ class PanelCard extends StatelessWidget {
               children: [
                 if (icon != null) ...[
                   Container(
-                    width: 26,
-                    height: 26,
+                    width: 30,
+                    height: 30,
                     decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.tint(accent, 0.15),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, size: 15, color: accent),
+                    child: Icon(icon, size: 16, color: accent),
                   ),
                   const SizedBox(width: 10),
                 ],
                 Expanded(
-                  child: Text(
-                    _sentenceCase(title!),
-                    style: AppType.rowTitle.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 13.5,
-                    ),
-                  ),
+                  child: Text(_sentenceCase(title!), style: AppType.cardTitle),
                 ),
                 ?trailing,
                 if (onTap != null && trailing == null)
@@ -516,29 +530,26 @@ class PanelCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
           ],
           child,
         ],
       ),
     );
-    final decoration = BoxDecoration(
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: AppColors.hairline),
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [AppColors.surfaceHigh, AppColors.surface],
-      ),
+    const decoration = BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.all(Radius.circular(26)),
+      boxShadow: AppColors.cardShadow,
     );
     if (onTap == null) return Container(decoration: decoration, child: body);
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: decoration,
+    return Container(
+      decoration: decoration,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(26),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(26),
           child: body,
         ),
       ),
