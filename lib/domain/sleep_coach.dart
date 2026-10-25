@@ -6,6 +6,8 @@ import 'heart_signal.dart';
 
 const defaultSleepNeedMinutes = 480;
 
+enum BaselineSource { user, learned, standard }
+
 enum OnsetSource { device, heartRate, user }
 
 /// A night with Becel's onset correction applied. Source stages are never
@@ -44,15 +46,23 @@ class AdjustedNight {
 /// Corrects sleep onset logged too early.
 ///
 /// Wrist trackers infer sleep from stillness, so lying still while scrolling
-/// can be logged as light sleep. Becel finds the sleeping heart-rate floor
-/// for the night (20th percentile) and moves onset forward to the first
-/// 5-minute run at or below floor + 8 bpm, trimming at most 2 hours. A
-/// user-entered onset always wins.
+/// can be logged as light sleep. Becel moves onset forward only while heart
+/// rate stays at your measured pre-bed *awake* level (median of the 30
+/// minutes before the session, minus 5 bpm) and above the night's sleeping
+/// floor + 8 bpm, trimming at most 60 minutes. It never trims after hard
+/// exercise in the previous 3 hours, when elevated sleeping HR is normal.
 AdjustedNight adjustOnset(
   SleepNight night, {
   required List<TimedValue> cleanedMinutes,
   DateTime? userOnset,
+  double? hardBpm,
 }) {
+  AdjustedNight unchanged() => AdjustedNight(
+    night: night,
+    onset: night.start,
+    asleepMinutes: night.minutes,
+    onsetSource: OnsetSource.device,
+  );
   if (userOnset != null &&
       userOnset.isAfter(night.start) &&
       userOnset.isBefore(night.end)) {
@@ -68,40 +78,45 @@ AdjustedNight adjustOnset(
       if (!sample.at.isBefore(night.start) && sample.at.isBefore(night.end))
         sample,
   ];
-  if (inNight.length < 120) {
-    return AdjustedNight(
-      night: night,
-      onset: night.start,
-      asleepMinutes: night.minutes,
-      onsetSource: OnsetSource.device,
-    );
+  if (inNight.length < 120) return unchanged();
+  final preBed = [
+    for (final sample in cleanedMinutes)
+      if (sample.at.isBefore(night.start) &&
+          !sample.at.isBefore(
+            night.start.subtract(const Duration(minutes: 30)),
+          ))
+        sample.value,
+  ];
+  if (preBed.length < 10) return unchanged();
+  if (hardBpm != null &&
+      cleanedMinutes.any(
+        (s) =>
+            s.value >= hardBpm &&
+            s.at.isBefore(night.start) &&
+            s.at.isAfter(night.start.subtract(const Duration(hours: 3))),
+      )) {
+    return unchanged();
   }
   final sorted = inNight.map((s) => s.value).toList()..sort();
   final floor = sorted[(sorted.length * 0.2).floor()];
-  final threshold = floor + 8;
-  final limit = night.start.add(const Duration(hours: 2));
-  var run = 0;
+  final awakeLevel = medianOf(preBed) - 5;
+  final threshold = math.max(floor + 8, awakeLevel);
+  if (awakeLevel <= floor + 8) return unchanged();
+  final limit = night.start.add(const Duration(minutes: 60));
   DateTime? onset;
   for (final sample in inNight) {
-    if (sample.at.isAfter(limit)) break;
-    if (sample.value <= threshold) {
-      run++;
-      if (run >= 5) {
-        onset = sample.at.subtract(const Duration(minutes: 4));
-        break;
-      }
-    } else {
-      run = 0;
+    if (sample.at.isAfter(limit)) {
+      onset = limit;
+      break;
+    }
+    if (sample.value < threshold) {
+      onset = sample.at;
+      break;
     }
   }
   // Only correct when it matters (> 15 minutes) so normal latency is kept.
   if (onset == null || onset.difference(night.start).inMinutes <= 15) {
-    return AdjustedNight(
-      night: night,
-      onset: night.start,
-      asleepMinutes: night.minutes,
-      onsetSource: OnsetSource.device,
-    );
+    return unchanged();
   }
   return AdjustedNight(
     night: night,
@@ -137,6 +152,8 @@ class SleepCoach {
     required this.midpointSdMinutes,
     required this.recommendedBedtime,
     required this.typicalWake,
+    this.baselineSource = BaselineSource.standard,
+    this.debtGoingIn = 0,
   });
 
   final AdjustedNight? lastNight;
@@ -144,20 +161,28 @@ class SleepCoach {
   /// Main sleeps (≥ 3 h) in the last 7 days, oldest first.
   final List<AdjustedNight> nights;
   final int baselineNeed;
+  final BaselineSource baselineSource;
   final int strainNeed;
+
+  /// Repayment added to tonight's need (shortfall of the last 3 nights).
   final int debtNeed;
+
+  /// Repayment that applied going into last night (the 3 nights before it).
+  /// Last night is graded against this, never against its own shortfall.
+  final int debtGoingIn;
   final int debtMinutes;
   final int? midpointSdMinutes;
   final DateTime? recommendedBedtime;
   final DateTime? typicalWake;
 
   int get needTonight => baselineNeed + strainNeed + debtNeed;
+  int get needLastNight => baselineNeed + debtGoingIn;
 
-  /// Last night against what was needed going into it (baseline + debt).
+  /// Last night against what was needed going into it.
   int? get performancePercent {
     final night = lastNight;
     if (night == null) return null;
-    return (night.asleepMinutes / math.max(1, baselineNeed + debtNeed) * 100)
+    return (night.asleepMinutes / math.max(1, needLastNight) * 100)
         .round()
         .clamp(0, 100);
   }
@@ -187,10 +212,34 @@ SleepCoach buildSleepCoach({
   double? yesterdayStrain,
   int? baselineNeedMinutes,
   Map<String, DateTime> userOnsets = const {},
+  bool correctOnset = true,
+  double? hardBpm,
 }) {
-  final baseline = (baselineNeedMinutes ?? defaultSleepNeedMinutes)
-      .clamp(360, 600)
-      .toInt();
+  // Baseline: the user's setting, else learned from their own upper-quartile
+  // main sleep over 28 days (what they get when life allows), clamped to the
+  // adult 7–9 h range. A fixed 8 h would put natural 7 h sleepers in
+  // permanent "debt".
+  final learnFrom = [
+    for (final session in sessions)
+      if (session.minutes >= 180 &&
+          session.end.isAfter(now.subtract(const Duration(days: 28))) &&
+          !session.end.isAfter(now))
+        session.minutes.toDouble(),
+  ]..sort();
+  final BaselineSource source;
+  final int baseline;
+  if (baselineNeedMinutes != null) {
+    source = BaselineSource.user;
+    baseline = baselineNeedMinutes.clamp(360, 600).toInt();
+  } else if (learnFrom.length >= 7) {
+    source = BaselineSource.learned;
+    baseline = learnFrom[(learnFrom.length * 0.75).floor()]
+        .clamp(420, 540)
+        .round();
+  } else {
+    source = BaselineSource.standard;
+    baseline = defaultSleepNeedMinutes;
+  }
   final cutoff = now.subtract(const Duration(days: 7));
   final mains = [
     for (final session in sessions)
@@ -204,15 +253,17 @@ SleepCoach buildSleepCoach({
   for (final session in mains) {
     final key = sleepKey(session);
     final existing = byDate[key];
-    if (existing == null || session.minutes > existing.minutes)
+    if (existing == null || session.minutes > existing.minutes) {
       byDate[key] = session;
+    }
   }
   final nights = [
     for (final session in byDate.values)
       adjustOnset(
         session,
-        cleanedMinutes: cleanedMinutes,
+        cleanedMinutes: correctOnset ? cleanedMinutes : const [],
         userOnset: userOnsets[sleepKey(session)],
+        hardBpm: hardBpm,
       ),
   ]..sort((a, b) => a.night.end.compareTo(b.night.end));
 
@@ -222,15 +273,21 @@ SleepCoach buildSleepCoach({
       ? null
       : nights.last;
 
-  // Debt from the three nights before tonight.
-  final recent = nights.length <= 3
-      ? nights
-      : nights.sublist(nights.length - 3);
-  final shortfall = recent.fold<int>(
+  int shortfallOf(List<AdjustedNight> list) => list.fold<int>(
     0,
     (sum, night) => sum + math.max(0, baseline - night.asleepMinutes),
   );
+  List<AdjustedNight> lastThree(List<AdjustedNight> list) =>
+      list.length <= 3 ? list : list.sublist(list.length - 3);
+  // Tonight: the three most recent nights. Going into last night: the three
+  // before it.
+  final shortfall = shortfallOf(lastThree(nights));
   final debtNeed = math.min(60, (shortfall / 3).round());
+  final before = last == null ? nights : nights.sublist(0, nights.length - 1);
+  final debtGoingIn = math.min(
+    60,
+    (shortfallOf(lastThree(before)) / 3).round(),
+  );
   final strain = yesterdayStrain ?? 0;
   final strainNeed = (math.max(0, strain - 10) / 11 * 45)
       .round()
@@ -285,8 +342,10 @@ SleepCoach buildSleepCoach({
     lastNight: last,
     nights: nights,
     baselineNeed: baseline,
+    baselineSource: source,
     strainNeed: strainNeed,
     debtNeed: debtNeed,
+    debtGoingIn: debtGoingIn,
     debtMinutes: shortfall,
     midpointSdMinutes: midpointSd,
     recommendedBedtime: bedtime,

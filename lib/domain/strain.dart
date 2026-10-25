@@ -6,11 +6,12 @@ import 'strength.dart';
 
 /// Banister TRIMP scale constant mapping daily load onto 0–21.
 ///
-/// strain = 21 × (1 − e^(−TRIMP / k)). With k = 90 a light day (~25 TRIMP)
-/// reads ~5, an hour of steady running (~100) ~14, and a long hard day
-/// (~250) ~19.7. The curve is logarithmic in effort, like WHOOP's scale:
-/// each extra point is harder to earn.
-const strainScaleK = 90.0;
+/// strain = 21 × (1 − e^(−TRIMP / k)). With k = 100 (and the floor
+/// subtracted below) an hour of Z2–Z3 running reads ~12, a 75-minute tempo
+/// ~13.5, and only a long, hard day (~250 TRIMP) passes 19. The curve is
+/// logarithmic in effort, like WHOOP's scale: each extra point is harder to
+/// earn, and 18+ stays rare.
+const strainScaleK = 100.0;
 const strainMax = 21.0;
 
 /// Below 30 % heart-rate reserve, minutes are ambient (standing, talking,
@@ -32,14 +33,17 @@ double trimpForStrain(double strain) =>
     -strainScaleK *
     math.log(1 - (strain.clamp(0, strainMax - 0.01) / strainMax));
 
-/// Banister TRIMP per minute at heart-rate-reserve fraction [hrr].
+/// Banister TRIMP per minute at heart-rate-reserve fraction [hrr], minus
+/// its value at the 30 % floor so load rises continuously from zero instead
+/// of jumping at the threshold.
 /// Men: 0.64·e^(1.92x); women: 0.86·e^(1.67x) (Banister 1991).
 double banisterTrimpPerMinute(double hrr, BiologicalSex? sex) {
   final x = hrr.clamp(0.0, 1.0);
-  if (x < strainFloorHrr) return 0;
-  return sex == BiologicalSex.female
-      ? x * 0.86 * math.exp(1.67 * x)
-      : x * 0.64 * math.exp(1.92 * x);
+  if (x <= strainFloorHrr) return 0;
+  double raw(double v) => sex == BiologicalSex.female
+      ? v * 0.86 * math.exp(1.67 * v)
+      : v * 0.64 * math.exp(1.92 * v);
+  return raw(x) - raw(strainFloorHrr);
 }
 
 class DayStrain {
@@ -234,7 +238,7 @@ extension LoadStatusLabel on LoadStatus {
 
   String get advice => switch (this) {
     LoadStatus.calibrating =>
-      'Needs 14 days of wear to compare short- and long-term load.',
+      'Needs 21 well-worn days to compare short- and long-term load.',
     LoadStatus.detraining =>
       'This week is well below your usual load. Fitness will drift down if it continues.',
     LoadStatus.maintaining =>
@@ -290,24 +294,56 @@ class TrainingLoad {
 /// The acute:chronic ratio is a load-change indicator. Its value for
 /// predicting injury is debated (Impellizzeri et al., 2020), so Becel uses it
 /// only to describe how this week compares with your recent base.
-TrainingLoad trainingLoad(List<DayStrain> days) {
+/// Days with less wear than this carry the averages forward instead of
+/// entering as zero load (an unworn day is unknown, not a rest day).
+const loadCoverageMinutes = 16 * 60;
+
+/// Covered days needed before the acute:chronic ratio is shown.
+const loadMinimumCoveredDays = 21;
+
+TrainingLoad trainingLoad(List<DayStrain> days, {DateTime? today}) {
   const acuteLambda = 2 / (7 + 1);
   const chronicLambda = 2 / (28 + 1);
-  final covered = days.where((day) => day.hasData).length;
-  double? acute;
-  double? chronic;
-  for (final day in days) {
-    final load = day.trimp;
-    acute = acute == null
-        ? load
-        : acuteLambda * load + (1 - acuteLambda) * acute;
-    chronic = chronic == null
-        ? load
-        : chronicLambda * load + (1 - chronicLambda) * chronic;
+  // Today is unfinished: including it would drag acute load down every
+  // morning. Load is computed through yesterday.
+  final cutoff = today == null
+      ? null
+      : DateTime(today.year, today.month, today.day);
+  final complete = [
+    for (final day in days)
+      if (cutoff == null || day.date.isBefore(cutoff)) day,
+  ];
+  bool wellWorn(DayStrain day) =>
+      day.coverageMinutes >= loadCoverageMinutes || day.strengthTrimp > 0;
+  final covered = complete.where(wellWorn).toList();
+  if (covered.isEmpty) {
+    return TrainingLoad(
+      days: days,
+      acute: 0,
+      chronic: 0,
+      acwr: null,
+      form: 0,
+      monotony: null,
+      weeklyTrimp: 0,
+      status: LoadStatus.calibrating,
+      coveredDays: 0,
+    );
   }
-  acute ??= 0;
-  chronic ??= 0;
-  final last7 = days.length <= 7 ? days : days.sublist(days.length - 7);
+  // Seed both averages with the mean of the first covered fortnight rather
+  // than one arbitrary first day.
+  final seedDays = covered.take(14).toList();
+  final seed =
+      seedDays.fold<double>(0, (s, d) => s + d.trimp) / seedDays.length;
+  var acute = seed;
+  var chronic = seed;
+  for (final day in complete) {
+    if (!wellWorn(day)) continue;
+    acute = acuteLambda * day.trimp + (1 - acuteLambda) * acute;
+    chronic = chronicLambda * day.trimp + (1 - chronicLambda) * chronic;
+  }
+  final last7 = covered.length <= 7
+      ? covered
+      : covered.sublist(covered.length - 7);
   final weekly = last7.fold<double>(0, (sum, day) => sum + day.trimp);
   final mean = weekly / math.max(1, last7.length);
   final variance = last7.isEmpty
@@ -318,8 +354,10 @@ TrainingLoad trainingLoad(List<DayStrain> days) {
             ) /
             last7.length;
   final sd = math.sqrt(variance);
-  final monotony = sd < 1 ? null : mean / sd;
-  final ratio = covered < 14 || chronic < 5 ? null : acute / chronic;
+  final monotony = sd < 1 || last7.length < 5 ? null : mean / sd;
+  final ratio = covered.length < loadMinimumCoveredDays || chronic < 5
+      ? null
+      : acute / chronic;
   final status = ratio == null
       ? LoadStatus.calibrating
       : ratio < 0.8
@@ -340,7 +378,7 @@ TrainingLoad trainingLoad(List<DayStrain> days) {
     monotony: monotony,
     weeklyTrimp: weekly,
     status: status,
-    coveredDays: covered,
+    coveredDays: covered.length,
   );
 }
 

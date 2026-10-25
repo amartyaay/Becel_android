@@ -77,7 +77,6 @@ DailyPlan buildDailyPlan({
   required TrainingLoad? load,
   required SleepCoach sleep,
   required BodyAlert? alert,
-  required Set<String> checkInTags,
   required List<MuscleVolume> muscleVolume,
   required bool logsStrength,
   required DateTime now,
@@ -89,7 +88,7 @@ DailyPlan buildDailyPlan({
   PlanTone tone;
   String headline;
   String session;
-  if (alert != null || checkInTags.contains('unwell')) {
+  if (alert != null) {
     tone = PlanTone.rest;
     headline = 'Back off today';
     session = 'Walk, mobility, or full rest. Skip intervals and top sets.';
@@ -114,7 +113,7 @@ DailyPlan buildDailyPlan({
     tone = PlanTone.train;
     headline = 'Train, but control intensity';
     session =
-        'Z2 cardio or technique-focused lifting at RPE ≤ 7. Save max efforts.';
+        'Z2 cardio or technique-focused lifting at RPE 7 or below. Save max efforts.';
   } else {
     tone = PlanTone.recover;
     headline = 'Recovery day';
@@ -185,7 +184,7 @@ class WeeklyReview {
     required this.sleepConsistency,
     required this.sleepDebt,
     required this.strengthSessions,
-    required this.hardSets,
+    required this.strengthMinutes,
     required this.adjustedSteps,
     required this.filteredSteps,
     required this.averageKcal,
@@ -202,7 +201,7 @@ class WeeklyReview {
   final int? sleepConsistency;
   final int sleepDebt;
   final int strengthSessions;
-  final int hardSets;
+  final int strengthMinutes;
   final int? adjustedSteps;
   final int? filteredSteps;
   final int? averageKcal;
@@ -267,7 +266,7 @@ WeeklyReview buildWeeklyReview({
     sleepConsistency: sleep.consistencyPercent,
     sleepDebt: sleep.debtMinutes,
     strengthSessions: sessions.length,
-    hardSets: sessions.fold(0, (s, x) => s + x.hardSets),
+    strengthMinutes: sessions.fold(0, (s, x) => s + x.durationMinutes),
     adjustedSteps: weekEnergy.isEmpty ? null : counted,
     filteredSteps: weekEnergy.isEmpty ? null : filtered,
     averageKcal: complete.isEmpty
@@ -331,10 +330,12 @@ WeeklyFocus _weeklyFocus({
   }
   if (sessions.isEmpty) {
     return const WeeklyFocus(
-      title: 'Log your lifts',
+      title: 'Add two strength sessions',
       body:
-          'Heart rate under-reads strength work. Logging sets and session RPE '
-          'adds muscular load to strain and tracks your estimated 1RMs.',
+          'No strength workouts synced this week. Two sessions of compound '
+          'lifts protect muscle and bone alongside cardio. Start them as a '
+          'workout on your Fitbit Air or in Google Health so Becel can count '
+          'them.',
     );
   }
   return const WeeklyFocus(
@@ -365,7 +366,7 @@ String weeklySummaryText(WeeklyReview review) {
       '${review.sleepConsistency == null ? '' : ' · ${review.sleepConsistency}% consistent'}',
     )
     ..writeln(
-      'Strength: ${review.strengthSessions} sessions · ${review.hardSets} hard sets',
+      'Strength: ${review.strengthSessions} sessions · ${review.strengthMinutes} min',
     );
   if (review.averageKcal != null) {
     buffer.writeln('Energy: ~${review.averageKcal} kcal/day (Becel estimate)');

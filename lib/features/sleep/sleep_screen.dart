@@ -208,7 +208,7 @@ class _LastNightCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '${formatClock(night.onset)} → ${formatClock(n.end)}',
+            '${formatClock(night.onset)} – ${formatClock(n.end)}',
             style: AppType.rowTitle,
           ),
           if (onsetNote != null) ...[
@@ -285,13 +285,13 @@ class _TonightCard extends StatelessWidget {
             color: AppColors.strain,
           ),
           _NeedRow(
-            label: 'Sleep debt (⅓ repaid)',
+            label: 'Sleep debt (a third repaid)',
             minutes: coach.debtNeed,
             color: AppColors.bandYellow,
           ),
           const SizedBox(height: 6),
           Text(
-            'Baseline is editable in Settings → Profile. Debt is the last 3 '
+            'Baseline is editable in Settings > Profile. Debt is the last 3 '
             'nights’ shortfall (${formatDurationMinutes(coach.debtMinutes)}); '
             'repaying a third a night is realistic.',
             style: AppType.caption.copyWith(fontSize: 11),
@@ -434,7 +434,7 @@ class _NightRow extends StatelessWidget {
             children: [
               Text(formatShortDate(night.night.end), style: AppType.rowTitle),
               Text(
-                '${formatClock(night.onset)} → ${formatClock(night.night.end)} · '
+                '${formatClock(night.onset)} – ${formatClock(night.night.end)} · '
                 '${night.efficiencyPercent}% efficient'
                 '${night.onsetSource == OnsetSource.device ? '' : ' · onset corrected'}',
                 style: AppType.caption.copyWith(fontSize: 11.5),

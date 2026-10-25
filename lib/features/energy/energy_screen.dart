@@ -108,12 +108,26 @@ class _TodayCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatNumber(t.totalKcal.round()), style: AppType.numXl),
-              const Padding(
-                padding: EdgeInsets.only(left: 6, bottom: 8),
-                child: Text('kcal', style: AppType.unit),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatNumber(t.totalKcal.round()),
+                        style: AppType.numXl,
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6, bottom: 8),
+                        child: Text('kcal', style: AppType.unit),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
@@ -406,7 +420,7 @@ class _BalanceWeekCard extends StatelessWidget {
                 : 'Average ${avgBalance < 0 ? 'deficit' : 'surplus'} '
                       '${formatNumber(avgBalance.abs().round())} kcal/day on '
                       '${logged.length} logged day${logged.length == 1 ? '' : 's'}. '
-                      '~7,700 kcal ≈ 1 kg of body mass.',
+                      'About 7,700 kcal = 1 kg of body mass.',
             style: AppType.caption,
           ),
         ],
@@ -584,7 +598,7 @@ class _StepsCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '5-minute blocks under $ambulatoryBucketSteps steps count only when '
-            'heart rate rises ≥${confirmedBucketHrRise.round()} bpm above '
+            'heart rate rises at least ${confirmedBucketHrRise.round()} bpm above '
             'resting. Desk typing and arm swings rarely do.',
             style: AppType.caption.copyWith(fontSize: 11),
           ),
@@ -624,7 +638,7 @@ class _WeekCard extends StatelessWidget {
           Text(
             maintenance == null
                 ? 'Maintenance appears after 3 full days with 12 h+ of wear.'
-                : 'Maintenance ≈ ${formatNumber(maintenance!.round())} kcal/day '
+                : 'Maintenance about ${formatNumber(maintenance!.round())} kcal/day '
                       '(line). A practical starting intake to hold weight; '
                       'adjust with your scale trend.',
             style: AppType.caption,
@@ -645,8 +659,8 @@ class _MethodCard extends StatelessWidget {
     accent: AppColors.textSecondary,
     child: Text(
       'Each minute gets exactly one source, so nothing is double counted: '
-      'logged lift (MET) → heart rate above FLEX-HR (Keytel 2005, net of '
-      'resting) → walking steps (0.5 kcal/kg/km net) → a 15% daily-living '
+      'logged lift (MET), then heart rate above FLEX-HR (Keytel 2005, net of '
+      'resting), then walking steps (0.5 kcal/kg/km net), then a 15% daily-living '
       'allowance when awake. Sleep adds nothing above resting. HR artifacts '
       'are removed first with a Hampel filter. Wrist devices typically '
       'overestimate exercise energy by 20–40%; this design errs low on '

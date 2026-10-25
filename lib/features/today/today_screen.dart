@@ -970,7 +970,7 @@ class _LoadTile extends StatelessWidget {
           Text(status.label, style: AppType.numS),
           Text(
             load?.acwr == null
-                ? 'needs 14 days'
+                ? 'needs 21 days'
                 : 'ratio ${load!.acwr!.toStringAsFixed(2)}',
             style: AppType.caption.copyWith(fontSize: 11.5),
           ),

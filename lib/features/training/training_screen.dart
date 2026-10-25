@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
 import '../../domain/heart_signal.dart';
 import '../../domain/performance.dart';
@@ -432,7 +433,7 @@ class _AcwrGauge extends StatelessWidget {
                             fit: BoxFit.scaleDown,
                             child: Text(
                               ratio == null
-                                  ? 'ACWR calibrating (14 days)'
+                                  ? 'ACWR calibrating (21 days)'
                                   : 'ACWR ${ratio!.toStringAsFixed(2)}',
                               style: AppType.caption.copyWith(
                                 fontSize: 11,
@@ -543,8 +544,10 @@ class _WorkoutList extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = snapshot.performance;
     final zones = p.zones!;
-    final synced = [...?snapshot.activity?.workouts]
-      ..sort((a, b) => b.start.compareTo(a.start));
+    final synced = [
+      for (final w in snapshot.activity?.workouts ?? const <WorkoutEntry>[])
+        if (p.now.difference(w.start).inDays < 7) w,
+    ]..sort((a, b) => b.start.compareTo(a.start));
     final items = <({DateTime at, Widget row})>[
       for (final workout in synced)
         (
@@ -556,7 +559,7 @@ class _WorkoutList extends StatelessWidget {
                 : AppColors.strain,
             title: workout.type,
             subtitle:
-                '${formatDayShort(workout.start)} ${formatClock(workout.start)} · '
+                '${formatShortDate(workout.start)} · ${formatClock(workout.start)} · '
                 '${formatDurationMinutes(workout.minutes)}',
             strain: sessionStrain(
               cleanedMinutes: p.clean.samples,

@@ -231,7 +231,6 @@ class HealthStore extends ChangeNotifier {
             ),
       ],
       onsetOverrides: const {},
-      checkInTags: const <String>{},
       now: now,
     );
     return HealthSnapshot(

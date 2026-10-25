@@ -21,7 +21,7 @@ void main() {
     test('favourable signals reach the green band', () {
       final result = _estimate(currentHrv: 100, currentRestingHr: 50);
 
-      expect(result.estimate!.hrvZ, 3);
+      expect(result.estimate!.hrvZ, 1.5);
       expect(result.estimate!.restingHrZ, -3);
       expect(result.estimate!.score, greaterThanOrEqualTo(95));
       expect(result.estimate!.band, RecoveryBand.green);
@@ -111,15 +111,12 @@ void main() {
       );
     });
 
-    test('feeling unwell lowers the score; muscle soreness does not', () {
-      final none = _estimate();
-      final sore = _estimate(checkInTags: {'sore'});
-      final unwell = _estimate(checkInTags: {'unwell'});
-
-      expect(sore.estimate!.score, none.estimate!.score);
-      expect(unwell.estimate!.score, lessThan(none.estimate!.score));
-      expect(unwell.estimate!.contextReasons, ['Feeling unwell']);
-      expect(unwell.estimate!.hrvZ, 0);
+    test('very high HRV is capped and not rewarded when resting HR is up', () {
+      final high = _estimate(currentHrv: 100);
+      expect(high.estimate!.hrvZ, 1.5);
+      final both = _estimate(currentHrv: 100, currentRestingHr: 66);
+      expect(both.estimate!.hrvZ, 0);
+      expect(both.estimate!.contextReasons, isNotEmpty);
     });
 
     test('a respiratory or temperature rise lowers the score', () {
@@ -246,7 +243,6 @@ RecoveryReadiness _estimate({
   bool currentHrvOutsideSleep = false,
   bool currentRestingHrOutsideSleep = false,
   bool historicalRestingHrOutsideSleep = false,
-  Set<String> checkInTags = const <String>{},
   double? respiratoryDelta,
   double? skinTempDelta,
 }) {
@@ -312,7 +308,6 @@ RecoveryReadiness _estimate({
     sleepEnd: currentEnd,
     asleepIntervals: [currentInterval],
     sleepWindows: windows,
-    checkInTags: checkInTags,
     respiratoryDelta: respiratoryDelta,
     skinTempDelta: skinTempDelta,
     now: now,

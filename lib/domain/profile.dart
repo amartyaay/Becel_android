@@ -9,7 +9,12 @@ class BodyProfile {
     this.bodyFatPercent,
     this.maxHrOverride,
     this.sleepNeedMinutes,
+    this.correctSleepOnset = true,
   });
+
+  /// Whether Becel trims sleep onset logged while heart rate was still at
+  /// waking levels. A calculation preference, not health data.
+  final bool correctSleepOnset;
 
   final int? age;
   final BiologicalSex? sex;
@@ -57,6 +62,7 @@ class BodyProfile {
     double? bodyFatPercent,
     int? maxHrOverride,
     int? sleepNeedMinutes,
+    bool? correctSleepOnset,
   }) => BodyProfile(
     age: age ?? this.age,
     sex: sex ?? this.sex,
@@ -65,6 +71,7 @@ class BodyProfile {
     bodyFatPercent: bodyFatPercent ?? this.bodyFatPercent,
     maxHrOverride: maxHrOverride ?? this.maxHrOverride,
     sleepNeedMinutes: sleepNeedMinutes ?? this.sleepNeedMinutes,
+    correctSleepOnset: correctSleepOnset ?? this.correctSleepOnset,
   );
 
   Map<String, Object?> toJson() => {
@@ -75,6 +82,7 @@ class BodyProfile {
     'bodyFatPercent': bodyFatPercent,
     'maxHrOverride': maxHrOverride,
     'sleepNeedMinutes': sleepNeedMinutes,
+    'correctSleepOnset': correctSleepOnset,
   };
 
   factory BodyProfile.fromJson(Map<String, dynamic> json) {
@@ -92,6 +100,7 @@ class BodyProfile {
       heightCm: (json['heightCm'] as num?)?.toDouble(),
       weightKg: (json['weightKg'] as num?)?.toDouble(),
       bodyFatPercent: (json['bodyFatPercent'] as num?)?.toDouble(),
+      correctSleepOnset: json['correctSleepOnset'] as bool? ?? true,
       maxHrOverride: (json['maxHrOverride'] as num?)?.toInt(),
       sleepNeedMinutes: (json['sleepNeedMinutes'] as num?)?.toInt(),
     );

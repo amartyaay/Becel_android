@@ -58,7 +58,7 @@ class VitalsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     const InfoNote(
                       text:
-                          'Fitbit Air does not write blood oxygen (SpO₂) or VO₂ '
+                          'Fitbit Air does not write blood oxygen (SpO2) or VO2 '
                           'max to Health Connect, so Becel does not show them.',
                       icon: Icons.info_outline_rounded,
                       color: AppColors.textTertiary,
@@ -213,7 +213,7 @@ class _ZonesCard extends StatelessWidget {
                 if (max.source != MaxHrSource.tested) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Know your true max from a field test? Enter it in Settings → '
+                    'Know your true max from a field test? Enter it in Settings > '
                     'Profile for the most accurate zones and strain.',
                     style: AppType.caption.copyWith(color: AppColors.teal),
                   ),
@@ -314,7 +314,7 @@ class _OvernightCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'A breathing rise ≥1/min or skin temp ≥0.5 °C lowers recovery and, '
+            'A breathing rise of 1+/min or skin temp of +0.5 °C lowers recovery and, '
             'together with resting HR, can trigger the body-strain alert.',
             style: AppType.caption.copyWith(fontSize: 11),
           ),
@@ -406,7 +406,7 @@ class _FitnessCard extends StatelessWidget {
                     ),
                     const Padding(
                       padding: EdgeInsets.only(left: 6, bottom: 3),
-                      child: Text('ml/kg/min VO₂max', style: AppType.unit),
+                      child: Text('ml/kg/min VO2 max', style: AppType.unit),
                     ),
                   ],
                 ),

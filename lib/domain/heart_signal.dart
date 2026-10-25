@@ -1,15 +1,25 @@
 import 'dart:math' as math;
 
+import 'energy.dart' show StepBucket;
 import 'estimates.dart';
 
 /// Minute-resolution heart rate after artifact rejection.
 class CleanHeartRate {
-  const CleanHeartRate({required this.samples, required this.corrected});
+  const CleanHeartRate({
+    required this.samples,
+    required this.corrected,
+    this.cadenceLocked = 0,
+  });
 
   final List<TimedValue> samples;
 
   /// Minutes replaced by the local median because they were isolated spikes.
   final int corrected;
+
+  /// Minutes dropped because HR was locked onto step cadence.
+  final int cadenceLocked;
+
+  int get artifactMinutes => corrected + cadenceLocked;
 }
 
 /// Rejects optical-HR artifacts with a centred Hampel filter.
@@ -59,6 +69,72 @@ CleanHeartRate cleanHeartRate(
     }
   }
   return CleanHeartRate(samples: cleaned, corrected: corrected);
+}
+
+/// Removes stretches where the optical sensor locked onto step cadence.
+///
+/// Wrist PPG can lock onto arm swing and report cadence as heart rate,
+/// typically for 5–20 minutes, which a short Hampel window cannot catch. A
+/// lock is flagged when HR jumps ≥ 25 bpm within ~2 minutes and then tracks
+/// the step cadence (±8) for at least five minutes. The jump is required
+/// because genuine walking HR can sit near cadence too, but it rises
+/// gradually. Flagged minutes are dropped, never replaced.
+CleanHeartRate excludeCadenceLock(
+  CleanHeartRate input,
+  List<StepBucket> steps, {
+  double jumpBpm = 25,
+  double tolerance = 8,
+  int minMinutes = 5,
+}) {
+  if (steps.isEmpty || input.samples.length < 10) return input;
+  final cadence = <int, double>{};
+  for (final bucket in steps) {
+    final start = bucket.start.millisecondsSinceEpoch ~/ 60000;
+    for (var m = 0; m < 5; m++) {
+      cadence[start + m] = bucket.steps / 5;
+    }
+  }
+  final samples = input.samples;
+  final excluded = <int>{};
+  var index = 3;
+  while (index < samples.length) {
+    final at = samples[index].at;
+    final before = [
+      for (var j = index - 3; j < index; j++)
+        if (at.difference(samples[j].at).inMinutes <= 3) samples[j].value,
+    ];
+    final jumped =
+        before.isNotEmpty && samples[index].value - medianOf(before) >= jumpBpm;
+    if (!jumped) {
+      index++;
+      continue;
+    }
+    var end = index;
+    while (end < samples.length) {
+      final minute = samples[end].at.millisecondsSinceEpoch ~/ 60000;
+      final spm = cadence[minute];
+      if (spm == null || spm < 50) break;
+      if ((samples[end].value - spm).abs() > tolerance) break;
+      end++;
+    }
+    if (end - index >= minMinutes) {
+      for (var j = index; j < end; j++) {
+        excluded.add(j);
+      }
+      index = end;
+    } else {
+      index++;
+    }
+  }
+  if (excluded.isEmpty) return input;
+  return CleanHeartRate(
+    samples: [
+      for (var j = 0; j < samples.length; j++)
+        if (!excluded.contains(j)) samples[j],
+    ],
+    corrected: input.corrected,
+    cadenceLocked: input.cadenceLocked + excluded.length,
+  );
 }
 
 enum MaxHrSource { tested, observed, predicted }
@@ -153,7 +229,7 @@ class HeartZones {
     'Z2 Endurance',
     'Z3 Tempo',
     'Z4 Threshold',
-    'Z5 VO₂max',
+    'Z5 Max',
   ];
 
   double get reserve => math.max(20, maxBpm - restingBpm);

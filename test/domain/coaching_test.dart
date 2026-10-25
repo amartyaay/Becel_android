@@ -41,20 +41,16 @@ const _emptySleep = SleepCoach(
   typicalWake: null,
 );
 
-DailyPlan _plan({
-  RecoveryEstimate? recovery,
-  BodyAlert? alert,
-  Set<String> tags = const {},
-}) => buildDailyPlan(
-  recovery: recovery,
-  load: null,
-  sleep: _emptySleep,
-  alert: alert,
-  checkInTags: tags,
-  muscleVolume: const [],
-  logsStrength: false,
-  now: DateTime(2026, 10, 25, 8),
-);
+DailyPlan _plan({RecoveryEstimate? recovery, BodyAlert? alert}) =>
+    buildDailyPlan(
+      recovery: recovery,
+      load: null,
+      sleep: _emptySleep,
+      alert: alert,
+      muscleVolume: const [],
+      logsStrength: false,
+      now: DateTime(2026, 10, 25, 8),
+    );
 
 void main() {
   group('daily plan', () {
@@ -71,11 +67,7 @@ void main() {
       expect(_plan(recovery: _recovery(25)).target.high, lessThanOrEqualTo(9));
     });
 
-    test('an unwell check-in or body alert overrides a green score', () {
-      expect(
-        _plan(recovery: _recovery(85), tags: {'unwell'}).tone,
-        PlanTone.rest,
-      );
+    test('a body alert overrides a green score', () {
       final alert = detectBodyAlert(
         recovery: _recovery(70, hrvZ: -2, rhrZ: 2.5, rhrChange: 7),
       );
@@ -99,7 +91,7 @@ void main() {
             date: DateTime(2026, 9, 28).add(Duration(days: i)),
             cardioTrimp: i < 21 ? 30 : 150,
             strengthTrimp: 0,
-            coverageMinutes: 900,
+            coverageMinutes: 1000,
             zoneMinutes: List.filled(5, 0),
             peakBpm: 170,
           ),
@@ -128,7 +120,7 @@ void main() {
         energyDays: const [],
         now: DateTime(2026, 10, 25, 12),
       );
-      expect(review.focus.title, 'Log your lifts');
+      expect(review.focus.title, 'Add two strength sessions');
     });
 
     test('CSV has one row per day with provenance', () {
@@ -138,7 +130,7 @@ void main() {
             date: DateTime(2026, 10, 19).add(Duration(days: i)),
             cardioTrimp: 50,
             strengthTrimp: i == 2 ? 30 : 0,
-            coverageMinutes: 900,
+            coverageMinutes: 1000,
             zoneMinutes: List.filled(5, 0),
             peakBpm: 150,
           ),

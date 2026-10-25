@@ -825,7 +825,8 @@ class MainActivity : FlutterFragmentActivity() {
         )
 
         if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted) {
-            readAirRecords<ExerciseSessionRecord>(client, now.minus(Duration.ofDays(7)), now)
+            // 56 days so strength windows line up with the full load history.
+            readAirRecords<ExerciseSessionRecord>(client, now.minus(Duration.ofDays(56)), now)
                 .sortedByDescending { it.endTime }
                 .forEach { record ->
                     workouts.add(
@@ -1102,7 +1103,7 @@ class MainActivity : FlutterFragmentActivity() {
         private const val AIR_HAPTICS_CHANNEL = "com.becel/air_haptics"
         private const val HEART_BUCKET_MILLIS = 5L * 60L * 1000L
         private const val STEP_BUCKET_MILLIS = 5L * 60L * 1000L
-        private const val LOAD_WINDOW_DAYS = 28L
+        private const val LOAD_WINDOW_DAYS = 56L
         private const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
         private const val FITBIT_APP_PACKAGE = "com.fitbit.FitbitMobile"
         private val AIR_SOURCE_PACKAGES = setOf(

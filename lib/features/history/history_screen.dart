@@ -205,7 +205,7 @@ class _WeekGrid extends StatelessWidget {
       (
         'STRENGTH',
         '${review.strengthSessions}',
-        '${review.hardSets} hard sets',
+        '${review.strengthMinutes} min synced',
         AppColors.orange,
       ),
       (
@@ -418,7 +418,7 @@ class _PatternsCard extends StatelessWidget {
     add(
       'Recovery after hard days',
       afterHard,
-      'STRAIN ≥ 14',
+      'STRAIN 14+',
       afterEasy,
       'EASIER',
     );

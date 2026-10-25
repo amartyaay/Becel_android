@@ -69,8 +69,8 @@ void main() {
   group('strain', () {
     test('maps TRIMP onto a logarithmic 0–21 scale', () {
       expect(strainFromTrimp(0), 0);
-      expect(strainFromTrimp(100), closeTo(14.0, 0.2));
-      expect(strainFromTrimp(250), closeTo(19.7, 0.2));
+      expect(strainFromTrimp(100), closeTo(13.3, 0.1));
+      expect(strainFromTrimp(250), closeTo(19.3, 0.1));
       expect(strainFromTrimp(10000), lessThanOrEqualTo(21));
       expect(strainFromTrimp(400), lessThan(21));
       expect(strainFromTrimp(trimpForStrain(12)), closeTo(12, 0.01));
@@ -80,11 +80,11 @@ void main() {
       expect(banisterTrimpPerMinute(0.2, BiologicalSex.male), 0);
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.male),
-        closeTo(1.72, 0.02),
+        closeTo(1.376, 0.005),
       );
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.female),
-        closeTo(1.94, 0.02),
+        closeTo(1.512, 0.005),
       );
     });
 
@@ -99,7 +99,7 @@ void main() {
         now: now,
         days: 1,
       );
-      expect(days.single.strain, inInclusiveRange(12, 16));
+      expect(days.single.strain, inInclusiveRange(10, 14));
     });
 
     test('logged lifting adds the load heart rate missed', () {
@@ -132,7 +132,7 @@ void main() {
             date: base.add(Duration(days: i)),
             cardioTrimp: i < 21 ? 40 : 160,
             strengthTrimp: 0,
-            coverageMinutes: 900,
+            coverageMinutes: 1000,
             zoneMinutes: List.filled(5, 0),
             peakBpm: 160,
           ),
@@ -163,7 +163,8 @@ void main() {
       expect(day.flexBpm, 92);
       expect(day.heartKcal, 0);
       // Resting 12 h ≈ 905 kcal, plus a small awake allowance.
-      expect(day.totalKcal, lessThan(1000));
+      expect(day.heartKcal, 0);
+      expect(day.totalKcal, lessThan(1150));
     });
 
     test('phantom desk steps are filtered; real walking counts', () {
@@ -212,8 +213,8 @@ void main() {
         maxBpm: 184,
         strengthSessions: [lift],
       )!;
-      // (6 − 1) MET × 3.5 × 82 / 200 × 60 ≈ 430 kcal, not ~700 from Keytel.
-      expect(day.strengthKcal, closeTo(430.5, 1));
+      // Corrected METs: (6 − 1) × RMR/min (1780/1440) × 60 ≈ 371 kcal.
+      expect(day.strengthKcal, closeTo(370.8, 1));
       expect(day.heartKcal, 0);
     });
 
@@ -245,7 +246,10 @@ void main() {
     test('trims onset logged while heart rate was still awake', () {
       final start = DateTime(2026, 10, 24, 23);
       final end = DateTime(2026, 10, 25, 7);
-      final hr = minutes(start, 480, (i) => i < 60 ? 72 : 52);
+      final hr = [
+        ...minutes(start.subtract(const Duration(minutes: 30)), 30, (_) => 75),
+        ...minutes(start, 480, (i) => i < 60 ? 72 : 52),
+      ];
       final adjusted = adjustOnset(night(start, end), cleanedMinutes: hr);
       expect(adjusted.onsetSource, OnsetSource.heartRate);
       expect(adjusted.trimmedMinutes, inInclusiveRange(55, 65));

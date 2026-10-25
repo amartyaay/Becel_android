@@ -25,9 +25,17 @@ const confirmedBucketHrRise = 15.0;
 /// van der Walt & Wyndham). Net = above resting, so it never double-counts RMR.
 const walkingNetKcalPerKgKm = 0.5;
 
-/// Sitting/standing awake costs ~1.15–1.3× resting; Becel adds 15 % of RMR
-/// for awake minutes with no measured movement.
-const awakeAllowance = 0.15;
+/// Awake, non-walking minutes (sitting, standing, fidgeting, chores the
+/// band cannot classify) cost ~1.3× resting. Doubly labelled water studies
+/// put even sedentary adults at PAL ≥ 1.4, which this allowance plus RMR and
+/// TEF reproduces on a rest day. Under-counting here risks under-fuelling.
+const awakeAllowance = 0.30;
+
+/// Thermic effect of food: ~10 % of energy eaten (Westerterp 2004).
+const tefFractionOfIntake = 0.10;
+
+/// TEF fallback when no food is logged: ~8 % of expenditure.
+const tefFractionOfExpenditure = 0.08;
 
 class DayEnergy {
   const DayEnergy({
@@ -44,6 +52,7 @@ class DayEnergy {
     required this.minutesElapsed,
     required this.complete,
     required this.rmrMethod,
+    this.intakeKcal,
   });
 
   final DateTime date;
@@ -60,23 +69,45 @@ class DayEnergy {
   final bool complete;
   final String rmrMethod;
 
-  double get activeKcal => heartKcal + stepKcal + strengthKcal + awakeKcal;
+  /// Food logged for this date, if any (drives the TEF estimate).
+  final double? intakeKcal;
+
+  double get _movementKcal => heartKcal + stepKcal + strengthKcal + awakeKcal;
+
+  /// Thermic effect of food: from logged intake when available.
+  double get tefKcal => intakeKcal != null && intakeKcal! > 0
+      ? intakeKcal! * tefFractionOfIntake
+      : (restingKcal + _movementKcal) *
+            tefFractionOfExpenditure /
+            (1 - tefFractionOfExpenditure);
+
+  bool get tefFromIntake => intakeKcal != null && intakeKcal! > 0;
+
+  double get activeKcal => _movementKcal + tefKcal;
   double get totalKcal => restingKcal + activeKcal;
 
+  /// Physical activity level (TDEE ÷ RMR), complete days only. Healthy
+  /// adults sit at ~1.4–2.5; values outside suggest missing wear or data.
+  double? get pal =>
+      complete && restingKcal > 0 ? totalKcal / restingKcal : null;
+  bool get palPlausible => pal == null || (pal! >= 1.35 && pal! <= 2.6);
+
   /// Plain ± error budget: RMR equations ~8 %, HR-derived energy ~25 %,
-  /// step energy ~20 %, MET-based lifting ~25 %, awake allowance ~50 %.
+  /// step energy ~20 %, MET-based lifting ~25 %, allowance and TEF ~40 %.
   double get uncertaintyKcal =>
       0.08 * restingKcal +
       0.25 * heartKcal +
       0.20 * stepKcal +
       0.25 * strengthKcal +
-      0.50 * awakeKcal;
+      0.40 * (awakeKcal + tefKcal);
 
-  /// Today only: remaining hours at resting + awake allowance.
+  /// Today only: the remaining hours at resting plus a typical evening
+  /// (part awake, part asleep), plus TEF on that remainder.
   double projectedTotalKcal(double rmrPerDay) {
     if (complete) return totalKcal;
     final remaining = math.max(0, 1440 - minutesElapsed);
-    return totalKcal + remaining * rmrPerDay / 1440 * (1 + awakeAllowance / 2);
+    final rest = remaining * rmrPerDay / 1440 * (1 + awakeAllowance / 2);
+    return totalKcal + rest / (1 - tefFractionOfExpenditure);
   }
 }
 
@@ -130,6 +161,8 @@ DayEnergy? estimateDayEnergy({
   required double restingBpm,
   required int maxBpm,
   Iterable<StrengthSession> strengthSessions = const [],
+  Iterable<({DateTime start, DateTime end})> workoutWindows = const [],
+  double? intakeKcal,
 }) {
   if (!profile.hasEnergyInputs) return null;
   final dayStart = DateTime(date.year, date.month, date.day);
@@ -208,20 +241,48 @@ DayEnergy? estimateDayEnergy({
     }
   }
 
+  final inWorkout = List<bool>.filled(minutes, false);
+  for (final window in workoutWindows) {
+    final from = window.start.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    final to = window.end.millisecondsSinceEpoch ~/ 60000 - startMinute;
+    for (var m = math.max(0, from); m < math.min(minutes, to); m++) {
+      inWorkout[m] = true;
+    }
+  }
+
   var heart = 0.0, steps = 0.0, strength = 0.0, awake = 0.0;
   var heartMinutes = 0;
-  final metKcalPerMinute = 3.5 * weight / 200;
+  final reserve = math.max(20.0, maxBpm - restingBpm);
+  var lastHardMinute = -1000;
   for (var m = 0; m < minutes; m++) {
     if (strengthMet[m] > 0) {
-      strength += (strengthMet[m] - 1) * metKcalPerMinute;
+      // Corrected METs (2024 Compendium): METs are multiples of the
+      // person's own resting rate, not the 3.5 ml/kg/min convention, which
+      // overstates lifting energy for lean, muscular users.
+      strength += (strengthMet[m] - 1) * rmrPerMinute;
       continue;
     }
     if (asleep[m]) continue;
     final hr = hrByMinute[m];
     if (hr != null && hr >= flex) {
-      heart += math.max(0, keytelKcalPerMinute(hr, profile) - rmrPerMinute);
-      heartMinutes++;
-      continue;
+      final hrr = (hr - restingBpm) / reserve;
+      if (hrr >= 0.5) lastHardMinute = m;
+      // Between FLEX and 50 % HRR, pulse alone is ambiguous (coffee, heat,
+      // stress, a hot shower). Count it only alongside movement, inside a
+      // workout, or in the 10 minutes after a hard bout (EPOC).
+      final confirmed =
+          hrr >= 0.5 ||
+          stepEnergy[m] > 0 ||
+          inWorkout[m] ||
+          m - lastHardMinute <= 10;
+      if (confirmed) {
+        heart += math.max(
+          stepEnergy[m],
+          keytelKcalPerMinute(hr, profile) - rmrPerMinute,
+        );
+        heartMinutes++;
+        continue;
+      }
     }
     if (stepEnergy[m] > 0) {
       steps += stepEnergy[m];
@@ -244,6 +305,7 @@ DayEnergy? estimateDayEnergy({
     minutesElapsed: minutes,
     complete: !now.isBefore(dayEnd),
     rmrMethod: rmrMethodLabel(profile),
+    intakeKcal: intakeKcal,
   );
 }
 

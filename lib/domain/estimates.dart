@@ -35,17 +35,17 @@ const recoveryMethod =
     'Recovery compares last night with your own 28-day baseline. Overnight '
     'HRV (ln RMSSD, only readings inside asleep stages) and morning resting '
     'heart rate become robust z-scores (median and MAD). Sleep is scored '
-    'against tonight-adjusted sleep need, and sleeping longer is never '
+    'against the need going into last night, and sleeping longer is never '
     'penalised. The weighted z-scores (HRV 55%, resting HR 25%, sleep 20%) '
     'are mapped to 0–100% with a normal curve so a typical morning reads '
-    '~64%. Feeling unwell, stress, a respiratory-rate rise of ≥1 breath/min, '
-    'or skin temperature ≥0.5 °C above baseline lower the score. Muscle '
-    'soreness does not. Scores start after 4 baseline nights and are '
-    'marked provisional until 10.';
+    'about 64%. HRV counts at most +1.5 SD, and not at all when resting HR '
+    'is also high. A respiratory-rate rise of 1+ breath/min or skin '
+    'temperature 0.5 °C+ above baseline lowers the score. Scores start '
+    'after 4 baseline nights and are marked provisional until 10.';
 
 const activityMethod =
     'Moderate-equivalent minutes from Fitbit Air heart rate over the last 7 '
-    'local days. Moderate = 40–59% of heart-rate reserve, vigorous ≥60% '
+    'local days. Moderate = 40–59% of heart-rate reserve, vigorous 60%+ '
     '(ACSM); vigorous minutes count twice toward the 150-minute aerobic '
     'guideline. Missing wear time can lower the total.';
 
@@ -257,7 +257,6 @@ RecoveryReadiness recoveryReadiness({
   required List<AsleepInterval> asleepIntervals,
   required List<SleepWindow> sleepWindows,
   int sleepNeedMinutes = 480,
-  Set<String> checkInTags = const <String>{},
   double? respiratoryDelta,
   double? skinTempDelta,
   DateTime? now,
@@ -328,16 +327,21 @@ RecoveryReadiness recoveryReadiness({
 
   // MAD is robust to isolated noisy nights; floors stop rounded, repeated
   // device values from producing a zero denominator.
-  final hrvZ = _clamp(
-    (math.log(hrvCurrent) - hrvMedian) / math.max(0.10, 1.4826 * hrvMad),
-    -3,
-    3,
-  );
+  // HRV far above baseline is not "extra recovered": in trained athletes it
+  // can mean parasympathetic saturation or early illness (Plews et al.,
+  // 2012). The upside is capped at +1.5 SD, and ignored entirely when
+  // resting HR is also elevated.
   final restingHrZ = _clamp(
     (restingHrCurrent - rhrMedian) / math.max(2.0, 1.4826 * rhrMad),
     -3,
     3,
   );
+  final rawHrvZ = _clamp(
+    (math.log(hrvCurrent) - hrvMedian) / math.max(0.10, 1.4826 * hrvMad),
+    -3,
+    1.5,
+  );
+  final hrvZ = rawHrvZ > 1 && restingHrZ > 1 ? 0.0 : rawHrvZ;
   final need = math.max(360, sleepNeedMinutes);
   final sleepPercent = ((sleepMinutes ?? 0) / need * 100).round();
   // 85 % of need is neutral; extra sleep helps a little and never hurts.
@@ -345,18 +349,8 @@ RecoveryReadiness recoveryReadiness({
 
   var adjustment = 0.0;
   final reasons = <String>[];
-  if (checkInTags.contains('unwell')) {
-    adjustment -= 0.8;
-    reasons.add('Feeling unwell');
-  } else if (checkInTags.contains('stressed') ||
-      checkInTags.contains('slept_badly')) {
-    adjustment -= 0.3;
-    reasons.add(
-      checkInTags.contains('stressed') ? 'Feeling stressed' : 'Slept badly',
-    );
-  } else if (checkInTags.contains('fresh')) {
-    adjustment += 0.2;
-    reasons.add('Feeling fresh');
+  if (rawHrvZ > 1 && restingHrZ > 1) {
+    reasons.add('HRV and resting HR both high: not counted as a boost');
   }
   if (respiratoryDelta != null && respiratoryDelta >= 1.0) {
     adjustment -= 0.5;
@@ -408,6 +402,88 @@ RecoveryReadiness recoveryReadiness({
       restingHrBaselineDays: restingHr.baselineNights,
       sleepPercentOfNeed: sleepPercent.clamp(0, 150),
     ),
+  );
+}
+
+enum HrvTrendState { below, within, above }
+
+/// Rolling 7-day ln RMSSD against the prior 28 days ± the smallest
+/// worthwhile change (0.5 × SD). Single nights are noisy; the weekly trend
+/// is the more reliable signal for training decisions (Plews et al., 2013;
+/// Buchheit, 2014).
+class HrvTrend {
+  const HrvTrend({
+    required this.nights,
+    required this.rolling,
+    required this.baseline,
+    required this.swc,
+  });
+
+  /// Nightly ln RMSSD for the last 14 wake dates (null = no reading).
+  final List<({DateTime date, double? ln})> nights;
+  final double rolling;
+  final double baseline;
+  final double swc;
+
+  HrvTrendState get state => rolling < baseline - swc
+      ? HrvTrendState.below
+      : rolling > baseline + swc
+      ? HrvTrendState.above
+      : HrvTrendState.within;
+
+  double get rollingMs => math.exp(rolling);
+  double get lowMs => math.exp(baseline - swc);
+  double get highMs => math.exp(baseline + swc);
+}
+
+HrvTrend? hrvTrend({
+  required List<TimedValue> hrvSamples,
+  required List<SleepWindow> sleepWindows,
+  required DateTime now,
+}) {
+  final today = _localDay(now);
+  final byDate = <DateTime, double>{};
+  for (final window in sleepWindows) {
+    if (window.sleepMinutes < 180) continue;
+    final date = _localDay(window.end);
+    if (date.isAfter(today) || today.difference(date).inDays > 35) continue;
+    final values = _validSamples(
+      hrvSamples,
+      asleepIntervals: window.asleepIntervals,
+      latest: now,
+      minValue: 5,
+      maxValue: 250,
+    ).map((s) => s.value).toList();
+    if (values.isEmpty) continue;
+    byDate[date] = math.log(_median(values));
+  }
+  final recent = <double>[];
+  final prior = <double>[];
+  for (final entry in byDate.entries) {
+    final age = today.difference(entry.key).inDays;
+    if (age < 7) {
+      recent.add(entry.value);
+    } else {
+      prior.add(entry.value);
+    }
+  }
+  if (recent.length < 4 || prior.length < 10) return null;
+  final mean = prior.reduce((a, b) => a + b) / prior.length;
+  final sd = math.sqrt(
+    prior.fold<double>(0, (s, v) => s + (v - mean) * (v - mean)) /
+        (prior.length - 1),
+  );
+  return HrvTrend(
+    nights: [
+      for (var offset = 13; offset >= 0; offset--)
+        (
+          date: today.subtract(Duration(days: offset)),
+          ln: byDate[today.subtract(Duration(days: offset))],
+        ),
+    ],
+    rolling: recent.reduce((a, b) => a + b) / recent.length,
+    baseline: mean,
+    swc: math.max(0.03, 0.5 * sd),
   );
 }
 

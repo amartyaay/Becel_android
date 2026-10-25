@@ -34,7 +34,11 @@ class Performance {
     required this.lifts,
     required this.strengthSessions,
     required this.weekly,
+    this.hrvTrend,
   });
+
+  /// Rolling 7-day HRV against the prior 28 days, when enough nights exist.
+  final HrvTrend? hrvTrend;
 
   final DateTime now;
   final CleanHeartRate clean;
@@ -74,7 +78,6 @@ Performance buildPerformance({
   required int? fallbackAge,
   required List<StrengthSession> strengthSessions,
   required Map<String, DateTime> onsetOverrides,
-  required Set<String> checkInTags,
   required DateTime now,
 }) {
   final age = profile?.age ?? fallbackAge;
@@ -87,8 +90,10 @@ Performance buildPerformance({
           for (final sample in heart.weeklySeries)
             TimedValue(at: sample.at, value: sample.bpm.toDouble()),
         ];
-  final clean = cleanHeartRate(rawMinutes);
+  final stepBuckets = heart?.stepBuckets ?? const <StepBucket>[];
+  final clean = excludeCadenceLock(cleanHeartRate(rawMinutes), stepBuckets);
   final sessions = sleep?.sessions ?? const <SleepNight>[];
+  final workouts = activity?.workouts ?? const <WorkoutEntry>[];
 
   // Resting HR: latest record within 72 h, else the sleeping-HR floor.
   double? resting;
@@ -123,13 +128,15 @@ Performance buildPerformance({
           maxBpm: zones.maxBpm,
           sex: sex,
           now: now,
-          days: 28,
+          days: loadWindowDays,
         );
-  final load = strainDays.isEmpty ? null : trainingLoad(strainDays);
+  final load = strainDays.isEmpty ? null : trainingLoad(strainDays, today: now);
   final yesterdayStrain = strainDays.length < 2
       ? null
       : strainDays[strainDays.length - 2].strain;
 
+  final correctOnset = profile?.correctSleepOnset ?? true;
+  final hardBpm = zones?.bpmAt(0.6).toDouble();
   final coach = buildSleepCoach(
     sessions: sessions,
     cleanedMinutes: clean.samples,
@@ -137,14 +144,35 @@ Performance buildPerformance({
     yesterdayStrain: yesterdayStrain,
     baselineNeedMinutes: profile?.sleepNeedMinutes,
     userOnsets: onsetOverrides,
+    correctOnset: correctOnset,
+    hardBpm: hardBpm,
   );
+  // Today's score and the history bars use the same onset-corrected
+  // windows and the same baseline need, so they stay comparable.
+  final adjustedWindows = [
+    for (final session in sessions)
+      if (session.minutes >= 180)
+        () {
+          final adjusted = adjustOnset(
+            session,
+            cleanedMinutes: correctOnset ? clean.samples : const [],
+            userOnset: onsetOverrides[sleepKey(session)],
+            hardBpm: hardBpm,
+          );
+          return SleepWindow(
+            start: adjusted.onset,
+            end: session.end,
+            sleepMinutes: adjusted.asleepMinutes,
+            asleepIntervals: adjusted.asleepIntervals,
+          );
+        }(),
+  ];
 
   final respiratoryDelta =
       body?.respiratoryRate != null && body?.respiratoryBaseline != null
       ? body!.respiratoryRate! - body.respiratoryBaseline!
       : null;
   final skinTempDelta = body?.skinTempDeviationC;
-  final needGoingIn = coach.baselineNeed + coach.debtNeed;
   final night = coach.lastNight;
   final recovery = heart == null
       ? const RecoveryReadiness(
@@ -160,12 +188,11 @@ Performance buildPerformance({
           hrvSamples: heart.hrvSamples,
           restingHrSamples: heart.restingHrSamples,
           sleepMinutes: night?.asleepMinutes,
-          sleepNeedMinutes: needGoingIn,
+          sleepNeedMinutes: coach.baselineNeed,
           sleepStart: night?.onset,
           sleepEnd: night?.night.end,
           asleepIntervals: night?.asleepIntervals ?? const <AsleepInterval>[],
-          sleepWindows: sleep?.sleepWindows ?? const <SleepWindow>[],
-          checkInTags: checkInTags,
+          sleepWindows: adjustedWindows,
           respiratoryDelta: respiratoryDelta,
           skinTempDelta: skinTempDelta,
           now: now,
@@ -175,9 +202,16 @@ Performance buildPerformance({
       : recoveryHistory(
           hrvSamples: heart.hrvSamples,
           restingHrSamples: heart.restingHrSamples,
-          sleepWindows: sleep.sleepWindows,
+          sleepWindows: adjustedWindows,
           now: now,
           sleepNeedMinutes: coach.baselineNeed,
+        );
+  final trend = heart == null
+      ? null
+      : hrvTrend(
+          hrvSamples: heart.hrvSamples,
+          sleepWindows: adjustedWindows,
+          now: now,
         );
   final alert = detectBodyAlert(
     recovery: recovery.estimate,
@@ -190,7 +224,6 @@ Performance buildPerformance({
     load: load,
     sleep: coach,
     alert: alert,
-    checkInTags: checkInTags,
     muscleVolume: muscleVolume,
     logsStrength: strengthSessions.isNotEmpty,
     now: now,
@@ -207,6 +240,19 @@ Performance buildPerformance({
           ...session.asleepIntervals,
     ];
     final today = DateTime(now.year, now.month, now.day);
+    final intakeByDate = <String, double?>{
+      for (var i = 0; i < (activity?.intakeDates.length ?? 0); i++)
+        activity!.intakeDates[i]: i < activity.intakeKcalByDay.length
+            ? activity.intakeKcalByDay[i]
+            : null,
+    };
+    final windows = [
+      for (final workout in workouts)
+        (
+          start: workout.start,
+          end: workout.start.add(Duration(minutes: workout.minutes)),
+        ),
+    ];
     for (var offset = 6; offset >= 0; offset--) {
       final date = today.subtract(Duration(days: offset));
       final day = estimateDayEnergy(
@@ -214,11 +260,13 @@ Performance buildPerformance({
         date: date,
         now: now,
         cleanedMinutes: clean.samples,
-        stepBuckets: heart?.stepBuckets ?? const <StepBucket>[],
+        stepBuckets: stepBuckets,
         sleep: asleep,
         restingBpm: zones.restingBpm,
         maxBpm: zones.maxBpm,
         strengthSessions: strengthSessions,
+        workoutWindows: windows,
+        intakeKcal: intakeByDate[sleepKeyOf(date)],
       );
       if (day != null) energyDays.add(day);
     }
@@ -227,8 +275,10 @@ Performance buildPerformance({
   if (energyDays.isNotEmpty && energyDays.last.date == _day(now)) {
     final history = [
       for (final day in energyDays)
-        if (day.complete && day.heartMinutes + day.countedSteps ~/ 100 > 0)
-          if (_coverage(clean.samples, day.date) >= 12 * 60) day,
+        if (day.complete &&
+            day.palPlausible &&
+            _coverage(clean.samples, day.date) >= 12 * 60)
+          day,
     ];
     energy = EnergyBalance(
       today: energyDays.last,
@@ -257,6 +307,7 @@ Performance buildPerformance({
     strainDays: strainDays,
     load: load,
     sleep: coach,
+    hrvTrend: trend,
     recovery: recovery,
     recoveryHistory: history,
     respiratoryDelta: respiratoryDelta,
@@ -272,7 +323,16 @@ Performance buildPerformance({
   );
 }
 
+/// Days of heart rate used for strain and load. 56 gives the 28-day chronic
+/// average a full window to settle before it is shown.
+const loadWindowDays = 56;
+
 DateTime _day(DateTime value) => DateTime(value.year, value.month, value.day);
+
+String sleepKeyOf(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
 
 /// Minutes of usable HR on a local date.
 int _coverage(List<TimedValue> samples, DateTime date) {
