@@ -1,29 +1,52 @@
 import 'package:flutter/material.dart';
 
-/// Becel design tokens: light-first, soft and vivid.
+/// Becel design tokens: light-first, soft and vivid, with a matching dark
+/// palette.
 ///
-/// An off-white canvas with white cards lifted by soft tinted shadows (no
-/// hairline borders), very round corners, and saturated metric hues used
-/// for rings and charts. The identity hues were validated as a set for
-/// colour-vision deficiency on the white card surface (all six pass the
-/// adjacent checks at ≥ 3:1; the on-screen trios pass all-pairs).
+/// Light: an off-white canvas with white cards lifted by soft tinted shadows
+/// (no hairline borders), very round corners, and saturated metric hues used
+/// for rings and charts. Dark: the same layout on a deep, slightly cool
+/// near-black, with cards a step lighter instead of shadows. The identity
+/// hues were validated as a set for colour-vision deficiency on both card
+/// surfaces.
+///
+/// Neutral tokens are getters so the whole app can switch palettes at
+/// runtime ([AppColors.useDark]); metric and status hues are fixed.
 abstract final class AppColors {
+  static bool _dark = false;
+
+  /// Switches every neutral token. The app rebuilds after calling this.
+  static void useDark(bool dark) => _dark = dark;
+  static bool get isDark => _dark;
+
   // Surfaces.
-  static const bg = Color(0xFFF3F4F8);
-  static const surface = Color(0xFFFFFFFF);
-  static const surfaceHigh = Color(0xFFFFFFFF);
+  static Color get bg => _dark ? const Color(0xFF0B0D12) : const Color(0xFFF3F4F8);
+  static Color get surface =>
+      _dark ? const Color(0xFF161A22) : const Color(0xFFFFFFFF);
+  static Color get surfaceHigh =>
+      _dark ? const Color(0xFF1C212B) : const Color(0xFFFFFFFF);
 
   /// Tracks, empty bars, input fills.
-  static const surfaceHigher = Color(0xFFEDEFF4);
-  static const border = Color(0xFFE5E7EE);
-  static const hairline = Color(0x0F101828);
+  static Color get surfaceHigher =>
+      _dark ? const Color(0xFF252B36) : const Color(0xFFEDEFF4);
+  static Color get border =>
+      _dark ? const Color(0xFF2C3340) : const Color(0xFFE5E7EE);
+  static Color get hairline =>
+      _dark ? const Color(0x14FFFFFF) : const Color(0x0F101828);
 
-  static const textPrimary = Color(0xFF0E1116);
-  static const textSecondary = Color(0xFF4A5160);
-  static const textTertiary = Color(0xFF6B7282);
+  static Color get textPrimary =>
+      _dark ? const Color(0xFFF2F4F8) : const Color(0xFF0E1116);
+  static Color get textSecondary =>
+      _dark ? const Color(0xFFB4BBC8) : const Color(0xFF4A5160);
+  static Color get textTertiary =>
+      _dark ? const Color(0xFF8A93A3) : const Color(0xFF6B7282);
 
-  /// Primary actions are ink-black pills; links use the steps blue.
-  static const ink = Color(0xFF0E1116);
+  /// Primary actions are ink pills (black on light, white on dark); text
+  /// on them uses [onInk]. Links use the steps blue.
+  static Color get ink =>
+      _dark ? const Color(0xFFF2F4F8) : const Color(0xFF0E1116);
+  static Color get onInk =>
+      _dark ? const Color(0xFF0B0D12) : const Color(0xFFFFFFFF);
   static const accent = Color(0xFF1A8FE8);
 
   // Metric identities (fixed; never reused for status).
@@ -52,20 +75,24 @@ abstract final class AppColors {
   static const energy = burned;
   static const strainBlue = strain;
 
-  /// Soft, cool-tinted elevation for cards (never grey or black).
-  static const cardShadow = [
-    BoxShadow(color: Color(0x0D1B2340), blurRadius: 24, offset: Offset(0, 8)),
-    BoxShadow(color: Color(0x0A1B2340), blurRadius: 3, offset: Offset(0, 1)),
-  ];
+  /// Soft, cool-tinted elevation for cards (never grey or black). On dark,
+  /// cards separate by surface tone, so the shadow is only a faint lift.
+  static List<BoxShadow> get cardShadow => _dark
+      ? const [
+          BoxShadow(color: Color(0x40000000), blurRadius: 18, offset: Offset(0, 6)),
+        ]
+      : const [
+          BoxShadow(color: Color(0x0D1B2340), blurRadius: 24, offset: Offset(0, 8)),
+          BoxShadow(color: Color(0x0A1B2340), blurRadius: 3, offset: Offset(0, 1)),
+        ];
 
-  /// A pale wash of a metric colour for chips and backgrounds.
-  static Color tint(Color color, [double amount = 0.12]) =>
-      Color.alphaBlend(color.withValues(alpha: amount), surface);
+  /// A pale wash of a metric colour for chips and backgrounds (a deeper
+  /// wash on dark so it still reads).
+  static Color tint(Color color, [double amount = 0.12]) => Color.alphaBlend(
+    color.withValues(alpha: _dark ? amount * 1.6 : amount),
+    surface,
+  );
 }
-
-/// Type scale. Inter for text; Nunito (rounded) for numerals, which gives
-/// scores a friendly, Bevel-like character. Labels stay quiet so values
-/// carry the hierarchy.
 abstract final class AppType {
   static const family = 'Inter';
   static const numerals = 'Nunito';
@@ -73,7 +100,7 @@ abstract final class AppType {
   /// Bundled subsets lack a few maths symbols (≤, ≈, ⅓).
   static const fallback = ['Roboto', 'sans-serif'];
 
-  static const eyebrow = TextStyle(
+  static TextStyle get eyebrow => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
@@ -83,7 +110,7 @@ abstract final class AppType {
     letterSpacing: 0.2,
   );
 
-  static const screenTitle = TextStyle(
+  static TextStyle get screenTitle => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -93,7 +120,7 @@ abstract final class AppType {
     letterSpacing: -1.2,
   );
 
-  static const sectionTitle = TextStyle(
+  static TextStyle get sectionTitle => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -102,7 +129,7 @@ abstract final class AppType {
     letterSpacing: -0.5,
   );
 
-  static const cardTitle = TextStyle(
+  static TextStyle get cardTitle => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -111,7 +138,7 @@ abstract final class AppType {
     letterSpacing: -0.3,
   );
 
-  static const rowTitle = TextStyle(
+  static TextStyle get rowTitle => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -120,7 +147,7 @@ abstract final class AppType {
     letterSpacing: -0.15,
   );
 
-  static const body = TextStyle(
+  static TextStyle get body => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textSecondary,
@@ -128,7 +155,7 @@ abstract final class AppType {
     height: 1.5,
   );
 
-  static const note = TextStyle(
+  static TextStyle get note => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textSecondary,
@@ -136,7 +163,7 @@ abstract final class AppType {
     height: 1.45,
   );
 
-  static const caption = TextStyle(
+  static TextStyle get caption => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
@@ -144,7 +171,7 @@ abstract final class AppType {
     height: 1.4,
   );
 
-  static const numXl = TextStyle(
+  static TextStyle get numXl => TextStyle(
     fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -154,7 +181,7 @@ abstract final class AppType {
     letterSpacing: -1.5,
   );
 
-  static const numM = TextStyle(
+  static TextStyle get numM => TextStyle(
     fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -164,7 +191,7 @@ abstract final class AppType {
     letterSpacing: -0.6,
   );
 
-  static const numS = TextStyle(
+  static TextStyle get numS => TextStyle(
     fontFamily: numerals,
     fontFamilyFallback: fallback,
     color: AppColors.textPrimary,
@@ -173,7 +200,7 @@ abstract final class AppType {
     letterSpacing: -0.2,
   );
 
-  static const unit = TextStyle(
+  static TextStyle get unit => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
@@ -181,7 +208,7 @@ abstract final class AppType {
     fontWeight: FontWeight.w600,
   );
 
-  static const footer = TextStyle(
+  static TextStyle get footer => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     color: AppColors.textTertiary,
@@ -190,7 +217,7 @@ abstract final class AppType {
     fontWeight: FontWeight.w500,
   );
 
-  static const pill = TextStyle(
+  static TextStyle get pill => TextStyle(
     fontFamily: family,
     fontFamilyFallback: fallback,
     fontSize: 12,
@@ -198,18 +225,21 @@ abstract final class AppType {
   );
 }
 
-ThemeData buildLightTheme() {
-  const colorScheme = ColorScheme.light(
-    primary: AppColors.ink,
-    onPrimary: Colors.white,
-    secondary: AppColors.accent,
-    onSecondary: Colors.white,
-    surface: AppColors.surface,
-    onSurface: AppColors.textPrimary,
-    surfaceContainerHighest: AppColors.surfaceHigher,
-    error: AppColors.bandRed,
-    onError: Colors.white,
-  );
+/// Material theme for the active palette ([AppColors.useDark]).
+ThemeData buildAppTheme() {
+  final dark = AppColors.isDark;
+  final colorScheme = (dark ? const ColorScheme.dark() : const ColorScheme.light())
+      .copyWith(
+        primary: AppColors.ink,
+        onPrimary: AppColors.onInk,
+        secondary: AppColors.accent,
+        onSecondary: Colors.white,
+        surface: AppColors.surface,
+        onSurface: AppColors.textPrimary,
+        surfaceContainerHighest: AppColors.surfaceHigher,
+        error: AppColors.bandRed,
+        onError: Colors.white,
+      );
   const buttonText = TextStyle(
     fontFamily: AppType.family,
     fontSize: 14.5,
@@ -219,8 +249,9 @@ ThemeData buildLightTheme() {
   return ThemeData(
     useMaterial3: true,
     fontFamily: AppType.family,
-    brightness: Brightness.light,
+    brightness: dark ? Brightness.dark : Brightness.light,
     scaffoldBackgroundColor: AppColors.bg,
+    canvasColor: AppColors.bg,
     colorScheme: colorScheme,
     splashFactory: InkSparkle.splashFactory,
     cardTheme: CardThemeData(
@@ -229,7 +260,7 @@ ThemeData buildLightTheme() {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: AppColors.bg,
       foregroundColor: AppColors.textPrimary,
       elevation: 0,
@@ -239,7 +270,7 @@ ThemeData buildLightTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.ink,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onInk,
         disabledBackgroundColor: AppColors.surfaceHigher,
         disabledForegroundColor: AppColors.textTertiary,
         textStyle: buttonText,
@@ -263,44 +294,66 @@ ThemeData buildLightTheme() {
         textStyle: buttonText,
       ),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
+    progressIndicatorTheme: ProgressIndicatorThemeData(
       color: AppColors.ink,
       linearTrackColor: AppColors.surfaceHigher,
       circularTrackColor: AppColors.surfaceHigher,
     ),
-    dividerTheme: const DividerThemeData(
+    dividerTheme: DividerThemeData(
       color: AppColors.border,
       thickness: 1,
       space: 1,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.ink,
-      contentTextStyle: const TextStyle(
+      contentTextStyle: TextStyle(
         fontFamily: AppType.family,
-        color: Colors.white,
+        color: AppColors.onInk,
         fontSize: 13.5,
         fontWeight: FontWeight.w500,
       ),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
+    bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       showDragHandle: true,
       dragHandleColor: AppColors.border,
     ),
-    listTileTheme: const ListTileThemeData(
+    listTileTheme: ListTileThemeData(
       iconColor: AppColors.textSecondary,
       textColor: AppColors.textPrimary,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected)
+            ? AppColors.onInk
+            : AppColors.textTertiary,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected)
+            ? AppColors.ink
+            : AppColors.surfaceHigher,
+      ),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.surfaceHigher,
       selectedColor: AppColors.ink,
       side: BorderSide.none,
-      labelStyle: const TextStyle(fontFamily: AppType.family, fontSize: 13),
+      labelStyle: TextStyle(
+        fontFamily: AppType.family,
+        fontSize: 13,
+        color: AppColors.textPrimary,
+      ),
+      secondaryLabelStyle: TextStyle(
+        fontFamily: AppType.family,
+        fontSize: 13,
+        color: AppColors.onInk,
+      ),
+      checkmarkColor: AppColors.onInk,
       shape: const StadiumBorder(),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -318,7 +371,7 @@ ThemeData buildLightTheme() {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
+        borderSide: BorderSide(color: AppColors.ink, width: 1.5),
       ),
     ),
     dialogTheme: DialogThemeData(
@@ -326,8 +379,6 @@ ThemeData buildLightTheme() {
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
     ),
-    timePickerTheme: const TimePickerThemeData(
-      backgroundColor: AppColors.surface,
-    ),
+    timePickerTheme: TimePickerThemeData(backgroundColor: AppColors.surface),
   );
 }
