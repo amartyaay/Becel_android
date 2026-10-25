@@ -54,7 +54,8 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 6 | `888e39e` | not rated (evaluator hit rate limit) | — |
 | 7 | `2e87dfb` | PhD **7.9** · UX **7.6** | PhD: cadence floor inflated runs; cached data claimed "just now"; strength RPE constant; 5-min steps; guide wording; no day timeline; missing-sleep kcal inflation. Calorie audit: **no constant changes** (2,708/day vs IOM DLW sedentary 2,876). PhD says realistic ceiling ≈ 9.0 for a screenless read-only band. UX: plan buried, prose left, ALL-CAPS titles, ambiguous nav icons, no timeline, zones 0m contradiction |
 | 8 | `dc1d5c2` | PhD **8.1** · UX **8.4** | PhD: plan ignores time of day/what's done, no hard-day spacing, strength RPE constant, adaptive TDEE from weight+intake, narrow truncation, 5-min steps, Z2 bpm false precision, sleep-window inference, Today long, docs drift. UX: workout detail sheet, leftover prose, zone colour ramp, narrow pass, ring animation, Today ⓘ, Tag/StatusPill merge, protein label, Trends overflow menu |
-| 9 | `bb896df` | _awaiting re-rate_ | — |
+| 9 | `bb896df` | PhD **8.2** · UX **8.7** | Two "burned" numbers (headline measured vs balance total); Fitbit delta vs measured (+786) misleading; lifting RPE inverted for heavy sets; 6-MET cap hit unrecorded steady cardio; spacing keyed on volume not intensity; zone label contrast; stale goldens |
+| 10 | `a6e6a98` | _awaiting re-rate_ | — |
 
 ## Open todos (missed or planned, not done)
 
