@@ -219,12 +219,25 @@ SleepCoach buildSleepCoach({
   // main sleep over 28 days (what they get when life allows), clamped to the
   // adult 7–9 h range. A fixed 8 h would put natural 7 h sleepers in
   // permanent "debt".
-  final learnFrom = [
-    for (final session in sessions)
+  // Learn in the same units as debt (onset-corrected minutes), and skip
+  // rebound nights that follow a short night (< 6 h), which overstate need.
+  // Newest first, so element i + 1 is the night before element i.
+  final newestFirst = [...sessions]..sort((a, b) => b.end.compareTo(a.end));
+  final recentMains = [
+    for (final session in newestFirst)
       if (session.minutes >= 180 &&
           session.end.isAfter(now.subtract(const Duration(days: 28))) &&
           !session.end.isAfter(now))
-        session.minutes.toDouble(),
+        adjustOnset(
+          session,
+          cleanedMinutes: correctOnset ? cleanedMinutes : const [],
+          hardBpm: hardBpm,
+        ).asleepMinutes,
+  ];
+  final learnFrom = <double>[
+    for (var i = 0; i < recentMains.length; i++)
+      if (i + 1 >= recentMains.length || recentMains[i + 1] >= 360)
+        recentMains[i].toDouble(),
   ]..sort();
   final BaselineSource source;
   final int baseline;

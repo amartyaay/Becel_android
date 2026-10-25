@@ -67,6 +67,31 @@ void main() {
       expect(_plan(recovery: _recovery(25)).target.high, lessThanOrEqualTo(9));
     });
 
+    test('push needs clear evidence, not just a 67 % reading', () {
+      RecoveryEstimate withComposite(int score, double z) => RecoveryEstimate(
+        score: score,
+        hrvZ: 0,
+        restingHrZ: 0,
+        sleepZ: 0,
+        contextAdjustment: 0,
+        composite: z,
+        hrvCurrent: 60,
+        hrvAt: DateTime(2026, 10, 25, 3),
+        hrvSampleCount: 4,
+        hrvBaseline: 60,
+        restingHrCurrent: 52,
+        restingHrAt: DateTime(2026, 10, 25, 6),
+        restingHrSampleCount: 1,
+        restingHrBaseline: 52,
+        hrvBaselineDays: 14,
+        restingHrBaselineDays: 14,
+        sleepPercentOfNeed: 90,
+      );
+      expect(_plan(recovery: withComposite(67, 0.1)).tone, PlanTone.train);
+      expect(_plan(recovery: withComposite(80, 0.6)).tone, PlanTone.push);
+      expect(_plan(recovery: withComposite(25, -0.8)).tone, PlanTone.recover);
+    });
+
     test('a body alert overrides a green score', () {
       final alert = detectBodyAlert(
         recovery: _recovery(70, hrvZ: -2, rhrZ: 2.5, rhrChange: 7),

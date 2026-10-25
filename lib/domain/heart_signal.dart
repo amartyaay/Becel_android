@@ -75,15 +75,17 @@ CleanHeartRate cleanHeartRate(
 ///
 /// Wrist PPG can lock onto arm swing and report cadence as heart rate,
 /// typically for 5–20 minutes, which a short Hampel window cannot catch. A
-/// lock is flagged when HR jumps ≥ 25 bpm within ~2 minutes and then tracks
-/// the step cadence (±8) for at least five minutes. The jump is required
-/// because genuine walking HR can sit near cadence too, but it rises
-/// gradually. Flagged minutes are dropped, never replaced.
+/// lock needs all three: HR jumps ≥ 25 bpm within ~2 minutes, then tracks
+/// step cadence (±5) for at least five minutes, then falls ≥ 20 bpm within
+/// a minute when the lock breaks. Real efforts (run starts, intervals) can
+/// jump and can sit near cadence, but they recover gradually, so they are
+/// kept. Flagged minutes are dropped, never replaced.
 CleanHeartRate excludeCadenceLock(
   CleanHeartRate input,
   List<StepBucket> steps, {
   double jumpBpm = 25,
-  double tolerance = 8,
+  double tolerance = 5,
+  double exitDropBpm = 20,
   int minMinutes = 5,
 }) {
   if (steps.isEmpty || input.samples.length < 10) return input;
@@ -117,7 +119,14 @@ CleanHeartRate excludeCadenceLock(
       if ((samples[end].value - spm).abs() > tolerance) break;
       end++;
     }
-    if (end - index >= minMinutes) {
+    // A real effort ends gradually (HR recovery takes minutes); a sensor
+    // lock ends with an instant fall back to the true rate.
+    final abruptExit =
+        end < samples.length &&
+        end > index &&
+        samples[end].at.difference(samples[end - 1].at).inMinutes <= 2 &&
+        samples[end - 1].value - samples[end].value >= exitDropBpm;
+    if (end - index >= minMinutes && abruptExit) {
       for (var j = index; j < end; j++) {
         excluded.add(j);
       }

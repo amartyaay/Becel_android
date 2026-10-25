@@ -99,6 +99,7 @@ class RecoveryEstimate {
     required this.restingHrZ,
     required this.sleepZ,
     required this.contextAdjustment,
+    this.composite,
     required this.hrvCurrent,
     required this.hrvAt,
     required this.hrvSampleCount,
@@ -122,6 +123,23 @@ class RecoveryEstimate {
 
   /// Composite-z shift from check-in and respiratory/temperature signals.
   final double contextAdjustment;
+
+  /// Weighted composite in SD units (0 = a typical morning for you). The
+  /// training prescription uses this, not the % band: a 67 % "green" only
+  /// needs z ≈ +0.1, which is too weak a signal to tell someone to go hard.
+  final double? composite;
+
+  /// Prescription band: push only on a clearly better-than-usual morning
+  /// (z ≥ +0.5, ~31 % of days), recover at z ≤ −0.75. Falls back to the
+  /// % band when the composite is unknown.
+  RecoveryBand get trainingBand {
+    final z = composite;
+    if (z == null) return band;
+    if (z >= 0.5) return RecoveryBand.green;
+    if (z <= -0.75) return RecoveryBand.red;
+    return RecoveryBand.yellow;
+  }
+
   final List<String> contextReasons;
   final double hrvCurrent;
   final DateTime hrvAt;
@@ -389,6 +407,7 @@ RecoveryReadiness recoveryReadiness({
       restingHrZ: restingHrZ,
       sleepZ: sleepZ,
       contextAdjustment: adjustment,
+      composite: composite,
       contextReasons: reasons,
       hrvCurrent: hrvCurrent,
       hrvAt: hrv.at,

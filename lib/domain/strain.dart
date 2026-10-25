@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'energy.dart' show StepBucket;
 import 'estimates.dart';
 import 'profile.dart';
 import 'strength.dart';
@@ -48,6 +49,26 @@ double banisterTrimpPerMinute(double hrr, BiologicalSex? sex) {
   return raw(x) - raw(strainFloorHrr);
 }
 
+/// Training-load floor: only effort at or above 30 % HRR (light-to-moderate
+/// exercise and up) feeds acute/chronic load and monotony. Ambient daily
+/// heart rate would otherwise pad every day equally, inflating Foster's
+/// monotony and pulling ACWR toward 1 (a real deload would look mild).
+const trainingFloorHrr = 0.30;
+
+double trainingTrimpPerMinute(double hrr, BiologicalSex? sex) {
+  final x = hrr.clamp(0.0, 1.0);
+  if (x <= trainingFloorHrr) return 0;
+  double raw(double v) => sex == BiologicalSex.female
+      ? v * 0.86 * math.exp(1.67 * v)
+      : v * 0.64 * math.exp(1.92 * v);
+  return raw(x) - raw(trainingFloorHrr);
+}
+
+/// Walking cadence thresholds (Tudor-Locke et al., CADENCE-Adults 2018):
+/// ~100 steps/min ≈ 3 METs (moderate), ~130 steps/min ≈ 6 METs (vigorous).
+const moderateCadence = 100.0;
+const vigorousCadence = 130.0;
+
 class DayStrain {
   const DayStrain({
     required this.date,
@@ -58,9 +79,17 @@ class DayStrain {
     required this.peakBpm,
     this.moderateMinutes = 0,
     this.vigorousMinutes = 0,
-  });
+    double? trainingTrimp,
+  }) : trainingTrimp = trainingTrimp ?? cardioTrimp;
 
-  /// ACSM intensity minutes: moderate 40–59 % HRR, vigorous ≥ 60 % HRR.
+  /// Load from effort at or above 30 % HRR only (what training-load maths
+  /// uses). Day strain ([trimp]) also includes everyday movement.
+  final double trainingTrimp;
+
+  double get loadTrimp => trainingTrimp + strengthTrimp;
+
+  /// Intensity minutes: moderate = 40–59 % HRR or ≥ 100 steps/min,
+  /// vigorous = ≥ 60 % HRR or ≥ 130 steps/min.
   final double moderateMinutes;
   final double vigorousMinutes;
   double get aerobicEquivalentMinutes => moderateMinutes + 2 * vigorousMinutes;
@@ -93,10 +122,19 @@ List<DayStrain> dailyStrain({
   required DateTime now,
   required int days,
   Iterable<StrengthSession> strengthSessions = const [],
+  Iterable<StepBucket> stepBuckets = const [],
 }) {
   final today = _localDay(now);
   final first = today.subtract(Duration(days: days - 1));
   final reserve = math.max(20.0, maxBpm - restingBpm);
+  final cadence = <int, double>{};
+  for (final bucket in stepBuckets) {
+    final start = bucket.start.millisecondsSinceEpoch ~/ 60000;
+    for (var m = 0; m < 5; m++) {
+      cadence[start + m] = bucket.steps / 5;
+    }
+  }
+  final training = <DateTime, double>{};
   final cardio = <DateTime, double>{};
   final coverage = <DateTime, double>{};
   final zones = <DateTime, List<double>>{};
@@ -109,18 +147,24 @@ List<DayStrain> dailyStrain({
     final previous = cleanedMinutes[index - 1];
     final current = cleanedMinutes[index];
     final gap = current.at.difference(previous.at).inSeconds / 60;
-    if (gap <= 0 || gap > 3) continue;
+    if (gap <= 0) continue;
     final day = _localDay(current.at);
     if (day.isBefore(first) || current.at.isAfter(now)) continue;
+    // Wear coverage tolerates the sparse resting sampling of wrist HR (up
+    // to 10 minutes between samples); load needs dense samples (≤ 3 min).
+    if (gap <= 10) coverage[day] = (coverage[day] ?? 0) + gap;
+    if (gap > 3) continue;
     final bpm = (previous.value + current.value) / 2;
     final hrr = (bpm - restingBpm) / reserve;
     final load = banisterTrimpPerMinute(hrr, sex) * gap;
     cardio[day] = (cardio[day] ?? 0) + load;
+    training[day] =
+        (training[day] ?? 0) + trainingTrimpPerMinute(hrr, sex) * gap;
     perMinute[current.at.millisecondsSinceEpoch ~/ 60000] = load;
-    coverage[day] = (coverage[day] ?? 0) + gap;
-    if (hrr >= 0.6) {
+    final spm = cadence[current.at.millisecondsSinceEpoch ~/ 60000] ?? 0;
+    if (hrr >= 0.6 || spm >= vigorousCadence) {
       vigorous[day] = (vigorous[day] ?? 0) + gap;
-    } else if (hrr >= 0.4) {
+    } else if (hrr >= 0.4 || spm >= moderateCadence) {
       moderate[day] = (moderate[day] ?? 0) + gap;
     }
     final zone = _zoneIndex(hrr);
@@ -153,6 +197,7 @@ List<DayStrain> dailyStrain({
         return DayStrain(
           date: date,
           cardioTrimp: cardio[date] ?? 0,
+          trainingTrimp: training[date] ?? 0,
           strengthTrimp: strength[date] ?? 0,
           coverageMinutes: coverage[date] ?? 0,
           zoneMinutes: zones[date] ?? List<double>.filled(5, 0),
@@ -298,7 +343,7 @@ class TrainingLoad {
 /// only to describe how this week compares with your recent base.
 /// Days with less wear than this carry the averages forward instead of
 /// entering as zero load (an unworn day is unknown, not a rest day).
-const loadCoverageMinutes = 16 * 60;
+const loadCoverageMinutes = 12 * 60;
 
 /// Covered days needed before the acute:chronic ratio is shown.
 const loadMinimumCoveredDays = 21;
@@ -335,24 +380,24 @@ TrainingLoad trainingLoad(List<DayStrain> days, {DateTime? today}) {
   // than one arbitrary first day.
   final seedDays = covered.take(14).toList();
   final seed =
-      seedDays.fold<double>(0, (s, d) => s + d.trimp) / seedDays.length;
+      seedDays.fold<double>(0, (s, d) => s + d.loadTrimp) / seedDays.length;
   var acute = seed;
   var chronic = seed;
   for (final day in complete) {
     if (!wellWorn(day)) continue;
-    acute = acuteLambda * day.trimp + (1 - acuteLambda) * acute;
-    chronic = chronicLambda * day.trimp + (1 - chronicLambda) * chronic;
+    acute = acuteLambda * day.loadTrimp + (1 - acuteLambda) * acute;
+    chronic = chronicLambda * day.loadTrimp + (1 - chronicLambda) * chronic;
   }
   final last7 = covered.length <= 7
       ? covered
       : covered.sublist(covered.length - 7);
-  final weekly = last7.fold<double>(0, (sum, day) => sum + day.trimp);
+  final weekly = last7.fold<double>(0, (sum, day) => sum + day.loadTrimp);
   final mean = weekly / math.max(1, last7.length);
   final variance = last7.isEmpty
       ? 0.0
       : last7.fold<double>(
               0,
-              (sum, day) => sum + math.pow(day.trimp - mean, 2),
+              (sum, day) => sum + math.pow(day.loadTrimp - mean, 2),
             ) /
             last7.length;
   final sd = math.sqrt(variance);

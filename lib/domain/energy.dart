@@ -29,15 +29,17 @@ const walkingNetKcalPerKgKm = 0.5;
 /// band cannot classify) cost ~1.3× resting. Doubly labelled water studies
 /// put even sedentary adults at PAL ≥ 1.4, which this allowance plus RMR and
 /// TEF reproduces on a rest day. Under-counting here risks under-fuelling.
-const awakeAllowance = 0.20;
+const awakeAllowance = 0.30;
 
 /// Thermic effect of food: ~10 % of energy eaten (Westerterp 2004).
 const tefFractionOfIntake = 0.10;
 
-/// TEF fallback when no food is logged: a conservative 6 % of expenditure.
-/// Real-device testing showed the fuller 8–10 % fallback, stacked on the
-/// allowance, pushed totals above the device's own (already generous) figure.
-const tefFractionOfExpenditure = 0.06;
+/// TEF when food is not (fully) logged: ~8 % of expenditure. Together with
+/// the allowance this keeps a light, ambulatory day near PAL 1.35–1.45,
+/// the floor seen in doubly labelled water studies of free-living adults
+/// (Black et al., 1996). Earlier, lower constants produced PAL ~1.25,
+/// which only chair-bound subjects reach.
+const tefFractionOfExpenditure = 0.08;
 
 class DayEnergy {
   const DayEnergy({
@@ -76,14 +78,24 @@ class DayEnergy {
 
   double get _movementKcal => heartKcal + stepKcal + strengthKcal + awakeKcal;
 
-  /// Thermic effect of food: from logged intake when available.
-  double get tefKcal => intakeKcal != null && intakeKcal! > 0
-      ? intakeKcal! * tefFractionOfIntake
-      : (restingKcal + _movementKcal) *
-            tefFractionOfExpenditure /
-            (1 - tefFractionOfExpenditure);
+  /// Thermic effect of food. Logged intake can only raise it: a partial
+  /// food log must never make the day's burn smaller.
+  double get tefKcal {
+    final fallback =
+        (restingKcal + _movementKcal) *
+        tefFractionOfExpenditure /
+        (1 - tefFractionOfExpenditure);
+    final fromIntake = (intakeKcal ?? 0) * tefFractionOfIntake;
+    return math.max(fallback, fromIntake);
+  }
 
-  bool get tefFromIntake => intakeKcal != null && intakeKcal! > 0;
+  bool get tefFromIntake =>
+      intakeKcal != null &&
+      intakeKcal! * tefFractionOfIntake > 0 &&
+      intakeKcal! * tefFractionOfIntake >=
+          (restingKcal + _movementKcal) *
+              tefFractionOfExpenditure /
+              (1 - tefFractionOfExpenditure);
 
   double get activeKcal => _movementKcal + tefKcal;
   double get totalKcal => restingKcal + activeKcal;
@@ -252,6 +264,26 @@ DayEnergy? estimateDayEnergy({
     }
   }
 
+  // Length of the consecutive run of minutes at or above FLEX, so a
+  // sustained bout can be told apart from a one-minute blip.
+  final aboveFlexRun = List<int>.filled(minutes, 0);
+  for (var m = 0; m < minutes; m++) {
+    final hr = hrByMinute[m];
+    if (hr == null || hr < flex) continue;
+    var start = m;
+    while (start > 0 && (hrByMinute[start - 1] ?? 0) >= flex) {
+      start--;
+    }
+    var end = m;
+    while (end < minutes - 1 && (hrByMinute[end + 1] ?? 0) >= flex) {
+      end++;
+    }
+    for (var j = start; j <= end; j++) {
+      aboveFlexRun[j] = end - start + 1;
+    }
+    m = end;
+  }
+
   var heart = 0.0, steps = 0.0, strength = 0.0, awake = 0.0;
   var heartMinutes = 0;
   final reserve = math.max(20.0, maxBpm - restingBpm);
@@ -280,12 +312,23 @@ DayEnergy? estimateDayEnergy({
         continue;
       }
       // Between FLEX and 50 % HRR (easy walking, chores, stairs) Keytel
-      // overstates cost roughly twice over. Walking is costed from steps;
-      // non-walking workouts (cycling, rowing) and the minutes just after a
-      // hard bout get a damped HR estimate; anything else falls through to
-      // the daily-living allowance.
-      if (stepEnergy[m] == 0 && (inWorkout[m] || m - lastHardMinute <= 10)) {
-        heart += keytelNet * 0.5;
+      // overstates cost roughly twice over, so it is damped to half. With
+      // steps, the larger of step cost and damped HR is used (stairs and
+      // hills cost more than level walking). Without steps, damped HR counts
+      // inside a workout, just after a hard bout, or in a sustained bout of
+      // 10+ minutes above FLEX (unlogged cycling or rowing); isolated
+      // minutes fall through to the daily-living allowance.
+      final damped = keytelNet * 0.5;
+      if (stepEnergy[m] > 0) {
+        if (damped > stepEnergy[m]) {
+          heart += damped;
+          heartMinutes++;
+          continue;
+        }
+      } else if (inWorkout[m] ||
+          m - lastHardMinute <= 10 ||
+          aboveFlexRun[m] >= 10) {
+        heart += damped;
         heartMinutes++;
         continue;
       }

@@ -8,7 +8,7 @@ class ShellScreen extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  static const _items = [
+  static const items = [
     (Icons.donut_large_outlined, Icons.donut_large_rounded, 'Today'),
     (Icons.bolt_outlined, Icons.bolt_rounded, 'Training'),
     (Icons.bedtime_outlined, Icons.bedtime_rounded, 'Sleep'),
@@ -23,65 +23,131 @@ class ShellScreen extends StatelessWidget {
       extendBody: true,
       body: navigationShell,
       bottomNavigationBar: Padding(
-        // The system inset is applied once, here; the bar itself must not
-        // add it again (NavigationBar pads for it by default).
+        // The system inset is applied exactly once, here.
         padding: EdgeInsets.fromLTRB(20, 0, 20, 10 + bottomInset),
-        child: Container(
-          height: 70,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(35),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1F1B2340),
-                blurRadius: 30,
-                offset: Offset(0, 10),
-              ),
-            ],
+        child: BecelNavBar(
+          selected: navigationShell.currentIndex,
+          onSelect: (index) => navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(35),
-            child: NavigationBarTheme(
-              data: NavigationBarThemeData(
-                labelTextStyle: WidgetStateProperty.resolveWith(
-                  (states) => TextStyle(
-                    fontFamily: AppType.family,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: states.contains(WidgetState.selected)
-                        ? AppColors.textPrimary
-                        : AppColors.textTertiary,
-                  ),
-                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating pill navigation: the selected tab grows into an ink pill with
+/// its label; the others are icons only. Fully custom so its layout never
+/// depends on Material's NavigationBar padding rules.
+class BecelNavBar extends StatelessWidget {
+  const BecelNavBar({
+    super.key,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final int selected;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 68,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(34),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F1B2340),
+            blurRadius: 30,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < ShellScreen.items.length; i++)
+            Expanded(
+              flex: i == selected ? 2 : 1,
+              child: _NavItem(
+                icon: ShellScreen.items[i].$1,
+                selectedIcon: ShellScreen.items[i].$2,
+                label: ShellScreen.items[i].$3,
+                selected: i == selected,
+                onTap: () => onSelect(i),
               ),
-              child: MediaQuery.removePadding(
-                context: context,
-                removeBottom: true,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: NavigationBar(
-                    height: 70,
-                    backgroundColor: Colors.transparent,
-                    surfaceTintColor: Colors.transparent,
-                    indicatorColor: AppColors.ink,
-                    indicatorShape: const StadiumBorder(),
-                    labelBehavior:
-                        NavigationDestinationLabelBehavior.alwaysHide,
-                    selectedIndex: navigationShell.currentIndex,
-                    onDestinationSelected: (index) => navigationShell.goBranch(
-                      index,
-                      initialLocation: index == navigationShell.currentIndex,
-                    ),
-                    destinations: [
-                      for (final item in _items)
-                        NavigationDestination(
-                          icon: Icon(item.$1, color: AppColors.textTertiary),
-                          selectedIcon: Icon(item.$2, color: Colors.white),
-                          label: item.$3,
-                        ),
-                    ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 32,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              height: 48,
+              padding: EdgeInsets.symmetric(horizontal: selected ? 14 : 0),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.ink : Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selected ? selectedIcon : icon,
+                    size: 22,
+                    color: selected ? Colors.white : AppColors.textTertiary,
                   ),
-                ),
+                  if (selected) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: const TextStyle(
+                          fontFamily: AppType.family,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

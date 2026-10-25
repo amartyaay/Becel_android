@@ -137,6 +137,7 @@ Performance buildPerformance({
           sex: sex,
           now: now,
           days: loadWindowDays,
+          stepBuckets: stepBuckets,
         );
   final load = strainDays.isEmpty ? null : trainingLoad(strainDays, today: now);
   final yesterdayStrain = strainDays.length < 2
@@ -196,7 +197,8 @@ Performance buildPerformance({
           hrvSamples: heart.hrvSamples,
           restingHrSamples: heart.restingHrSamples,
           sleepMinutes: night?.asleepMinutes,
-          sleepNeedMinutes: coach.baselineNeed,
+          // Same "need going into last night" the Sleep ring grades against.
+          sleepNeedMinutes: coach.needLastNight,
           sleepStart: night?.onset,
           sleepEnd: night?.night.end,
           asleepIntervals: night?.asleepIntervals ?? const <AsleepInterval>[],
@@ -307,10 +309,7 @@ Performance buildPerformance({
   if (energyDays.isNotEmpty && energyDays.last.date == _day(now)) {
     final history = [
       for (final day in energyDays)
-        if (day.complete &&
-            day.palPlausible &&
-            _coverage(clean.samples, day.date) >= 12 * 60)
-          day,
+        if (day.complete && _coverage(clean.samples, day.date) >= 12 * 60) day,
     ];
     energy = EnergyBalance(
       today: energyDays.last,

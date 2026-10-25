@@ -124,7 +124,7 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = recoveryColor(estimate.score);
+    final color = estimateColor(estimate);
     return PanelCard(
       accent: color,
       child: Row(
@@ -143,7 +143,7 @@ class _HeroCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Tag(recoveryWord(estimate.score), color: color),
+                Tag(estimateWord(estimate), color: color),
                 const SizedBox(height: 10),
                 Text(switch (estimate.band) {
                   RecoveryBand.green =>

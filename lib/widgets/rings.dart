@@ -21,6 +21,24 @@ String recoveryWord(int? score) =>
       null => 'Calibrating',
     };
 
+/// Colour and word for an estimate, following its evidence band (composite
+/// z), so the ring always agrees with the day's prescription.
+Color estimateColor(RecoveryEstimate? estimate) =>
+    switch (estimate?.trainingBand) {
+      RecoveryBand.green => AppColors.bandGreen,
+      RecoveryBand.yellow => AppColors.bandYellow,
+      RecoveryBand.red => AppColors.bandRed,
+      null => AppColors.textTertiary,
+    };
+
+String estimateWord(RecoveryEstimate? estimate) =>
+    switch (estimate?.trainingBand) {
+      RecoveryBand.green => 'Primed',
+      RecoveryBand.yellow => 'Steady',
+      RecoveryBand.red => 'Run down',
+      null => 'Calibrating',
+    };
+
 /// Animated circular progress ring with a centred value and caption.
 class MetricRing extends StatelessWidget {
   const MetricRing({

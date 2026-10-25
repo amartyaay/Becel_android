@@ -4,6 +4,7 @@
 import 'package:becel/data/health_connect_service.dart';
 import 'package:becel/data/health_store.dart';
 import 'package:becel/data/local_store.dart';
+import 'package:becel/features/shell/shell_screen.dart';
 import 'package:becel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,7 +50,7 @@ void main() {
       if (tab != 'Today') {
         await tester.tap(
           find.descendant(
-            of: find.byType(NavigationBar),
+            of: find.byType(BecelNavBar),
             matching: find.byTooltip(tab),
           ),
         );

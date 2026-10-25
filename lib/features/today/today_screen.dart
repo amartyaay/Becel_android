@@ -293,7 +293,7 @@ class _RecoveryHero extends StatelessWidget {
     final p = performance;
     final recovery = p.recoveryEstimate;
     final score = recovery?.score;
-    final color = recoveryColor(score);
+    final color = estimateColor(recovery);
     final strain = p.today?.strain;
     final target = p.plan.target;
     final sleepPct = p.sleep.performancePercent;
@@ -361,7 +361,7 @@ class _RecoveryHero extends StatelessWidget {
                           semanticsLabel: score == null
                               ? 'Recovery calibrating'
                               : 'Recovery $score percent, '
-                                    '${recoveryWord(score)}',
+                                    '${estimateWord(recovery)}',
                         ),
                       ),
                     ),
@@ -398,8 +398,8 @@ class _RecoveryHero extends StatelessWidget {
                           ? 'Calibrating · $waiting more night${waiting == 1 ? '' : 's'}'
                           : 'Needs last night’s sleep'
                     : recovery!.provisional
-                    ? '${recoveryWord(score)} · provisional'
-                    : recoveryWord(score),
+                    ? '${estimateWord(recovery)} · provisional'
+                    : estimateWord(recovery),
                 color: color,
               ),
             ],
@@ -567,24 +567,23 @@ class _BurnCard extends StatelessWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        formatNumber(today.totalKcal.round()),
+                        formatNumber(today.activeKcal.round()),
                         style: AppType.numXl,
                       ),
                       const SizedBox(width: 6),
-                      const Text('kcal', style: AppType.unit),
+                      const Text('active kcal', style: AppType.unit),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: StatBlock(
-                  label: 'BY MIDNIGHT',
-                  value: '~${formatNumber(energy.projectedToday.round())}',
-                  align: CrossAxisAlignment.end,
-                ),
-              ),
             ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Movement, daily living, and digestion. Your body also burns '
+            '${formatNumber((energy.rmr / 24).round())} kcal an hour just '
+            'staying alive.',
+            style: AppType.caption,
           ),
           const SizedBox(height: 14),
           ClipRRect(
@@ -594,15 +593,15 @@ class _BurnCard extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    flex: math.max(1, today.restingKcal.round()),
-                    child: Container(
-                      color: AppColors.burned.withValues(alpha: 0.35),
-                    ),
+                    flex: math.max(1, today.activeKcal.round()),
+                    child: Container(color: AppColors.burned),
                   ),
                   const SizedBox(width: 2),
                   Expanded(
-                    flex: math.max(1, today.activeKcal.round()),
-                    child: Container(color: AppColors.burned),
+                    flex: math.max(1, today.restingKcal.round()),
+                    child: Container(
+                      color: AppColors.burned.withValues(alpha: 0.25),
+                    ),
                   ),
                 ],
               ),
@@ -613,19 +612,21 @@ class _BurnCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'ACTIVE',
-                  value: formatNumber(today.activeKcal.round()),
+                  label: 'Total so far',
+                  value: formatNumber(today.totalKcal.round()),
+                  delta:
+                      '~${formatNumber(energy.projectedToday.round())} by midnight',
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'RESTING',
+                  label: 'Resting',
                   value: formatNumber(today.restingKcal.round()),
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'FITBIT SAYS',
+                  label: 'Fitbit total',
                   value: energy.deviceTotalToday == null
                       ? '—'
                       : formatNumber(energy.deviceTotalToday!),

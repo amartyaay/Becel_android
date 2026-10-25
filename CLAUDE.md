@@ -20,9 +20,15 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 | 9 | Take **age / weight / height from Google Health**. | Weight, height, body fat read from Health Connect. **Age and sex are not in Health Connect** → entered once in Settings (explain to user). |
 | 10 | Calories burned **as of the latest sync**, only shown **once all inputs exist**. | Done ("as of" tag, missing-input state). |
 | 11 | **Complete UI overhaul like Bevel**, modern/fancy/attractive; owner **hated the dark colour scheme**. | Done v1 (light theme, gradient rings, Nunito numerals). Polish ongoing. |
-| 12 | Calories were **higher than Google Health**, which already overestimates. | Fixed in progress: Keytel no longer applied to easy walking; allowance 0.20; TEF fallback 6 %. Verify on device. |
-| 13 | **Fix the bottom bar** (clipped, inset applied twice). | Fix written (inset applied once, removePadding); verify on device. |
+| 12 | Calories were **higher than Google Health**, which already overestimates. | Root cause fixed: Keytel was costing easy walks at ~7 kcal/min. |
+| 13 | **Fix the bottom bar** (clipped, inset applied twice). | Replaced Material NavigationBar with custom `BecelNavBar`; verify on device. |
 | 14 | **Create CLAUDE.md**, revisit all prompts, keep a todo list of anything missed. | This file — update it every iteration. |
+| 15 | "1,668 kcal and strain 4.4 seem high for my day — research it; what does the PhD evaluator say?" | Answered with DLW/Mifflin/WHOOP evidence: total burn is mostly resting metabolism (81 kcal/h for the owner); free-living PAL ≥ 1.4, so the total was if anything low; 4.4 is "light" on WHOOP's scale (member average 11). Evaluator agreed calories were too low and ambient HR padded load. Home now leads with **active** kcal; total/resting shown beneath. |
+
+### Decisions to keep (with evidence)
+- **Calories**: target a light ambulatory day near PAL 1.35–1.45 (DLW floor for free-living adults); do NOT tune to undercut Fitbit's total — Fitbit's known error is exercise kcal. Keytel only ≥ 50 % HRR; FLEX–50 % uses max(step cost, ½ Keytel).
+- **Strain**: day strain counts from 10 % HRR (WHOOP-like); training load / ACWR / monotony use effort ≥ 30 % HRR only.
+- **Prescription**: push only when recovery composite z ≥ +0.5; recover at z ≤ −0.75 (the % ring colour follows the same band).
 
 ## Evaluator score history (target ≥ 9.0)
 
@@ -30,14 +36,16 @@ its own WHOOP/Bevel-class metrics on the phone. Branch in progress:
 |---|---|---|---|
 | 0 baseline | `eff2c8b` | 4.2 | Keytel at rest inflates kcal; contradictory recovery weights; population coaching; no complaint fixes |
 | 2 | `a71ed31`, `e7a9cfc` | 6.6 | Load used partial day; sleep graded against own debt; rest-day kcal low; strain saturates; cadence lock |
-| 3+ | `8083007` → current | _not yet re-rated_ | — |
+| 3 | `8083007`…`91cc01c` | 7.1 | Green fires on average mornings; ambient load breaks monotony/ACWR; PAL 1.27 too low; TEF drops with partial food log; cadence filter deletes real starts; active min ignores cadence; sleep-need units mismatch; coverage rule fragile; narrow-screen truncation; no HRV trend card / day timeline |
+| 4 | current | _not yet re-rated_ | — |
 
 ## Open todos (missed or planned, not done)
 
-- [ ] Re-run the evaluator on the current build; record the score above.
-- [ ] Verify on the phone: bottom bar fix; calories now below Fitbit; strain with the 10 % HRR floor.
-- [ ] Training load shows "Calibrating" on the owner's real data — check whether the 16 h/day coverage rule is too strict for real Fitbit Air wear (count covered days on device).
-- [ ] HRV 7-day trend (`hrvTrend` in `estimates.dart`) has no UI card yet (Recovery screen).
+- [ ] Re-run the evaluator on iteration 4; record the score above.
+- [ ] Verify on the phone: new nav bar; active-kcal hero; strain/load after the 30 % training floor and 12 h coverage.
+- [ ] HRV 7-day trend (`hrvTrend` in `estimates.dart`) has no UI card yet (Recovery screen) — evaluator iteration 3 asked for it next to the 14-day chart.
+- [ ] Today below-the-fold feels empty vs Bevel: add a day timeline (HR/strain over the day with workout bands) and per-signal sparklines on recovery drivers.
+- [ ] Training: seed the EWMA from days before the iteration start (minor double count with short history).
 - [ ] Sleep-onset correction toggle (`BodyProfile.correctSleepOnset`) has no Settings switch yet.
 - [ ] Today at 360 px / 1.3× text: some captions still truncate (hero captions, vitals labels).
 - [ ] Vitals: suppress the VO₂max category when the range spans 2+ categories.

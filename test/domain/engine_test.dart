@@ -125,6 +125,44 @@ void main() {
       expect(days.single.trimp, closeTo(96, 1));
     });
 
+    test('everyday HR counts toward day strain but not training load', () {
+      final now = DateTime(2026, 10, 25, 20);
+      // 10 hours at ~20 % HRR: walking around the house, no exercise.
+      final ambient = minutes(DateTime(2026, 10, 25, 9), 600, (_) => 78);
+      final day = dailyStrain(
+        cleanedMinutes: ambient,
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+      ).single;
+      expect(day.strain, greaterThan(1));
+      expect(day.trainingTrimp, 0);
+    });
+
+    test('brisk walking cadence counts as moderate even at low HRR', () {
+      final now = DateTime(2026, 10, 25, 20);
+      final start = DateTime(2026, 10, 25, 12);
+      final day = dailyStrain(
+        cleanedMinutes: minutes(start, 31, (_) => 95),
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+        stepBuckets: [
+          for (var i = 0; i < 6; i++)
+            StepBucket(
+              start: start.add(Duration(minutes: i * 5)),
+              steps: 550,
+            ),
+        ],
+      ).single;
+      // 30 intervals; the last falls just after the final step bucket.
+      expect(day.moderateMinutes, closeTo(29, 0.5));
+    });
+
     test('ACWR flags a load spike after a quiet month', () {
       final base = DateTime(2026, 10, 1);
       final days = [
@@ -195,9 +233,10 @@ void main() {
         restingBpm: 66,
         maxBpm: 190,
       )!;
-      expect(day.heartKcal, 0);
-      // 4,000 steps × 0.768 m × 92 kg × 0.5 kcal/kg/km ≈ 141 kcal.
-      expect(day.stepKcal, closeTo(141, 2));
+      // 4,000 steps × 0.768 m × 92 kg × 0.5 kcal/kg/km ≈ 141 kcal. Each
+      // minute takes the larger of step cost and half-Keytel, never full
+      // Keytel (~7 kcal/min here), so the walk stays near walking cost.
+      expect(day.heartKcal + day.stepKcal, inInclusiveRange(135, 150));
     });
 
     test('phantom desk steps are filtered; real walking counts', () {
@@ -249,6 +288,31 @@ void main() {
       // Corrected METs: (6 − 1) × RMR/min (1780/1440) × 60 ≈ 371 kcal.
       expect(day.strengthKcal, closeTo(370.8, 1));
       expect(day.heartKcal, 0);
+    });
+
+    test('logging a small meal never lowers the digestion estimate', () {
+      DayEnergy dayWith(double? intake) => DayEnergy(
+        date: DateTime(2026, 10, 24),
+        restingKcal: 1950,
+        heartKcal: 100,
+        stepKcal: 150,
+        strengthKcal: 0,
+        awakeKcal: 300,
+        countedSteps: 6000,
+        filteredSteps: 0,
+        flexBpm: 95,
+        heartMinutes: 20,
+        minutesElapsed: 1440,
+        complete: true,
+        rmrMethod: 'Mifflin',
+        intakeKcal: intake,
+      );
+      final none = dayWith(null);
+      final snack = dayWith(500);
+      final full = dayWith(3200);
+      expect(snack.tefKcal, none.tefKcal);
+      expect(full.tefKcal, closeTo(320, 0.1));
+      expect(none.pal, inInclusiveRange(1.35, 1.55));
     });
 
     test('Katch–McArdle is used when body fat is known', () {

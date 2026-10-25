@@ -1,6 +1,7 @@
 import 'package:becel/data/health_connect_service.dart';
 import 'package:becel/data/health_store.dart';
 import 'package:becel/data/local_store.dart';
+import 'package:becel/features/shell/shell_screen.dart';
 import 'package:becel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +33,7 @@ Future<void> _settle(WidgetTester tester) async {
 Future<void> _openTab(WidgetTester tester, String label) async {
   await tester.tap(
     find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(BecelNavBar),
       matching: find.byTooltip(label),
     ),
   );
@@ -103,7 +104,7 @@ void main() {
 
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
-    expect(find.text('By midnight'), findsOneWidget);
+    expect(find.text('Total so far'), findsOneWidget);
     expect(find.text('Eaten'), findsNothing);
     await _scrollTo(tester, find.text('Steps'));
     expect(find.text('Active'), findsWidgets);
@@ -123,7 +124,7 @@ void main() {
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.text('Waiting for data'), findsOneWidget);
     expect(find.textContaining('Needs sex'), findsOneWidget);
-    expect(find.text('By midnight'), findsNothing);
+    expect(find.text('Total so far'), findsNothing);
   });
 
   testWidgets('Today has no logging controls (read-only app)', (tester) async {
@@ -262,7 +263,7 @@ void main() {
     _setPhone(tester);
     _installAthlete();
     await _boot(tester);
-    GoRouter.of(tester.element(find.byType(NavigationBar))).push('/energy');
+    GoRouter.of(tester.element(find.byType(BecelNavBar))).push('/energy');
     await _settle(tester);
 
     expect(find.text('Today so far'), findsOneWidget);

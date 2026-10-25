@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:becel/data/health_connect_service.dart';
 import 'package:becel/data/health_store.dart';
 import 'package:becel/data/local_store.dart';
+import 'package:becel/features/shell/shell_screen.dart';
 import 'package:becel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -116,7 +117,7 @@ void main() {
   Future<void> openTab(WidgetTester tester, String label) async {
     await tester.tap(
       find.descendant(
-        of: find.byType(NavigationBar),
+        of: find.byType(BecelNavBar),
         matching: find.byTooltip(label),
       ),
     );
@@ -133,10 +134,7 @@ void main() {
   for (final entry in tabs.entries) {
     testWidgets('shot ${entry.key}', (tester) async {
       await boot(tester);
-      final labels = tester
-          .widgetList<NavigationDestination>(find.byType(NavigationDestination))
-          .map((d) => d.label)
-          .toList();
+      final labels = [for (final item in ShellScreen.items) item.$3];
       if (entry.value != labels.first) {
         if (!labels.contains(entry.value)) return;
         await openTab(tester, entry.value);

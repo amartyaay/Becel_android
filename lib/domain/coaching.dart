@@ -82,7 +82,15 @@ DailyPlan buildDailyPlan({
   required DateTime now,
 }) {
   final score = recovery?.score;
-  var target = strainTarget(recovery: score, load: load);
+  final trainingBand = recovery?.trainingBand;
+  // The prescription follows the evidence band, not the raw %.
+  final bandScore = switch (trainingBand) {
+    RecoveryBand.green => 80,
+    RecoveryBand.yellow => 50,
+    RecoveryBand.red => 20,
+    null => null,
+  };
+  var target = strainTarget(recovery: bandScore, load: load);
   final notes = <String>[];
 
   PlanTone tone;
@@ -103,13 +111,13 @@ DailyPlan buildDailyPlan({
     headline = 'Train by feel';
     session =
         'Recovery is calibrating. Keep hard work to RPE 7–8 until it is ready.';
-  } else if (score >= RecoveryModel.green) {
+  } else if (trainingBand == RecoveryBand.green) {
     tone = PlanTone.push;
     headline = 'Green light: go hard';
     session =
         'Good day for intervals, a tempo run, or heavy compound lifts near '
         'RPE 8–9.';
-  } else if (score > RecoveryModel.red) {
+  } else if (trainingBand == RecoveryBand.yellow) {
     tone = PlanTone.train;
     headline = 'Train, but control intensity';
     session =
@@ -341,8 +349,8 @@ WeeklyFocus _weeklyFocus({
   return const WeeklyFocus(
     title: 'Hold the line',
     body:
-        'Load, sleep, and recovery are balanced. Repeat the week and progress '
-        'your main lifts by one rep or 2.5 kg.',
+        'Load, sleep, and recovery are balanced. Repeat the week, adding '
+        'about 5–10% more training time or one harder session.',
   );
 }
 

@@ -269,6 +269,13 @@ class _LoadTrendCard extends StatelessWidget {
     final load = performance.load;
     final days = performance.strainDays;
     final last14 = days.length <= 14 ? days : days.sublist(days.length - 14);
+    final last28 = [
+      for (final d in days.length <= 28 ? days : days.sublist(days.length - 28))
+        if (d.hasData) d.strain,
+    ];
+    final averageStrain = last28.isEmpty
+        ? null
+        : last28.reduce((a, b) => a + b) / last28.length;
     final status = load?.status ?? LoadStatus.calibrating;
     final color = switch (status) {
       LoadStatus.productive => AppColors.bandGreen,
@@ -305,7 +312,7 @@ class _LoadTrendCard extends StatelessWidget {
             ],
             maxValue: strainMax,
             height: 70,
-            referenceLine: load?.chronicStrain,
+            referenceLine: averageStrain,
             colorFor: (i, v) => v >= 14
                 ? AppColors.strain
                 : AppColors.strain.withValues(alpha: v >= 10 ? 0.7 : 0.4),
@@ -313,8 +320,8 @@ class _LoadTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Line = your 28-day average strain '
-            '(${load?.chronicStrain.toStringAsFixed(1) ?? '—'}).',
+            'Line = your 28-day average day strain '
+            '(${averageStrain?.toStringAsFixed(1) ?? '—'}).',
             style: AppType.caption.copyWith(fontSize: 11),
           ),
           const SizedBox(height: 12),
