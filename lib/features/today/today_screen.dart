@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
 import '../../domain/coaching.dart';
 import '../../domain/performance.dart';
 import '../../domain/strain.dart';
+import '../../widgets/charts_kit.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
@@ -36,6 +38,24 @@ class _TodayScreenState extends State<TodayScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: _body(context)),
+          // Keeps scrolled content from running under the status-bar icons.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.paddingOf(context).top,
+            child: const ColoredBox(color: Color(0xF2F3F4F8)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    return Scaffold(
       body: ListenableBuilder(
         listenable: _health,
         builder: (context, _) {
@@ -54,11 +74,12 @@ class _TodayScreenState extends State<TodayScreen> {
                     loading: _health.loading,
                     connected: snapshot?.airMatched ?? false,
                     refreshedAt: snapshot?.loadedAt,
+                    cached: _health.showingCached,
                     onData: () => context.push('/data'),
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, navClearance),
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, navClearanceOf(context)),
                   sliver: SliverList.list(
                     children: snapshot == null
                         ? [
@@ -126,6 +147,10 @@ class _TodayScreenState extends State<TodayScreen> {
         _AlertCard(alert: p.alert!),
       ],
       const SizedBox(height: 12),
+      _PlanCard(plan: p.plan, strainNow: p.today?.strain),
+      const SizedBox(height: 12),
+      _DayCard(snapshot: snapshot),
+      const SizedBox(height: 12),
       _BurnCard(snapshot: snapshot, onTap: () => context.push('/energy')),
       const SizedBox(height: 12),
       IntrinsicHeight(
@@ -138,8 +163,6 @@ class _TodayScreenState extends State<TodayScreen> {
           ],
         ),
       ),
-      const SizedBox(height: 12),
-      _PlanCard(plan: p.plan, strainNow: p.today?.strain),
       const SizedBox(height: 12),
       IntrinsicHeight(
         child: Row(
@@ -191,6 +214,7 @@ class _Header extends StatelessWidget {
     required this.connected,
     required this.refreshedAt,
     required this.onData,
+    this.cached = false,
   });
 
   final DateTime now;
@@ -198,6 +222,9 @@ class _Header extends StatelessWidget {
   final bool connected;
   final DateTime? refreshedAt;
   final VoidCallback onData;
+
+  /// Showing the last launch's data while fresh data loads.
+  final bool cached;
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +279,9 @@ class _Header extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       loading
-                          ? 'Syncing'
+                          ? (cached && refreshedAt != null
+                                ? 'Syncing · from ${formatClock(refreshedAt!)}'
+                                : 'Syncing')
                           : refreshedAt == null
                           ? 'Not synced'
                           : formatAgo(refreshedAt!),
@@ -894,8 +923,17 @@ class _PlanCard extends StatelessWidget {
             plan.headline,
             style: AppType.sectionTitle.copyWith(fontSize: 20),
           ),
-          const SizedBox(height: 6),
-          Text(plan.session, style: AppType.body),
+          const SizedBox(height: 10),
+          if (plan.prescription.isEmpty)
+            Text(plan.session, style: AppType.body)
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in plan.prescription) _PlanChip(item: item),
+              ],
+            ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -931,7 +969,7 @@ class _PlanCard extends StatelessWidget {
           ),
           if (plan.notes.isNotEmpty) ...[
             const SizedBox(height: 14),
-            for (final note in plan.notes)
+            for (final note in plan.notes.take(2))
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -955,6 +993,141 @@ class _PlanCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PlanChip extends StatelessWidget {
+  const _PlanChip({required this.item});
+
+  final PlanItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (item.kind) {
+      PlanKind.cardio => (Icons.favorite_rounded, AppColors.active),
+      PlanKind.lift => (Icons.fitness_center_rounded, AppColors.strain),
+      PlanKind.mobility => (Icons.self_improvement_rounded, AppColors.sleep),
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.tint(color, 0.10),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              item.label,
+              style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Heart rate across today with sleep and workouts shaded: the day at a
+/// glance, the way Bevel and WHOOP open their day view.
+class _DayCard extends StatelessWidget {
+  const _DayCard({required this.snapshot});
+
+  final HealthSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = snapshot.performance;
+    final now = p.now;
+    final midnight = DateTime(now.year, now.month, now.day);
+    double minuteOf(DateTime t) =>
+        t.toLocal().difference(midnight).inSeconds / 60;
+    // 5-minute averages keep the line readable at phone width.
+    final buckets = <int, List<double>>{};
+    for (final s in p.clean.samples) {
+      final m = minuteOf(s.at);
+      if (m < 0 || m >= 1440) continue;
+      (buckets[m ~/ 5] ??= []).add(s.value);
+    }
+    final keys = buckets.keys.toList()..sort();
+    final points = [
+      for (final k in keys)
+        (k * 5 + 2.5, buckets[k]!.reduce((a, b) => a + b) / buckets[k]!.length),
+    ];
+    final night = p.sleep.lastNight;
+    final sleep = [
+      if (night != null) (minuteOf(night.onset), minuteOf(night.night.end)),
+    ];
+    final workouts = [
+      for (final w in snapshot.activity?.workouts ?? const <WorkoutEntry>[])
+        if (!w.start.toLocal().isBefore(midnight))
+          (minuteOf(w.start), minuteOf(w.start) + w.minutes),
+    ];
+    final peak = p.today?.peakBpm;
+    return PanelCard(
+      title: 'Your day',
+      icon: Icons.timeline_rounded,
+      accent: AppColors.active,
+      onTap: () => context.push('/vitals'),
+      trailing: peak == null
+          ? null
+          : Tag('Peak $peak', color: AppColors.active),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DayTimeline(
+            points: points,
+            sleep: sleep,
+            workouts: workouts,
+            nowMinute: minuteOf(now),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              _Key(color: AppColors.active, label: 'Heart rate'),
+              _Key(
+                color: AppColors.tint(AppColors.sleep, 0.35),
+                label: 'Sleep',
+              ),
+              if (workouts.isNotEmpty)
+                _Key(
+                  color: AppColors.tint(AppColors.strain, 0.4),
+                  label: 'Workout',
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Key extends StatelessWidget {
+  const _Key({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+      const SizedBox(width: 6),
+      Text(label, style: AppType.caption),
+    ],
+  );
 }
 
 class _LoadTile extends StatelessWidget {

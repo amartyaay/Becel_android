@@ -10,10 +10,10 @@ class ShellScreen extends StatelessWidget {
 
   static const items = [
     (Icons.donut_large_outlined, Icons.donut_large_rounded, 'Today'),
-    (Icons.bolt_outlined, Icons.bolt_rounded, 'Training'),
+    (Icons.fitness_center_outlined, Icons.fitness_center_rounded, 'Training'),
     (Icons.bedtime_outlined, Icons.bedtime_rounded, 'Sleep'),
-    (Icons.insights_outlined, Icons.insights_rounded, 'Trends'),
-    (Icons.tune_outlined, Icons.tune_rounded, 'Settings'),
+    (Icons.show_chart_outlined, Icons.show_chart_rounded, 'Trends'),
+    (Icons.settings_outlined, Icons.settings_rounded, 'Settings'),
   ];
 
   @override
@@ -170,5 +170,9 @@ class _NavItem extends StatelessWidget {
 
 void openSettings(BuildContext context) => context.go('/settings');
 
-/// Bottom padding every tab's scroll view needs to clear the floating bar.
-const navClearance = 108.0;
+/// Bottom padding every tab's scroll view needs to clear the floating bar:
+/// the bar (68), its gap (10), the system navigation inset (3-button nav
+/// on many phones is ~48), and room to breathe. A fixed value hid the last
+/// cards behind the bar on phones with button navigation.
+double navClearanceOf(BuildContext context) =>
+    68 + 10 + MediaQuery.paddingOf(context).bottom + 24;

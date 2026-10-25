@@ -54,7 +54,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearanceOf(context)),
                 children: [
                   const ScreenHeader(
                     eyebrow: 'Strain · load · zones',
@@ -132,7 +132,7 @@ class _TodayStrainCard extends StatelessWidget {
     final strain = today?.strain ?? 0;
     final zoneTotal = today?.zoneMinutes.fold<double>(0, (s, v) => s + v) ?? 0;
     return PanelCard(
-      title: 'TODAY',
+      title: 'Today',
       icon: Icons.bolt_rounded,
       accent: AppColors.strain,
       trailing: Tag(target.label, color: AppColors.strain),
@@ -145,7 +145,7 @@ class _TodayStrainCard extends StatelessWidget {
                 fraction: strain / strainMax,
                 color: AppColors.strain,
                 value: strain.toStringAsFixed(1),
-                label: 'STRAIN',
+                label: 'Strain',
                 size: 112,
                 bandFrom: target.low / strainMax,
                 bandTo: target.high / strainMax,
@@ -159,14 +159,12 @@ class _TodayStrainCard extends StatelessWidget {
                       'Target ${target.low.round()}–${target.high.round()}',
                       style: AppType.cardTitle.copyWith(fontSize: 17),
                     ),
-                    const SizedBox(height: 4),
-                    Text(target.reason, style: AppType.caption),
                     const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
                           child: StatBlock(
-                            label: 'PEAK',
+                            label: 'Peak',
                             value: today?.peakBpm?.toString() ?? '—',
                             unit: 'bpm',
                           ),
@@ -189,32 +187,44 @@ class _TodayStrainCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            'Time in zones today',
-            style: AppType.eyebrow.copyWith(fontSize: 10),
-          ),
-          const SizedBox(height: 8),
-          _ZoneStrip(minutes: today?.zoneMinutes ?? List.filled(5, 0)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              for (var z = 0; z < 5; z++)
-                Text(
-                  'Z${z + 1} ${(today?.zoneMinutes[z] ?? 0).round()}m',
-                  style: AppType.caption.copyWith(
-                    color: zoneColors[z],
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-            ],
-          ),
-          if (zoneTotal == 0) ...[
-            const SizedBox(height: 6),
+          if (zoneTotal == 0)
             Text(
-              'No time above ${zones.bpmAt(0.5)} bpm (Z1) yet today.',
+              'No zone time yet · Z1 starts at ${zones.bpmAt(0.5)} bpm',
               style: AppType.caption,
+            )
+          else ...[
+            Text('Time in zones', style: AppType.caption),
+            const SizedBox(height: 8),
+            _ZoneStrip(minutes: today!.zoneMinutes),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                for (var z = 0; z < 5; z++)
+                  if (today.zoneMinutes[z] >= 1)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: zoneColors[z],
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Z${z + 1} ${today.zoneMinutes[z].round()}m',
+                          style: AppType.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+              ],
             ),
           ],
         ],
@@ -284,7 +294,7 @@ class _LoadTrendCard extends StatelessWidget {
               .sublist(days.length - 7)
               .fold<double>(0, (s, d) => s + d.aerobicEquivalentMinutes);
     return PanelCard(
-      title: 'TRAINING LOAD',
+      title: 'Training load',
       icon: Icons.stacked_line_chart_rounded,
       accent: AppColors.strain,
       trailing: Tag(status.label, color: color),
@@ -321,7 +331,7 @@ class _LoadTrendCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'FORM',
+                  label: 'Form',
                   value: load == null
                       ? '—'
                       : '${load.form >= 0 ? '+' : ''}${load.form.round()}',
@@ -334,7 +344,7 @@ class _LoadTrendCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'MONOTONY',
+                  label: 'Monotony',
                   value: load?.monotony?.toStringAsFixed(1) ?? '—',
                   delta: load?.monotony == null
                       ? null
@@ -348,7 +358,7 @@ class _LoadTrendCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'AEROBIC MIN',
+                  label: 'Aerobic min',
                   value: weekAerobic.round().toString(),
                   delta: 'mod-equiv / 7d',
                 ),
@@ -479,7 +489,7 @@ class _WeekZonesCard extends StatelessWidget {
     }
     final top = totals.fold<double>(1, math.max);
     return PanelCard(
-      title: 'HEART-RATE ZONES · 7 DAYS',
+      title: 'Heart-rate zones · 7 days',
       icon: Icons.favorite_rounded,
       accent: AppColors.bandRed,
       onTap: onOpen,

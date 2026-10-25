@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'energy.dart';
 import 'estimates.dart';
+import 'heart_signal.dart';
 import 'sleep_coach.dart';
 import 'strain.dart';
 import 'strength.dart';
@@ -52,6 +53,18 @@ BodyAlert? detectBodyAlert({
 
 enum PlanTone { push, train, recover, rest }
 
+enum PlanKind { cardio, lift, mobility }
+
+/// One concrete thing to do today.
+class PlanItem {
+  const PlanItem.cardio(this.label) : kind = PlanKind.cardio;
+  const PlanItem.lift(this.label) : kind = PlanKind.lift;
+  const PlanItem.mobility(this.label) : kind = PlanKind.mobility;
+
+  final PlanKind kind;
+  final String label;
+}
+
 class DailyPlan {
   const DailyPlan({
     required this.tone,
@@ -59,6 +72,7 @@ class DailyPlan {
     required this.session,
     required this.target,
     required this.notes,
+    this.prescription = const [],
   });
 
   final PlanTone tone;
@@ -70,6 +84,10 @@ class DailyPlan {
 
   /// At most three short, specific notes. No filler.
   final List<String> notes;
+
+  /// Concrete sessions for today, with heart-rate ranges from the user's
+  /// own zones when known (e.g. "45–60 min Z2 · 128–141 bpm").
+  final List<PlanItem> prescription;
 }
 
 DailyPlan buildDailyPlan({
@@ -82,6 +100,7 @@ DailyPlan buildDailyPlan({
   required DateTime now,
   double? ambientTrimp,
   HrvTrend? hrvTrend,
+  HeartZones? zones,
 }) {
   final score = recovery?.score;
   // A 7-day HRV average below the normal range means accumulated fatigue
@@ -183,12 +202,33 @@ DailyPlan buildDailyPlan({
     }
   }
 
+  String range(double from, double to) =>
+      zones == null ? '' : ' · ${zones.bpmAt(from)}–${zones.bpmAt(to)} bpm';
+  final prescription = switch (tone) {
+    PlanTone.push => [
+      PlanItem.cardio('Intervals 4–6 × 4 min Z4${range(0.8, 0.9)}'),
+      const PlanItem.lift('Heavy compounds · RPE 8–9'),
+    ],
+    PlanTone.train => [
+      PlanItem.cardio('45–60 min Z2${range(0.6, 0.7)}'),
+      const PlanItem.lift('Lift · RPE 7 or below'),
+    ],
+    PlanTone.recover => [
+      PlanItem.cardio(
+        '20–40 min Z1${zones == null ? '' : ' · under ${zones.bpmAt(0.6)} bpm'}',
+      ),
+      const PlanItem.mobility('Mobility 10–15 min'),
+    ],
+    PlanTone.rest => [const PlanItem.mobility('Walk or full rest')],
+  };
+
   return DailyPlan(
     tone: tone,
     headline: headline,
     session: session,
     target: target,
     notes: notes.take(3).toList(),
+    prescription: prescription,
   );
 }
 

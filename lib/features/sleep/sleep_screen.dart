@@ -41,7 +41,7 @@ class _SleepScreenState extends State<SleepScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearanceOf(context)),
                 children: [
                   const ScreenHeader(
                     eyebrow: 'Need · debt · timing',
@@ -149,7 +149,7 @@ class _LastNightCard extends StatelessWidget {
         'Onset set by you (${night.trimmedMinutes} min trimmed).',
     };
     return PanelCard(
-      title: 'LAST NIGHT',
+      title: 'Last night',
       icon: Icons.bedtime_rounded,
       accent: AppColors.sleep,
       child: Column(
@@ -162,7 +162,7 @@ class _LastNightCard extends StatelessWidget {
                 color: AppColors.sleep,
                 value: '$pct',
                 unit: '%',
-                label: 'OF NEED',
+                label: 'Of need',
                 size: 116,
               ),
               const SizedBox(width: 16),
@@ -183,7 +183,7 @@ class _LastNightCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: StatBlock(
-                            label: 'EFFICIENCY',
+                            label: 'Efficiency',
                             value: '${night.efficiencyPercent}%',
                             delta: night.efficiencyPercent >= 85
                                 ? 'good'
@@ -195,7 +195,7 @@ class _LastNightCard extends StatelessWidget {
                         ),
                         Expanded(
                           child: StatBlock(
-                            label: 'IN BED',
+                            label: 'In bed',
                             value: formatDurationMinutes(night.inBedMinutes),
                           ),
                         ),
@@ -242,7 +242,7 @@ class _TonightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bedtime = coach.recommendedBedtime;
     return PanelCard(
-      title: 'TONIGHT',
+      title: 'Tonight',
       icon: Icons.nights_stay_rounded,
       accent: AppColors.sleep,
       child: Column(
@@ -252,13 +252,13 @@ class _TonightCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'SLEEP NEED',
+                  label: 'Sleep need',
                   value: formatDurationMinutes(coach.needTonight),
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'IN BED BY',
+                  label: 'In bed by',
                   value: bedtime == null ? '—' : formatClock(bedtime),
                   delta: coach.typicalWake == null
                       ? 'needs 3 nights'
@@ -331,7 +331,7 @@ class _ConsistencyCard extends StatelessWidget {
     final nights = coach.nights;
     final need = coach.baselineNeed;
     return PanelCard(
-      title: 'CONSISTENCY · 7 NIGHTS',
+      title: 'Consistency · 7 nights',
       icon: Icons.schedule_rounded,
       accent: AppColors.sleep,
       trailing: coach.consistencyPercent == null
@@ -363,7 +363,7 @@ class _ConsistencyCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'AVERAGE',
+                  label: 'Average',
                   value: coach.averageAsleep == null
                       ? '—'
                       : formatDurationMinutes(coach.averageAsleep!),
@@ -371,7 +371,7 @@ class _ConsistencyCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'MIDPOINT SPREAD',
+                  label: 'Midpoint spread',
                   value: coach.midpointSdMinutes == null
                       ? '—'
                       : '±${coach.midpointSdMinutes}m',

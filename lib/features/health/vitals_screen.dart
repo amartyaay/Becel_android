@@ -79,7 +79,7 @@ class _HeartTodayCard extends StatelessWidget {
       for (final s in heart?.series ?? const <HeartSample>[]) s.bpm.toDouble(),
     ];
     return PanelCard(
-      title: 'HEART RATE TODAY',
+      title: 'Heart rate today',
       icon: Icons.favorite_rounded,
       accent: AppColors.bandRed,
       child: Column(
@@ -89,26 +89,26 @@ class _HeartTodayCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'LATEST',
+                  label: 'Latest',
                   value: heart?.latestBpm?.toString() ?? '—',
                   unit: 'bpm',
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'MIN',
+                  label: 'Min',
                   value: heart?.minBpm?.toString() ?? '—',
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'AVG',
+                  label: 'Avg',
                   value: heart?.avgBpm?.toString() ?? '—',
                 ),
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'MAX',
+                  label: 'Max',
                   value: heart?.maxBpm?.toString() ?? '—',
                 ),
               ),
@@ -236,7 +236,7 @@ class _OvernightCard extends StatelessWidget {
     final body = snapshot.body;
     final p = snapshot.performance;
     return PanelCard(
-      title: 'OVERNIGHT SIGNALS · 28 DAYS',
+      title: 'Overnight signals · 28 days',
       icon: Icons.nightlight_round,
       accent: AppColors.teal,
       child: Column(
@@ -269,7 +269,7 @@ class _OvernightCard extends StatelessWidget {
             children: [
               Expanded(
                 child: StatBlock(
-                  label: 'RESPIRATORY',
+                  label: 'Respiratory',
                   value: body?.respiratoryRate?.toStringAsFixed(1) ?? '—',
                   unit: '/min',
                   delta: p.respiratoryDelta == null
@@ -282,7 +282,7 @@ class _OvernightCard extends StatelessWidget {
               ),
               Expanded(
                 child: StatBlock(
-                  label: 'SKIN TEMP',
+                  label: 'Skin temp',
                   value: p.skinTempDelta == null
                       ? '—'
                       : '${p.skinTempDelta! >= 0 ? '+' : ''}${p.skinTempDelta!.toStringAsFixed(1)}',
@@ -357,7 +357,7 @@ class _FitnessCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final f = fitness;
     return PanelCard(
-      title: 'CARDIO FITNESS · ESTIMATE',
+      title: 'Cardio fitness · estimate',
       icon: Icons.directions_run_rounded,
       accent: AppColors.green,
       trailing: f == null

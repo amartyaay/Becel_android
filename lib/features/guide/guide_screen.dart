@@ -104,7 +104,8 @@ final guideSections = <GuideSection>[
             '${RecoveryModel.green}%+ (green) means clearly better than usual: '
             'a good day to go hard. ${RecoveryModel.red}% or less (red) means '
             'clearly worse: recover. Anything between is yellow: train, but '
-            'control intensity.',
+            'control intensity. 90%+ is rare by design: it takes a night far '
+            'better than your usual.',
       ),
       ('How it is calculated', recoveryMethod),
       (
@@ -168,8 +169,9 @@ final guideSections = <GuideSection>[
       (
         'Acute vs chronic (ACWR)',
         'Exponentially weighted 7-day load divided by 28-day load, through '
-            'yesterday. Around 0.8–1.3 is productive; above 1.5 is a spike '
-            'that raises injury risk; below 0.8 means you are detraining.',
+            'yesterday. 1.0–1.3 is productive building, 0.8–1.0 maintaining, '
+            'below 0.8 detraining. Above 1.5 is a sharp jump; links to injury '
+            'risk are debated (Impellizzeri 2020), but it is worth easing off.',
       ),
       (
         'What counts',
@@ -221,23 +223,25 @@ final guideSections = <GuideSection>[
             '(never instead of it, never twice). An hour of walking shows as '
             'one hour of resting in "At rest" plus the extra cost of walking '
             'in "Movement"; the everyday allowance is not added for those '
-            'minutes. Workouts use heart rate (Keytel 2005) only above '
-            '${(keytelMinHrr * 100).round()}% of heart-rate reserve, and lifting '
-            'uses Compendium METs.',
+            'minutes. Workouts use heart rate (Keytel 2005) above '
+            '${(keytelMinHrr * 100).round()}% of heart-rate reserve. Below that, '
+            'the larger of step cost and half of Keytel is used (hills, '
+            'stairs, cycling). Lifting uses Compendium METs.',
       ),
       ('Full method', energyMethod),
       (
         'Is the total too high?',
         'A whole day of sitting still burns about 1.3–1.4× your resting rate. '
             'Doubly labelled water studies, the gold standard for free-living '
-            'energy, find 1.4 for desk workers and 1.7–2.0+ for active people. '
+            'energy, find about 1.4–1.6 for sedentary people and 1.7–2.0+ for '
+            'active ones (FAO/WHO). '
             'Becel shows this ratio as "activity level"; outside 1.35–2.6 '
             'usually means missing wear time or a wrong profile value.',
       ),
       (
         'Why Fitbit differs',
-        'Fitbit costs heart rate at all intensities, so easy walks, stress, '
-            'and caffeine add calories. Becel uses steps there and drops '
+        'Fitbit\'s method is not public; it typically credits more for easy '
+            'movement and a raised pulse. Becel uses steps there and drops '
             'incidental steps (5-minute blocks under $ambulatoryBucketSteps '
             'steps, unless heart rate rises '
             '${confirmedBucketHrRise.round()}+ bpm), like typing or arm swings.',

@@ -22,14 +22,13 @@ const strainMax = 21.0;
 /// [cadenceHrr]), so real walks still register even when wrist HR lags.
 const strainFloorHrr = 0.20;
 
-/// HRR equivalent of walking cadence: ≥ 100 steps/min is moderate (~3 METs,
-/// ≈ 40 % HRR) and ≥ 130 vigorous (~6 METs, ≈ 60 % HRR) (Tudor-Locke et al.,
-/// CADENCE-Adults 2018). Used as a floor for that minute's intensity.
-double cadenceHrr(double stepsPerMinute) => stepsPerMinute >= vigorousCadence
-    ? 0.60
-    : stepsPerMinute >= moderateCadence
-    ? 0.40
-    : 0.0;
+/// HRR equivalent of brisk *walking*: 100+ steps/min is moderate (~3 METs,
+/// ≈ 40 % HRR; Tudor-Locke et al., CADENCE-Adults 2018). Used as a floor
+/// for that minute's day-strain intensity when wrist HR lags. Running
+/// cadence (140+) gets no floor: every run is 150+ spm, so a floor there
+/// would score an easy Z2 run as hard and erase the easy/hard split.
+double cadenceHrr(double stepsPerMinute) =>
+    stepsPerMinute >= moderateCadence && stepsPerMinute < 140 ? 0.40 : 0.0;
 
 /// Session-RPE units to Banister-TRIMP equivalence for resistance work.
 ///
@@ -190,7 +189,8 @@ List<DayStrain> dailyStrain({
     final effort = math.max(hrr, cadenceHrr(spm));
     final load = banisterTrimpPerMinute(effort, sex) * gap;
     cardio[day] = (cardio[day] ?? 0) + load;
-    final trainingLoadPart = trainingTrimpPerMinute(effort, sex) * gap;
+    // Training load stays heart-rate only: a daily dog walk is not training.
+    final trainingLoadPart = trainingTrimpPerMinute(hrr, sex) * gap;
     training[day] = (training[day] ?? 0) + trainingLoadPart;
     // Everyday load: easy minutes only, outside any recorded workout, so
     // warm-ups, cool-downs, and the easy part of hard minutes stay out.

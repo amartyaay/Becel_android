@@ -283,6 +283,7 @@ Performance buildPerformance({
     now: now,
     ambientTrimp: ambientTrimp(strainDays, today: now),
     hrvTrend: trend,
+    zones: zones,
   );
 
   // Calories burned are shown only when every input is present, and only up

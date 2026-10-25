@@ -150,6 +150,9 @@ class HealthStore extends ChangeNotifier {
         body: BodyDetail.fromMap(part('body')),
         trends: Trends7d.fromMap(part('trends')),
         age: decoded['age'] as int?,
+        readAt:
+            DateTime.tryParse(decoded['readAt'] as String? ?? '') ??
+            DateTime.now(),
       );
       final snapshot = _compose(raw);
       // A live read may have finished while the cache was decoding.
@@ -163,7 +166,9 @@ class HealthStore extends ChangeNotifier {
   }
 
   Future<void> _saveCache(int? age) async {
-    final raw = Map<String, Object?>.from(_service.lastRaw)..['age'] = age;
+    final raw = Map<String, Object?>.from(_service.lastRaw)
+      ..['age'] = age
+      ..['readAt'] = DateTime.now().toIso8601String();
     try {
       final text = await compute(_encodeCache, raw);
       if (text != null) await LocalStore.instance.writeSnapshotCache(text);
@@ -219,6 +224,7 @@ class HealthStore extends ChangeNotifier {
         body: body,
         trends: trends,
         age: age,
+        readAt: DateTime.now(),
       );
       _raw = raw;
       final snapshot = _compose(raw);
@@ -300,7 +306,8 @@ class HealthStore extends ChangeNotifier {
       activityEstimate: raw.heart == null
           ? null
           : _service.activityEstimateFor(raw.heart!, raw.age),
-      loadedAt: now,
+      // When the data was read, so a cached copy never claims to be fresh.
+      loadedAt: raw.readAt,
       performance: performance,
       profile: profile,
       cardioFitness: estimateCardioFitness(
@@ -351,6 +358,7 @@ class _RawRead {
     required this.body,
     required this.trends,
     required this.age,
+    required this.readAt,
   });
 
   final HealthConnectInspection inspection;
@@ -361,4 +369,5 @@ class _RawRead {
   final BodyDetail? body;
   final Trends7d? trends;
   final int? age;
+  final DateTime readAt;
 }

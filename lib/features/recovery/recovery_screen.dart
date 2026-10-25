@@ -84,7 +84,7 @@ class _CalibratingCard extends StatelessWidget {
       readiness.restingHrBaselineNights,
     ].reduce((a, b) => a < b ? a : b);
     return PanelCard(
-      title: 'CALIBRATING',
+      title: 'Calibrating',
       icon: Icons.hourglass_top_rounded,
       accent: AppColors.teal,
       child: Column(
@@ -134,7 +134,7 @@ class _HeroCard extends StatelessWidget {
             color: color,
             value: '${estimate.score}',
             unit: '%',
-            label: 'RECOVERY',
+            label: 'Recovery',
             size: 128,
             stroke: 11,
           ),
@@ -180,7 +180,7 @@ class _ContributorsCard extends StatelessWidget {
     final hrvPct = estimate.hrvChangePercent;
     final rhrDelta = estimate.restingHrChange;
     return PanelCard(
-      title: 'WHAT DROVE TODAY',
+      title: 'What drove today',
       icon: Icons.insights_rounded,
       accent: AppColors.teal,
       child: Column(
@@ -484,7 +484,7 @@ class _HistoryCard extends StatelessWidget {
         ? null
         : (valid.reduce((a, b) => a + b) / valid.length).round();
     return PanelCard(
-      title: 'LAST 14 DAYS',
+      title: 'Last 14 days',
       icon: Icons.calendar_view_week_rounded,
       accent: AppColors.recovery,
       trailing: average == null

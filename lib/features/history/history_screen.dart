@@ -86,13 +86,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
               backgroundColor: AppColors.surfaceHigh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearance),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, navClearanceOf(context)),
                 children: [
                   ScreenHeader(
                     eyebrow: p == null
                         ? 'Weekly review'
                         : 'Week of ${formatShortDate(p.weekly.start)}',
                     title: 'Trends',
+                    trailing: const GuideButton(section: 'load'),
                   ),
                   const SizedBox(height: 12),
                   if (snapshot == null || failed)
@@ -158,7 +159,7 @@ class _FocusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PanelCard(
-    title: 'NEXT WEEK’S FOCUS',
+    title: 'Next week’s focus',
     icon: Icons.flag_rounded,
     accent: AppColors.green,
     child: Column(
@@ -226,7 +227,7 @@ class _WeekGrid extends StatelessWidget {
       ),
     ];
     return PanelCard(
-      title: 'THIS WEEK',
+      title: 'This week',
       icon: Icons.grid_view_rounded,
       accent: AppColors.teal,
       child: LayoutBuilder(
@@ -272,7 +273,7 @@ class _ChartsCard extends StatelessWidget {
         i.isEven || i == dates.length - 1 ? formatDayShort(dates[i])[0] : '',
     ];
     return PanelCard(
-      title: 'LAST 14 DAYS',
+      title: 'Last 14 days',
       icon: Icons.show_chart_rounded,
       accent: AppColors.teal,
       child: Column(
@@ -400,7 +401,7 @@ class _PatternsCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: StatBlock(
-                      label: 'DIFFERENCE',
+                      label: 'Difference',
                       value:
                           '${(avgA - avgB) >= 0 ? '+' : ''}${(avgA - avgB).round()}',
                       deltaColor: AppColors.textSecondary,
@@ -430,7 +431,7 @@ class _PatternsCard extends StatelessWidget {
       'FULL NIGHT',
     );
     return PanelCard(
-      title: 'YOUR PATTERNS',
+      title: 'Your patterns',
       icon: Icons.auto_graph_rounded,
       accent: AppColors.violet,
       child: rows.isEmpty

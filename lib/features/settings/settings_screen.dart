@@ -46,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               16,
               MediaQuery.paddingOf(context).top + 12,
               16,
-              navClearance,
+              navClearanceOf(context),
             ),
             children: [
               const ScreenHeader(eyebrow: 'Preferences', title: 'Settings'),

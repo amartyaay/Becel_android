@@ -103,6 +103,9 @@ void main() {
     expect(find.text('Strain'), findsOneWidget);
     expect(find.text('Sleep'), findsWidgets);
 
+    // The plan sits right under the rings, then the day, then calories.
+    await _scrollTo(tester, find.text('Today’s plan'));
+    await _scrollTo(tester, find.text('Your day'));
     await _scrollTo(tester, find.text('Calories burned'));
     expect(find.textContaining('as of'), findsOneWidget);
     expect(find.text('kcal so far'), findsOneWidget);
@@ -110,7 +113,6 @@ void main() {
     expect(find.text('Eaten'), findsNothing);
     await _scrollTo(tester, find.text('Steps'));
     expect(find.text('Active'), findsWidgets);
-    await _scrollTo(tester, find.text('Today’s plan'));
     await _scrollTo(tester, find.text('Vitals'));
     expect(tester.takeException(), isNull);
   });
@@ -190,7 +192,11 @@ void main() {
     await _boot(tester);
     await _openTab(tester, 'Training');
 
-    expect(find.text('Time in zones today'), findsOneWidget);
+    expect(
+      find.text('Time in zones').evaluate().isNotEmpty ||
+          find.textContaining('No zone time yet').evaluate().isNotEmpty,
+      isTrue,
+    );
     await _scrollTo(tester, find.text('Training load'));
     expect(find.textContaining('ACWR'), findsOneWidget);
     await _scrollTo(tester, find.text('Heart-rate zones · 7 days'));

@@ -545,7 +545,7 @@ class _HealthSummaryCard extends StatelessWidget {
               const Expanded(
                 child: Text('Fitbit Air records', style: AppType.cardTitle),
               ),
-              StatusPill(label: 'AIR FILTER', color: AppColors.green),
+              StatusPill(label: 'Air filter', color: AppColors.green),
             ],
           ),
           const SizedBox(height: 6),

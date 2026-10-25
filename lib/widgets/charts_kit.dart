@@ -365,3 +365,179 @@ class ZoneBarRow extends StatelessWidget {
     );
   }
 }
+
+/// A day at a glance: heart rate from midnight to midnight with sleep and
+/// workouts shaded behind it and a marker at the current time.
+class DayTimeline extends StatelessWidget {
+  const DayTimeline({
+    super.key,
+    required this.points,
+    required this.sleep,
+    required this.workouts,
+    this.nowMinute,
+    this.height = 120,
+  });
+
+  /// (minute of day 0–1439, bpm), in time order.
+  final List<(double, double)> points;
+
+  /// Shaded spans as (from, to) minutes of day.
+  final List<(double, double)> sleep;
+  final List<(double, double)> workouts;
+  final double? nowMinute;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: height,
+          width: double.infinity,
+          child: points.length < 2
+              ? Center(
+                  child: Text(
+                    'No heart rate yet today',
+                    style: AppType.caption,
+                  ),
+                )
+              : CustomPaint(
+                  painter: _DayTimelinePainter(
+                    points: points,
+                    sleep: sleep,
+                    workouts: workouts,
+                    nowMinute: nowMinute,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (final label in const ['12a', '6a', '12p', '6p', '12a'])
+              Text(label, style: AppType.caption.copyWith(fontSize: 11)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DayTimelinePainter extends CustomPainter {
+  _DayTimelinePainter({
+    required this.points,
+    required this.sleep,
+    required this.workouts,
+    required this.nowMinute,
+  });
+
+  final List<(double, double)> points;
+  final List<(double, double)> sleep;
+  final List<(double, double)> workouts;
+  final double? nowMinute;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double x(double minute) => minute / 1440 * size.width;
+    final values = [for (final p in points) p.$2];
+    final low = values.reduce(math.min) - 5;
+    final high = values.reduce(math.max) + 5;
+    double y(double bpm) =>
+        size.height - (bpm - low) / math.max(1, high - low) * size.height;
+
+    final band = RRect.fromLTRBR;
+    void shade(List<(double, double)> spans, Color color) {
+      final paint = Paint()..color = color;
+      for (final (from, to) in spans) {
+        final left = x(from.clamp(0, 1440));
+        final right = x(to.clamp(0, 1440));
+        if (right - left < 1) continue;
+        canvas.drawRRect(
+          band(left, 0, right, size.height, const Radius.circular(6)),
+          paint,
+        );
+      }
+    }
+
+    shade(sleep, AppColors.tint(AppColors.sleep, 0.12));
+    shade(workouts, AppColors.tint(AppColors.strain, 0.16));
+
+    // Quiet guides at 6-hour marks.
+    final grid = Paint()
+      ..color = AppColors.border
+      ..strokeWidth = 1;
+    for (var h = 6; h < 24; h += 6) {
+      canvas.drawLine(
+        Offset(x(h * 60.0), 0),
+        Offset(x(h * 60.0), size.height),
+        grid,
+      );
+    }
+
+    final line = Path();
+    final area = Path();
+    for (var i = 0; i < points.length; i++) {
+      final px = x(points[i].$1);
+      final py = y(points[i].$2);
+      // Break the line across gaps of more than 20 minutes (band off).
+      final gap = i > 0 && points[i].$1 - points[i - 1].$1 > 20;
+      if (i == 0 || gap) {
+        line.moveTo(px, py);
+      } else {
+        line.lineTo(px, py);
+      }
+    }
+    area
+      ..addPath(line, Offset.zero)
+      ..lineTo(x(points.last.$1), size.height)
+      ..lineTo(x(points.first.$1), size.height)
+      ..close();
+    canvas.drawPath(
+      area,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.active.withValues(alpha: 0.16),
+            AppColors.active.withValues(alpha: 0),
+          ],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = AppColors.active
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+
+    final now = nowMinute;
+    if (now != null) {
+      final nx = x(now.clamp(0, 1440));
+      final dash = Paint()
+        ..color = AppColors.textTertiary
+        ..strokeWidth = 1.2;
+      for (var dy = 0.0; dy < size.height; dy += 6) {
+        canvas.drawLine(Offset(nx, dy), Offset(nx, dy + 3), dash);
+      }
+      final last = points.last;
+      canvas.drawCircle(
+        Offset(x(last.$1), y(last.$2)),
+        4,
+        Paint()..color = AppColors.surface,
+      );
+      canvas.drawCircle(
+        Offset(x(last.$1), y(last.$2)),
+        3,
+        Paint()..color = AppColors.active,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DayTimelinePainter old) =>
+      old.points != points || old.nowMinute != nowMinute;
+}

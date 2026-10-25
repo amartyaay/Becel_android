@@ -113,6 +113,32 @@ void main() {
       expect(strainFromTrimp(trimpForStrain(12)), closeTo(12, 0.01));
     });
 
+    test('cadence credits brisk walking but never inflates an easy run', () {
+      final now = DateTime(2026, 10, 25, 20);
+      final start = DateTime(2026, 10, 25, 18);
+      DayStrain dayAt(double bpm, int spm) => dailyStrain(
+        cleanedMinutes: minutes(start, 60, (_) => bpm),
+        restingBpm: 52,
+        maxBpm: 184,
+        sex: BiologicalSex.male,
+        now: now,
+        days: 1,
+        stepBuckets: [
+          for (var m = 0; m < 60; m += 5)
+            StepBucket(
+              start: start.add(Duration(minutes: m)),
+              steps: spm * 5,
+            ),
+        ],
+      ).single;
+      // Brisk walk with a lagging wrist HR (~23 % HRR) still earns strain.
+      expect(dayAt(82, 110).strain, greaterThan(dayAt(82, 0).strain + 1));
+      // An easy Z2 run (45 % HRR, 165 spm) scores on heart rate alone.
+      expect(dayAt(111, 165).strain, closeTo(dayAt(111, 0).strain, 0.01));
+      // Brisk walking is not training load.
+      expect(dayAt(82, 110).trainingTrimp, 0);
+    });
+
     test('heart rate below 20% HRR adds no load', () {
       expect(banisterTrimpPerMinute(0.05, BiologicalSex.male), 0);
       expect(banisterTrimpPerMinute(0.19, BiologicalSex.male), 0);
