@@ -488,8 +488,9 @@ class _DeviceCard extends StatelessWidget {
     final device = energy.deviceTotalToday;
     final delta = energy.deviceDelta;
     final reasons = <String>[
-      'Heart rate only counts above ${t.flexBpm} bpm (your FLEX-HR point). '
-          'Below it, pulse reflects posture, caffeine, and stress, not work.',
+      'Heart rate only counts as exercise above ~50% of your heart-rate '
+          'reserve. Below that (including easy walks), Becel uses your steps: '
+          'pulse there reflects posture, caffeine, and stress more than work.',
       if (t.filteredSteps > 0)
         '${formatNumber(t.filteredSteps)} steps looked incidental (arm '
             'movement, fidgeting) and earned no walking energy.',
@@ -681,14 +682,13 @@ class _MethodCard extends StatelessWidget {
     child: Text(
       'Each minute gets exactly one source, so nothing is double counted: '
       'a strength workout (Compendium METs scaled to your resting rate), '
-      'then heart rate above your FLEX-HR point (Keytel 2005, net of '
-      'resting; between FLEX and 50% heart-rate reserve only with movement '
-      'or right after hard effort), then walking steps (0.5 kcal/kg/km net), '
-      'then a 30% daily-living allowance when awake. Sleep adds nothing above '
-      'resting. Digestion adds 10% of food logged, or about 8% of the day '
-      'when none is. Spikes and cadence-locked heart rate are removed first. '
-      'Wrist devices often overstate exercise energy by 20–40%; this design '
-      'avoids that without under-fuelling rest days.',
+      'then heart rate at 50%+ of heart-rate reserve (Keytel 2005, net of '
+      'resting), then walking steps (0.5 kcal/kg/km net). Easy effort '
+      'between your FLEX-HR point and 50% is costed from steps, not pulse, '
+      'because HR equations overstate walking about twice over. Awake time '
+      'without movement adds 20% of resting; sleep adds nothing. Digestion '
+      'adds 10% of food logged, or 6% of the day when none is. Spikes and '
+      'cadence-locked heart rate are removed first.',
       style: AppType.caption,
     ),
   );

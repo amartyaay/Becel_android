@@ -69,22 +69,23 @@ void main() {
   group('strain', () {
     test('maps TRIMP onto a logarithmic 0–21 scale', () {
       expect(strainFromTrimp(0), 0);
-      expect(strainFromTrimp(100), closeTo(13.3, 0.1));
-      expect(strainFromTrimp(250), closeTo(19.3, 0.1));
+      expect(strainFromTrimp(100), closeTo(11.3, 0.1));
+      expect(strainFromTrimp(250), closeTo(17.9, 0.1));
       expect(strainFromTrimp(10000), lessThanOrEqualTo(21));
       expect(strainFromTrimp(400), lessThan(21));
       expect(strainFromTrimp(trimpForStrain(12)), closeTo(12, 0.01));
     });
 
-    test('ambient heart rate below 30% HRR adds no load', () {
-      expect(banisterTrimpPerMinute(0.2, BiologicalSex.male), 0);
+    test('resting heart rate below 10% HRR adds no load', () {
+      expect(banisterTrimpPerMinute(0.05, BiologicalSex.male), 0);
+      expect(banisterTrimpPerMinute(0.3, BiologicalSex.male), greaterThan(0.2));
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.male),
-        closeTo(1.376, 0.005),
+        closeTo(1.642, 0.005),
       );
       expect(
         banisterTrimpPerMinute(0.7, BiologicalSex.female),
-        closeTo(1.512, 0.005),
+        closeTo(1.836, 0.005),
       );
     });
 
@@ -165,6 +166,38 @@ void main() {
       // Resting 12 h ≈ 905 kcal, plus a small awake allowance.
       expect(day.heartKcal, 0);
       expect(day.totalKcal, lessThan(1150));
+    });
+
+    test('an easy walk is costed from steps, not inflated by Keytel', () {
+      // Real-device case: 92 kg, RHR 66, walking at ~105 bpm (~29% HRR).
+      const user = BodyProfile(
+        age: 26,
+        sex: BiologicalSex.male,
+        heightCm: 185,
+        weightKg: 92,
+      );
+      final date = DateTime(2026, 10, 25);
+      final now = DateTime(2026, 10, 25, 15);
+      final walkStart = DateTime(2026, 10, 25, 14);
+      final day = estimateDayEnergy(
+        profile: user,
+        date: date,
+        now: now,
+        cleanedMinutes: minutes(walkStart, 40, (_) => 105),
+        stepBuckets: [
+          for (var i = 0; i < 8; i++)
+            StepBucket(
+              start: walkStart.add(Duration(minutes: i * 5)),
+              steps: 500,
+            ),
+        ],
+        sleep: const [],
+        restingBpm: 66,
+        maxBpm: 190,
+      )!;
+      expect(day.heartKcal, 0);
+      // 4,000 steps × 0.768 m × 92 kg × 0.5 kcal/kg/km ≈ 141 kcal.
+      expect(day.stepKcal, closeTo(141, 2));
     });
 
     test('phantom desk steps are filtered; real walking counts', () {

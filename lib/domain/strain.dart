@@ -6,17 +6,19 @@ import 'strength.dart';
 
 /// Banister TRIMP scale constant mapping daily load onto 0–21.
 ///
-/// strain = 21 × (1 − e^(−TRIMP / k)). With k = 100 (and the floor
-/// subtracted below) an hour of Z2–Z3 running reads ~12, a 75-minute tempo
-/// ~13.5, and only a long, hard day (~250 TRIMP) passes 19. The curve is
-/// logarithmic in effort, like WHOOP's scale: each extra point is harder to
-/// earn, and 18+ stays rare.
-const strainScaleK = 100.0;
+/// strain = 21 × (1 − e^(−TRIMP / k)). With k = 130 and load counted from
+/// 10 % HRR, an ordinary day of moving around reads ~5–7, a brisk 45-minute
+/// walk adds ~1–2, an hour of running lands ~14–15, a 75-minute tempo ~16,
+/// and only an extreme day passes 19. The curve is logarithmic in effort,
+/// like WHOOP's scale: each extra point is harder to earn.
+const strainScaleK = 130.0;
 const strainMax = 21.0;
 
-/// Below 30 % heart-rate reserve, minutes are ambient (standing, talking,
-/// digestion) and are not counted as training load.
-const strainFloorHrr = 0.30;
+/// Load counts from 10 % heart-rate reserve. Below that is rest; above it,
+/// everyday movement (walking, chores, stairs) builds a small baseline the
+/// way WHOOP's day strain does. A 30 % floor, tried first, scored real
+/// walks at zero for users with a higher resting HR.
+const strainFloorHrr = 0.10;
 
 /// Session-RPE units to Banister-TRIMP equivalence for resistance work.
 ///

@@ -270,7 +270,7 @@ void main() {
     expect(find.textContaining('g/kg'), findsWidgets);
     await _scrollTo(tester, find.text('Eaten vs burned · 7 days'));
     await _scrollTo(tester, find.text('WHY THEY DIFFER'));
-    expect(find.textContaining('FLEX-HR'), findsWidgets);
+    expect(find.textContaining('heart-rate reserve'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

@@ -23,7 +23,9 @@ class ShellScreen extends StatelessWidget {
       extendBody: true,
       body: navigationShell,
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 12 + bottomInset * 0.4),
+        // The system inset is applied once, here; the bar itself must not
+        // add it again (NavigationBar pads for it by default).
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 10 + bottomInset),
         child: Container(
           height: 70,
           decoration: BoxDecoration(
@@ -52,26 +54,34 @@ class ShellScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              child: NavigationBar(
-                height: 70,
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                indicatorColor: AppColors.ink,
-                indicatorShape: const StadiumBorder(),
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-                selectedIndex: navigationShell.currentIndex,
-                onDestinationSelected: (index) => navigationShell.goBranch(
-                  index,
-                  initialLocation: index == navigationShell.currentIndex,
-                ),
-                destinations: [
-                  for (final item in _items)
-                    NavigationDestination(
-                      icon: Icon(item.$1, color: AppColors.textTertiary),
-                      selectedIcon: Icon(item.$2, color: Colors.white),
-                      label: item.$3,
+              child: MediaQuery.removePadding(
+                context: context,
+                removeBottom: true,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: NavigationBar(
+                    height: 70,
+                    backgroundColor: Colors.transparent,
+                    surfaceTintColor: Colors.transparent,
+                    indicatorColor: AppColors.ink,
+                    indicatorShape: const StadiumBorder(),
+                    labelBehavior:
+                        NavigationDestinationLabelBehavior.alwaysHide,
+                    selectedIndex: navigationShell.currentIndex,
+                    onDestinationSelected: (index) => navigationShell.goBranch(
+                      index,
+                      initialLocation: index == navigationShell.currentIndex,
                     ),
-                ],
+                    destinations: [
+                      for (final item in _items)
+                        NavigationDestination(
+                          icon: Icon(item.$1, color: AppColors.textTertiary),
+                          selectedIcon: Icon(item.$2, color: Colors.white),
+                          label: item.$3,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

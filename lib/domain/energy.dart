@@ -29,13 +29,15 @@ const walkingNetKcalPerKgKm = 0.5;
 /// band cannot classify) cost ~1.3× resting. Doubly labelled water studies
 /// put even sedentary adults at PAL ≥ 1.4, which this allowance plus RMR and
 /// TEF reproduces on a rest day. Under-counting here risks under-fuelling.
-const awakeAllowance = 0.30;
+const awakeAllowance = 0.20;
 
 /// Thermic effect of food: ~10 % of energy eaten (Westerterp 2004).
 const tefFractionOfIntake = 0.10;
 
-/// TEF fallback when no food is logged: ~8 % of expenditure.
-const tefFractionOfExpenditure = 0.08;
+/// TEF fallback when no food is logged: a conservative 6 % of expenditure.
+/// Real-device testing showed the fuller 8–10 % fallback, stacked on the
+/// allowance, pushed totals above the device's own (already generous) figure.
+const tefFractionOfExpenditure = 0.06;
 
 class DayEnergy {
   const DayEnergy({
@@ -266,20 +268,24 @@ DayEnergy? estimateDayEnergy({
     final hr = hrByMinute[m];
     if (hr != null && hr >= flex) {
       final hrr = (hr - restingBpm) / reserve;
-      if (hrr >= 0.5) lastHardMinute = m;
-      // Between FLEX and 50 % HRR, pulse alone is ambiguous (coffee, heat,
-      // stress, a hot shower). Count it only alongside movement, inside a
-      // workout, or in the 10 minutes after a hard bout (EPOC).
-      final confirmed =
-          hrr >= 0.5 ||
-          stepEnergy[m] > 0 ||
-          inWorkout[m] ||
-          m - lastHardMinute <= 10;
-      if (confirmed) {
-        heart += math.max(
-          stepEnergy[m],
-          keytelKcalPerMinute(hr, profile) - rmrPerMinute,
-        );
+      final keytelNet = math.max(
+        0.0,
+        keytelKcalPerMinute(hr, profile) - rmrPerMinute,
+      );
+      if (hrr >= 0.5) {
+        // Real exercise: Keytel was derived in this range.
+        lastHardMinute = m;
+        heart += keytelNet;
+        heartMinutes++;
+        continue;
+      }
+      // Between FLEX and 50 % HRR (easy walking, chores, stairs) Keytel
+      // overstates cost roughly twice over. Walking is costed from steps;
+      // non-walking workouts (cycling, rowing) and the minutes just after a
+      // hard bout get a damped HR estimate; anything else falls through to
+      // the daily-living allowance.
+      if (stepEnergy[m] == 0 && (inWorkout[m] || m - lastHardMinute <= 10)) {
+        heart += keytelNet * 0.5;
         heartMinutes++;
         continue;
       }

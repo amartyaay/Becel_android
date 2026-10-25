@@ -696,7 +696,7 @@ class _StepsTile extends StatelessWidget {
                   walking == null || raw == null || raw - walking < 100
                       ? 'of ${formatNumber(stepGoal)}'
                       : '${formatNumber(walking)} walking',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.caption.copyWith(fontSize: 11.5),
                 ),
