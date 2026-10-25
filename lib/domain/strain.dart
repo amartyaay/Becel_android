@@ -439,12 +439,18 @@ TrainingLoad trainingLoad(List<DayStrain> days, {DateTime? today}) {
       ? covered
       : covered.sublist(covered.length - 7);
   final weekly = last7.fold<double>(0, (sum, day) => sum + day.loadTrimp);
-  final mean = weekly / math.max(1, last7.length);
+  // Foster's monotony is only meaningful on measured load. Lifting top-ups
+  // come from an estimated RPE (floored at 6), which would make lift days
+  // look identical by construction, so monotony uses heart-rate load only.
+  final measuredMean =
+      last7.fold<double>(0, (sum, day) => sum + day.trainingTrimp) /
+      math.max(1, last7.length);
+  final mean = measuredMean;
   final variance = last7.isEmpty
       ? 0.0
       : last7.fold<double>(
               0,
-              (sum, day) => sum + math.pow(day.loadTrimp - mean, 2),
+              (sum, day) => sum + math.pow(day.trainingTrimp - mean, 2),
             ) /
             last7.length;
   final sd = math.sqrt(variance);

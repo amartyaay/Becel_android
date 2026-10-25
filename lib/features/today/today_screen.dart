@@ -255,6 +255,8 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          const GuideButton(section: 'start'),
+          const SizedBox(width: 8),
           Material(
             color: AppColors.surfaceHigh,
             shape: const StadiumBorder(
@@ -715,7 +717,7 @@ class _BurnCard extends StatelessWidget {
             TextSpan(
               style: AppType.caption,
               children: [
-                const TextSpan(text: 'Total incl. everyday '),
+                const TextSpan(text: 'Total '),
                 TextSpan(
                   text: '~${formatNumber(fullEstimate.round())}',
                   style: AppType.caption.copyWith(
@@ -723,7 +725,7 @@ class _BurnCard extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const TextSpan(text: ' by midnight'),
+                const TextSpan(text: ' incl. everyday'),
                 if (energy.deviceTotalToday != null)
                   TextSpan(
                     text:
@@ -962,7 +964,7 @@ class _BalanceCard extends StatelessWidget {
                   label: 'Total burn',
                   value: formatNumber(burned.round()),
                   unit: 'kcal',
-                  delta: 'incl. everyday',
+                  delta: 'incl. est.',
                 ),
               ),
               Expanded(
@@ -1124,11 +1126,20 @@ class _PlanCard extends StatelessWidget {
     final target = plan.target;
     final now = strainNow ?? 0;
     final remaining = (target.low - now).clamp(0, strainMax);
+    // In the end states the target is no longer something to chase.
+    final active = plan.state == PlanState.active;
     return PanelCard(
       title: 'Today’s plan',
       icon: Icons.flag_rounded,
       accent: AppColors.accent,
-      trailing: Tag(target.label, color: color),
+      trailing: active
+          ? Tag(target.label, color: color)
+          : Tag(
+              plan.state == PlanState.done ? 'Done' : 'Rest',
+              color: plan.state == PlanState.done
+                  ? AppColors.bandGreen
+                  : AppColors.sleep,
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1147,39 +1158,41 @@ class _PlanCard extends StatelessWidget {
                 for (final item in plan.prescription) _PlanChip(item: item),
               ],
             ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  'Strain ${now.toStringAsFixed(1)}',
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.rowTitle.copyWith(fontSize: 13),
+          if (active) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Strain ${now.toStringAsFixed(1)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.rowTitle.copyWith(fontSize: 13),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  remaining > 0
-                      ? '${remaining.toStringAsFixed(1)} to target'
-                      : now > target.high
-                      ? 'Above target'
-                      : 'In target',
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.caption,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    remaining > 0
+                        ? '${remaining.toStringAsFixed(1)} to target'
+                        : now > target.high
+                        ? 'Above target'
+                        : 'In target',
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          LinearMeter(
-            value: now,
-            max: strainMax,
-            color: AppColors.strain,
-            bandFrom: target.low,
-            bandTo: target.high,
-          ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            LinearMeter(
+              value: now,
+              max: strainMax,
+              color: AppColors.strain,
+              bandFrom: target.low,
+              bandTo: target.high,
+            ),
+          ],
           if (plan.notes.isNotEmpty) ...[
             const SizedBox(height: 14),
             for (final note in plan.notes.take(2))

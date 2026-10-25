@@ -141,8 +141,11 @@ void main() {
         now: DateTime(2026, 10, 25, 20, 30),
       );
       expect(late.headline, 'Wind down');
+      expect(late.state, PlanState.windDown);
+      expect(late.notes.length, lessThanOrEqualTo(1));
       final done = _plan(recovery: _recovery(50), strainToday: 12);
       expect(done.headline, 'Target reached');
+      expect(done.state, PlanState.done);
       // A recovery day's band is a ceiling, never a goal to reach.
       expect(
         _plan(recovery: _recovery(20), strainToday: 3).headline,

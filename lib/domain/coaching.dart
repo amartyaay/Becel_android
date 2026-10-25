@@ -55,6 +55,9 @@ enum PlanTone { push, train, recover, rest }
 
 enum PlanKind { cardio, lift, mobility }
 
+/// Where the day stands: still to train, already done, or too late to.
+enum PlanState { active, done, windDown }
+
 /// One concrete thing to do today.
 class PlanItem {
   const PlanItem.cardio(this.label) : kind = PlanKind.cardio;
@@ -73,7 +76,10 @@ class DailyPlan {
     required this.target,
     required this.notes,
     this.prescription = const [],
+    this.state = PlanState.active,
   });
+
+  final PlanState state;
 
   final PlanTone tone;
   final String headline;
@@ -278,8 +284,18 @@ DailyPlan buildDailyPlan({
     headline: finalHeadline,
     session: session,
     target: target,
-    notes: notes.take(3).toList(),
+    // End states keep a single note: the day's work is over.
+    notes: notes
+        .take(alert == null && (targetMet || windDown) ? 1 : 3)
+        .toList(),
     prescription: finalPrescription,
+    state: alert != null
+        ? PlanState.active
+        : targetMet
+        ? PlanState.done
+        : windDown
+        ? PlanState.windDown
+        : PlanState.active,
   );
 }
 

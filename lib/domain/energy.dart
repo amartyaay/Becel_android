@@ -362,19 +362,20 @@ DayEnergy? estimateDayEnergy({
     m = end;
   }
 
-  // Steady aerobic work (cycling, rowing, elliptical) holds 60 %+ HRR for
-  // 15+ minutes in a row; lifting drops below that between sets. Such
-  // stretches keep full Keytel energy even without steps or a recorded
-  // workout; the MET cap below is for sawtooth or short bouts only.
+  // Steady aerobic work (cycling, rowing, elliptical, easy Z2 included)
+  // holds 50 %+ HRR for 15+ minutes with little minute-to-minute change;
+  // lifting is a sawtooth. Such stretches keep full Keytel energy even
+  // without steps or a recorded workout; the MET cap below is for sawtooth
+  // or short bouts only.
   final steadyAerobic = List<bool>.filled(minutes, false);
   {
-    final steadyBpm = restingBpm + 0.6 * math.max(20.0, maxBpm - restingBpm);
+    final steadyBpm = restingBpm + 0.5 * math.max(20.0, maxBpm - restingBpm);
     var runStart = -1;
     for (var m = 0; m <= minutes; m++) {
       final high = m < minutes && (hrByMinute[m] ?? 0) >= steadyBpm;
       if (high && runStart < 0) runStart = m;
       if (!high && runStart >= 0) {
-        if (m - runStart >= 15) {
+        if (m - runStart >= 15 && _steady(hrByMinute, runStart, m)) {
           for (var j = runStart; j < m; j++) {
             steadyAerobic[j] = true;
           }
@@ -511,4 +512,19 @@ class EnergyBalance {
 DateTime localDay(DateTime value) {
   final local = value.toLocal();
   return DateTime(local.year, local.month, local.day);
+}
+
+/// True when minute-to-minute heart-rate changes over [from, to) are small
+/// (SD of successive differences under 6 bpm): steady cardio, not sets.
+bool _steady(Map<int, double> hr, int from, int to) {
+  final diffs = <double>[
+    for (var m = from + 1; m < to; m++)
+      if (hr[m] != null && hr[m - 1] != null) hr[m]! - hr[m - 1]!,
+  ];
+  if (diffs.length < 10) return false;
+  final mean = diffs.reduce((a, b) => a + b) / diffs.length;
+  final variance =
+      diffs.fold<double>(0, (s, d) => s + (d - mean) * (d - mean)) /
+      diffs.length;
+  return math.sqrt(variance) < 6;
 }

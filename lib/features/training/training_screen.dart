@@ -6,10 +6,12 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../../data/health_connect_service.dart';
 import '../../data/health_store.dart';
+import '../../domain/energy.dart';
 import '../../domain/heart_signal.dart';
 import '../../domain/performance.dart';
 import '../../domain/strain.dart';
 import '../../domain/strength.dart';
+import '../../widgets/charts_kit.dart';
 import '../../widgets/format.dart';
 import '../../widgets/kit.dart';
 import '../../widgets/rings.dart';
@@ -560,34 +562,32 @@ class _WorkoutList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = snapshot.performance;
-    final zones = p.zones!;
     final synced = [
       for (final w in snapshot.activity?.workouts ?? const <WorkoutEntry>[])
         if (p.now.difference(w.start).inDays < 7) w,
     ]..sort((a, b) => b.start.compareTo(a.start));
     final items = <({DateTime at, Widget row})>[
       for (final workout in synced)
-        (
-          at: workout.start,
-          row: _WorkoutRow(
-            icon: _iconFor(workout.type),
-            color: isStrengthWorkout(workout.type)
-                ? AppColors.textSecondary
-                : AppColors.strain,
-            title: workout.type,
-            subtitle:
-                '${formatShortDate(workout.start)} · ${formatClock(workout.start)} · '
-                '${formatDurationMinutes(workout.minutes)}',
-            strain: sessionStrain(
-              cleanedMinutes: p.clean.samples,
-              start: workout.start,
-              end: workout.start.add(Duration(minutes: workout.minutes)),
-              restingBpm: zones.restingBpm,
-              maxBpm: zones.maxBpm,
-              sex: snapshot.profile?.sex,
+        () {
+          final detail = WorkoutDetail.of(workout, snapshot);
+          return (
+            at: workout.start,
+            row: _WorkoutRow(
+              icon: _iconFor(workout.type),
+              color: isStrengthWorkout(workout.type)
+                  ? AppColors.textSecondary
+                  : AppColors.strain,
+              title: workout.type,
+              subtitle:
+                  '${formatShortDate(workout.start)} · ${formatClock(workout.start)} · '
+                  '${formatDurationMinutes(workout.minutes)}',
+              strain: detail.strain,
+              zoneMinutes: detail.zoneMinutes,
+              onTap: () =>
+                  _showWorkout(context, detail, _iconFor(workout.type)),
             ),
-          ),
-        ),
+          );
+        }(),
     ];
     if (items.isEmpty) {
       return const StateCard(
@@ -628,6 +628,8 @@ class _WorkoutRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.strain,
+    this.zoneMinutes,
+    this.onTap,
   });
 
   final IconData icon;
@@ -635,47 +637,276 @@ class _WorkoutRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final SessionStrain? strain;
+  final List<double>? zoneMinutes;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => SurfaceCard(
     padding: const EdgeInsets.all(12),
     color: AppColors.surface,
-    child: Row(
+    onTap: onTap,
+    child: Column(
       children: [
-        IconChip(icon: icon, color: color, size: 38, iconSize: 19),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: AppType.rowTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(subtitle, style: AppType.caption.copyWith(fontSize: 11.5)),
-              if (strain?.averageBpm != null)
-                Text(
-                  'avg ${strain!.averageBpm} · peak ${strain!.peakBpm} bpm',
-                  style: AppType.caption.copyWith(fontSize: 11.5),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (strain != null)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                strain!.strain.toStringAsFixed(1),
-                style: AppType.numS.copyWith(color: AppColors.strain),
-              ),
-              Text('strain', style: AppType.caption.copyWith(fontSize: 10)),
-            ],
-          ),
+        _rowBody(),
+        if (zoneMinutes != null &&
+            zoneMinutes!.fold<double>(0, (s, v) => s + v) > 0) ...[
+          const SizedBox(height: 10),
+          _ZoneStrip(minutes: zoneMinutes!),
+        ],
       ],
+    ),
+  );
+
+  Widget _rowBody() => Row(
+    children: [
+      IconChip(icon: icon, color: color, size: 38, iconSize: 19),
+      const SizedBox(width: 11),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: AppType.rowTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(subtitle, style: AppType.caption.copyWith(fontSize: 11.5)),
+            if (strain?.averageBpm != null)
+              Text(
+                'avg ${strain!.averageBpm} · peak ${strain!.peakBpm} bpm',
+                style: AppType.caption.copyWith(fontSize: 11.5),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(width: 8),
+      if (strain != null)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              strain!.strain.toStringAsFixed(1),
+              style: AppType.numS.copyWith(color: AppColors.strain),
+            ),
+            Text('strain', style: AppType.caption.copyWith(fontSize: 10)),
+          ],
+        ),
+      if (onTap != null) ...[
+        const SizedBox(width: 4),
+        const Icon(
+          Icons.chevron_right_rounded,
+          size: 18,
+          color: AppColors.textTertiary,
+        ),
+      ],
+    ],
+  );
+}
+
+/// Everything about one synced workout, computed from cleaned minute HR.
+class WorkoutDetail {
+  WorkoutDetail._({
+    required this.workout,
+    required this.strain,
+    required this.zoneMinutes,
+    required this.bpm,
+    required this.activeKcal,
+    required this.rpe,
+  });
+
+  factory WorkoutDetail.of(WorkoutEntry workout, HealthSnapshot snapshot) {
+    final p = snapshot.performance;
+    final zones = p.zones!;
+    final end = workout.start.add(Duration(minutes: workout.minutes));
+    final samples = [
+      for (final s in p.clean.samples)
+        if (!s.at.isBefore(workout.start) && s.at.isBefore(end)) s,
+    ];
+    final zoneMinutes = List<double>.filled(5, 0);
+    for (final s in samples) {
+      final z = zones.zoneOf(s.value);
+      if (z >= 0) zoneMinutes[z] += 1;
+    }
+    final lift = isStrengthWorkout(workout.type)
+        ? p.strengthSessions.where((s) => s.start == workout.start).firstOrNull
+        : null;
+    final profile = snapshot.profile;
+    double? kcal;
+    if (profile != null && profile.hasEnergyInputs) {
+      final rmrPerMinute = restingMetabolicRate(profile) / 1440;
+      if (lift != null) {
+        // Corrected Compendium METs, as the calorie model costs lifting.
+        kcal = (lift.met - 1) * rmrPerMinute * workout.minutes;
+      } else {
+        // Keytel net of resting from 50 % HRR; half of it below that.
+        kcal = 0;
+        for (final s in samples) {
+          final net = math.max(
+            0.0,
+            keytelKcalPerMinute(s.value, profile) - rmrPerMinute,
+          );
+          final f = zones.fraction(s.value);
+          kcal =
+              kcal! +
+              (f >= keytelMinHrr
+                  ? net
+                  : f >= 0.3
+                  ? net / 2
+                  : 0);
+        }
+      }
+    }
+    return WorkoutDetail._(
+      workout: workout,
+      strain: sessionStrain(
+        cleanedMinutes: p.clean.samples,
+        start: workout.start,
+        end: end,
+        restingBpm: zones.restingBpm,
+        maxBpm: zones.maxBpm,
+        sex: profile?.sex,
+      ),
+      zoneMinutes: zoneMinutes,
+      bpm: [for (final s in samples) s.value],
+      activeKcal: kcal,
+      rpe: lift?.sessionRpe,
+    );
+  }
+
+  final WorkoutEntry workout;
+  final SessionStrain? strain;
+  final List<double> zoneMinutes;
+  final List<double> bpm;
+  final double? activeKcal;
+
+  /// Estimated session RPE for synced lifting (from heart-rate density).
+  final double? rpe;
+}
+
+void _showWorkout(BuildContext context, WorkoutDetail d, IconData icon) {
+  final w = d.workout;
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                IconChip(icon: icon, color: AppColors.strain),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(w.type, style: AppType.cardTitle),
+                      Text(
+                        '${formatShortDate(w.start)} · ${formatClock(w.start)} · '
+                        '${formatDurationMinutes(w.minutes)}',
+                        style: AppType.caption,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: StatBlock(
+                    label: 'Strain',
+                    value: d.strain?.strain.toStringAsFixed(1) ?? '—',
+                  ),
+                ),
+                Expanded(
+                  child: StatBlock(
+                    label: 'Avg',
+                    value: d.strain?.averageBpm?.toString() ?? '—',
+                    unit: 'bpm',
+                  ),
+                ),
+                Expanded(
+                  child: StatBlock(
+                    label: 'Peak',
+                    value: d.strain?.peakBpm?.toString() ?? '—',
+                    unit: 'bpm',
+                  ),
+                ),
+                Expanded(
+                  child: StatBlock(
+                    label: 'Active',
+                    value: d.activeKcal == null
+                        ? '—'
+                        : '~${d.activeKcal!.round()}',
+                    unit: 'kcal',
+                    delta: d.rpe == null
+                        ? null
+                        : 'RPE ~${d.rpe!.toStringAsFixed(d.rpe! % 1 == 0 ? 0 : 1)}',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const Text('Heart rate', style: AppType.caption),
+            const SizedBox(height: 8),
+            SparkArea(
+              values: d.bpm,
+              color: AppColors.active,
+              height: 110,
+              emptyLabel: 'No heart rate recorded for this workout',
+            ),
+            const SizedBox(height: 18),
+            const Text('Time in zones', style: AppType.caption),
+            const SizedBox(height: 8),
+            _ZoneStrip(minutes: d.zoneMinutes),
+            const SizedBox(height: 10),
+            for (var z = 4; z >= 0; z--)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: zoneColors[z],
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(HeartZones.names[z], style: AppType.note),
+                    ),
+                    Text(
+                      formatDurationMinutes(d.zoneMinutes[z].round()),
+                      style: AppType.body.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     ),
   );
 }
